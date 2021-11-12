@@ -3472,6 +3472,9 @@ sub write_output_files {
         push @groups, "fan_nml";
       }
     }
+    {
+      push @groups, "elm_ats_inparm";
+    }
   }
 
   my $outfile;
