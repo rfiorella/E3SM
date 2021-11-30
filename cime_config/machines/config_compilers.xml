@@ -87,17 +87,17 @@ flags should be captured within MPAS CMake files.
 <compiler MACH="mymac" COMPILER="gnu">
   <NETCDF_PATH>$ENV{NETCDF_PATH}</NETCDF_PATH>
   <CFLAGS>
-    <base> -mcmodel=medium </base>
+    <base> -mcmodel=small </base>
     <append> -I$ENV{NETCDF_PATH}/include -I$ENV{HDF5_PATH}/include </append>
   </CFLAGS>
   <FFLAGS>
-    <base> -mcmodel=medium -fconvert=big-endian -ffree-line-length-none -ffixed-line-length-none </base>
+    <base> -mcmodel=small -fconvert=big-endian -ffree-line-length-none -ffixed-line-length-none </base>
     <append> -I$ENV{NETCDF_PATH}/include -I$ENV{HDF5_PATH}/include </append>
   </FFLAGS>
   <LDFLAGS>
-    <append> -framework Accelerate -L$ENV{NETCDF_PATH}/lib -lnetcdff -lnetcdf </append>
+    <append> -framework Accelerate -L$ENV{NETCDF_PATH}/lib -lnetcdff -lnetcdf -lpnetcdf</append>
     <append> -L$ENV{MPI_ROOT}/lib -lmpichcxx </append>
-    <append MODEL="driver">-L$ENV{NETCDF_PATH}/lib -lnetcdff -lnetcdf -L$ENV{HDF5_PATH}/lib -lhdf5_hl -lhdf5 -lhdf5hl_fortran -lhdf5_fortran </append>
+    <append MODEL="driver">-L$ENV{NETCDF_PATH}/lib -lnetcdff -lnetcdf -lpnetcdf -L$ENV{HDF5_PATH}/lib -lhdf5_hl -lhdf5 -lhdf5hl_fortran -lhdf5_fortran </append>
   </LDFLAGS>
   <SFC>$ENV{FC_ROOT}/bin/gfortran</SFC>
   <SCC>$ENV{CC_ROOT}/bin/gcc</SCC>
