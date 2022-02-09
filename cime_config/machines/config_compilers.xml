@@ -1506,6 +1506,20 @@ flags should be captured within MPAS CMake files.
   </SLIBS>
 </compiler>
 
+<compiler MACH="WSL2" COMPILER="gnu">
+  <HDF5_PATH> $ENV{HDF5_PATH}</HDF5_PATH>
+  <NETCDF_PATH> $ENV{NETCDF_PATH}</NETCDF_PATH>
+  <NETCDF_C_PATH> $ENV{NETCDF_C_PATH}</NETCDF_C_PATH>
+  <NETCDF_FORTRAN_PATH> $ENV{NETCDF_FORTRAN_PATH}</NETCDF_FORTRAN_PATH>
+  <LAPACK_LIBDIR>$ENV{BLASLAPACK_LIBDIR}</LAPACK_LIBDIR>
+  <CXX_LINKER>CXX</CXX_LINKER>
+  <SLIBS>
+    <append> $SHELL{$NETCDF_PATH/bin/nf-config --flibs} -Wl,-rpath -Wl,$NETCDF_PATH/lib </append>
+    <append> $SHELL{$NETCDF_PATH/bin/nc-config --libs} </append>
+    <append> -L$LAPACK_LIBDIR -lblas -llapack </append>	
+  </SLIBS>
+</compiler>
+
 <compiler MACH="singularity" COMPILER="gnu">
   <HDF5_PATH> $ENV{HDF5_PATH}</HDF5_PATH>
   <NETCDF_PATH> $ENV{NETCDF_PATH}</NETCDF_PATH>
