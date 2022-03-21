@@ -55,7 +55,7 @@
      This allows using a different mpirun command to launch unit tests
 
   -->
-  <machine MACH="mymac">
+  <machine MACH="lanl-mac">
     <DESC>Mac OS/X workstation or laptop</DESC>
     <NODENAME_REGEX>imac.local</NODENAME_REGEX>
     <OS>Darwin</OS>
