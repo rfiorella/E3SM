@@ -403,7 +403,7 @@ contains
                              vertAleTransportTop, tendVel, err)
 
       ! Add pressure gradient
-      call ocn_vel_pressure_grad_tend(ssh, pressure, &
+      call ocn_vel_pressure_grad_tend(ssh, pressure, surfacePressure, &
                                montgomeryPotential, zMid, &
                                density, potentialDensity, &
                                indxTemp, indxSalt, activeTracers, &
@@ -414,7 +414,7 @@ contains
       call ocn_compute_tidal_potential_forcing(err)
       if (config_time_integrator == 'RK4') then
         ! for split explicit, tidal forcing is added in barotropic subcycles
-        call ocn_vel_tidal_potential_tend(ssh, tendVel, err) 
+        call ocn_vel_tidal_potential_tend(ssh,surfacePressure, tendVel, err)
       endif
 
       ! Add horizontal mixing
@@ -636,9 +636,22 @@ contains
       ! allocate and transfer data not specific to tracer groups
       allocate(normalThicknessFlux(nVertLevels, nEdgesAll+1))
 
+      !$acc enter data create(normalThicknessFlux) &
+      !$acc            copyin(layerThickness)
+      !TEMPORARY - once diagnotics module ported, these should already
+      !            be on the device
+      !$acc update device (normalTransportVelocity, layerThickEdge, &
+      !$acc                vertAleTransportTop)
+
       ! compute transport velocity to use for all tracers
+#ifdef MPAS_OPENACC
+      !$acc parallel loop collapse(2) &
+      !$acc    present(normalThicknessFlux, normalTransportVelocity, &
+      !$acc            layerThickEdge)
+#else
       !$omp parallel
       !$omp do schedule(runtime) private(k)
+#endif
       do iEdge = 1,nEdgesAll
       do k = 1,nVertLevels
          normalThicknessFlux(k,iEdge) = &
@@ -646,8 +659,10 @@ contains
                  layerThickEdge(k, iEdge)
       end do
       end do
+#ifndef MPAS_OPENACC
       !$omp end do
       !$omp end parallel
+#endif
 
       !
       ! Start computation of tracer tendencies.
@@ -974,9 +989,9 @@ contains
          !
          if (config_use_tracerGroup_idealAge_forcing) then
             call mpas_timer_start("ideal age " // groupName)
-            call mpas_log_write( &
-                        "WARNING: ideal age not fully tested", &
-                        MPAS_LOG_WARN)
+            if (trim(groupName) /= 'idealAgeTracers') call mpas_log_write( &
+                                                      "WARNING: ideal age not fully tested", &
+                                                      MPAS_LOG_WARN)
 
             call mpas_pool_get_subpool(forcingPool, &
                                        'tracersIdealAgeFields', &
@@ -1023,6 +1038,9 @@ contains
             call mpas_timer_stop("TTD " // groupName)
          endif ! TTD
 
+         !$acc enter data &
+         !$acc    copyin(tracerGroup, tracerGroupTend)
+
          !
          ! Accumulate tendencies for all tracers
          ! First is the horizontal advection term
@@ -1031,8 +1049,17 @@ contains
          ! routine
          call ocn_tracer_advection_tend(tracerGroup, &
                             normalThicknessFlux, vertAleTransportTop, &
-                            layerThickness, dt, meshPool, tracerGroupTend, &
-                            groupName)
+                            layerThickness, dt, tracerGroupTend, &
+                            computeBudgets)
+
+         !$acc update host (activeTracerHorizontalAdvectionEdgeFlux, &
+         !$acc              activeTracerHorizontalAdvectionTendency, &
+         !$acc              activeTracerVerticalAdvectionTopFlux, &
+         !$acc              activeTracerVerticalAdvectionTendency)
+
+         !$acc exit data &
+         !$acc    copyout(tracerGroupTend) &
+         !$acc    delete(tracerGroup)
 
          !
          ! Add horizontal tracer diffusion,
@@ -1220,6 +1247,8 @@ contains
       end if ! active only
       end if ! member is field
       end do ! loop over tracer groups
+
+      !$acc exit data delete (normalThicknessFlux, layerThickness)
 
       deallocate(normalThicknessFlux)
 

@@ -346,7 +346,7 @@ subroutine phys_inidat( cam_out, pbuf2d )
     use dycore,              only: dycore_is
     use polar_avg,           only: polar_average
     use short_lived_species, only: initialize_short_lived_species
-    use comsrf,              only: landm, sgh, sgh30
+    use comsrf,              only: sgh, sgh30
     use cam_control_mod,     only: aqua_planet
 
     type(cam_out_t),     intent(inout) :: cam_out(begchunk:endchunk)
@@ -382,34 +382,36 @@ subroutine phys_inidat( cam_out, pbuf2d )
     if(aqua_planet) then
        sgh = 0._r8
        sgh30 = 0._r8
-       landm = 0._r8
-       if (masterproc) write(iulog,*) 'AQUA_PLANET simulation, sgh, sgh30, landm initialized to 0.'
+       if (masterproc) write(iulog,*) 'AQUA_PLANET simulation, sgh, sgh30 initialized to 0.'
     else
        if (masterproc) write(iulog,*) 'NOT AN AQUA_PLANET simulation, initialize &
                                       &sgh, sgh30, land m using data from file.'
        fh_topo=>topo_file_get_id()
+       call t_startf('phys_inidat_infld')
        call infld('SGH', fh_topo, dim1name, dim2name, 1, pcols, begchunk, endchunk, &
             sgh, found, gridname='physgrid')
+       call t_stopf('phys_inidat_infld')
        if(.not. found) call endrun('ERROR: SGH not found on topo file')
 
+       call t_startf('phys_inidat_infld')
        call infld('SGH30', fh_topo, dim1name, dim2name, 1, pcols, begchunk, endchunk, &
             sgh30, found, gridname='physgrid')
+       call t_stopf('phys_inidat_infld')
+       
        if(.not. found) then
           if (masterproc) write(iulog,*) 'Warning: Error reading SGH30 from topo file.'
           if (masterproc) write(iulog,*) 'The field SGH30 will be filled using data from SGH.'
           sgh30 = sgh
        end if
-
-       call infld('LANDM_COSLAT', fh_topo, dim1name, dim2name, 1, pcols, begchunk, endchunk, &
-            landm, found, gridname='physgrid')
-
-       if(.not.found) call endrun(' ERROR: LANDM_COSLAT not found on topo dataset.')
     end if
 
     allocate(tptr(1:pcols,begchunk:endchunk))
 
+    call t_startf('phys_inidat_infld')
     call infld('PBLH', fh_ini, dim1name, dim2name, 1, pcols, begchunk, endchunk, &
          tptr(:,:), found, gridname='physgrid')
+    call t_stopf('phys_inidat_infld')
+    
     if(.not. found) then
        tptr(:,:) = 0._r8
        if (masterproc) write(iulog,*) 'PBLH initialized to 0.'
@@ -777,7 +779,9 @@ subroutine phys_init( phys_state, phys_tend, pbuf2d, cam_out )
     if (adiabatic .or. ideal_phys) return
 
     if (nsrest .eq. 0) then
+       call t_startf ('phys_inidat')
        call phys_inidat(cam_out, pbuf2d) 
+       call t_stopf ('phys_inidat')
     end if
     
     ! wv_saturation is relatively independent of everything else and
@@ -788,15 +792,22 @@ subroutine phys_init( phys_state, phys_tend, pbuf2d, cam_out )
     if (cam3_aero_data_on) call cam3_aero_data_init(phys_state)
 
     ! Initialize rad constituents and their properties
+    call t_startf ('rad_cnst_init')
     call rad_cnst_init()
+    call t_stopf ('rad_cnst_init')
+    
     call aer_rad_props_init()
     call cloud_rad_props_init()
 
     ! solar irradiance data modules
+    call t_startf ('solar_data_init')
     call solar_data_init()
+    call t_stopf ('solar_data_init')
 
     ! Prognostic chemistry.
+    call t_startf ('chem_init')
     call chem_init(phys_state,pbuf2d, species_class)
+    call t_stopf ('chem_init')
 
     ! Prescribed tracers
     call prescribed_ozone_init()
@@ -807,11 +818,15 @@ subroutine phys_init( phys_state, phys_tend, pbuf2d, cam_out )
     !when is_cmip6_volc is true ,cmip6 style volcanic file is read
     !Initialized to .false. here but it gets its values from prescribed_volcaero_init
     is_cmip6_volc = .false. 
+    call t_startf ('prescribed_volcaero_init')
     call prescribed_volcaero_init(is_cmip6_volc)
+    call t_stopf ('prescribed_volcaero_init')
 
     ! Initialize ocean data
     if (has_mam_mom) then
+       call t_startf ('init_ocean_data')
        call init_ocean_data()
+       call t_stopf ('init_ocean_data')
     end if
 
     ! co2 cycle            
@@ -839,7 +854,9 @@ subroutine phys_init( phys_state, phys_tend, pbuf2d, cam_out )
 
     call tsinti(tmelt, latvap, rair, stebol, latice)
 
+    call t_startf ('radiation_init')
     call radiation_init(phys_state)
+    call t_stopf ('radiation_init')
 
     call rad_solar_var_init()
 
@@ -874,7 +891,10 @@ subroutine phys_init( phys_state, phys_tend, pbuf2d, cam_out )
     call metdata_phys_init()
 #endif
     call sslt_rebin_init()
+    
+    call t_startf ('tropopause_init')
     call tropopause_init()
+    call t_stopf ('tropopause_init')
 
     if(do_aerocom_ind3) call output_aerocom_aie_init()
 
@@ -928,7 +948,7 @@ subroutine phys_run1(phys_state, ztodt, phys_tend, pbuf2d,  cam_in, cam_out)
 #if (defined E3SM_SCM_REPLAY )
     use cam_history,    only: outfld
 #endif
-    use comsrf,         only: fsns, fsnt, flns, sgh, sgh30, flnt, landm, fsds
+    use comsrf,         only: fsns, fsnt, flns, sgh, sgh30, flnt, fsds
     use cam_abortutils,     only: endrun
 #if ( defined OFFLINE_DYN )
      use metdata,       only: get_met_srf1
@@ -986,15 +1006,14 @@ subroutine phys_run1(phys_state, ztodt, phys_tend, pbuf2d,  cam_in, cam_out)
     call check_energy_gmean(phys_state, pbuf2d, ztodt, nstep)
     call t_stopf ('chk_en_gmean')
 
-    call t_stopf ('physpkg_st1')
-
+    
     if ( adiabatic .or. ideal_phys )then
+       call t_stopf ('physpkg_st1')
+	
        call t_startf ('bc_physics')
        call phys_run1_adiabatic_or_ideal(ztodt, phys_state, phys_tend,  pbuf2d)
        call t_stopf ('bc_physics')
     else
-       call t_startf ('physpkg_st1')
-
        call pbuf_allocate(pbuf2d, 'physpkg')
        call diag_allocate()
 
@@ -1002,7 +1021,9 @@ subroutine phys_run1(phys_state, ztodt, phys_tend, pbuf2d,  cam_in, cam_out)
        ! Advance time information
        !-----------------------------------------------------------------------
 
+       call t_startf('phys_timestep_init')
        call phys_timestep_init( phys_state, cam_out, pbuf2d)
+       call t_stopf('phys_timestep_init')
 
        call t_stopf ('physpkg_st1')
 
@@ -1038,7 +1059,7 @@ subroutine phys_run1(phys_state, ztodt, phys_tend, pbuf2d,  cam_in, cam_out)
           call t_stopf ('diag_physvar_ic')
 
           call tphysbc (ztodt, fsns(1,c), fsnt(1,c), flns(1,c), flnt(1,c), phys_state(c),        &
-                       phys_tend(c), phys_buffer_chunk,  fsds(1,c), landm(1,c),          &
+                       phys_tend(c), phys_buffer_chunk,  fsds(1,c),                       &
                        sgh(1,c), sgh30(1,c), cam_out(c), cam_in(c) )
 
           call system_clock(count=end_chnk_cnt, count_rate=sysclock_rate, count_max=sysclock_max)
@@ -1822,7 +1843,7 @@ end subroutine tphysac
 
 subroutine tphysbc (ztodt,               &
        fsns,    fsnt,    flns,    flnt,    state,   &
-       tend,    pbuf,     fsds,    landm,            &
+       tend,    pbuf,     fsds,                     &
        sgh, sgh30, cam_out, cam_in )
     !----------------------------------------------------------------------- 
     ! 
@@ -1901,7 +1922,6 @@ subroutine tphysbc (ztodt,               &
     real(r8), intent(inout) :: flns(pcols)                   ! Srf longwave cooling (up-down) flux
     real(r8), intent(inout) :: flnt(pcols)                   ! Net outgoing lw flux at model top
     real(r8), intent(inout) :: fsds(pcols)                   ! Surface solar down flux
-    real(r8), intent(in) :: landm(pcols)                     ! land fraction ramp
     real(r8), intent(in) :: sgh(pcols)                       ! Std. deviation of orography
     real(r8), intent(in) :: sgh30(pcols)                     ! Std. deviation of 30 s orography for tms
 
@@ -2368,7 +2388,7 @@ end if
 
        call stratiform_tend(state, ptend, pbuf, ztodt, &
             cam_in%icefrac, cam_in%landfrac, cam_in%ocnfrac, &
-            landm, cam_in%snowhland, & ! sediment
+            cam_in%snowhland, & ! sediment
             dlf, dlf2, & ! detrain
             rliq  , & ! check energy after detrain
             cmfmc,   cmfmc2, &
@@ -2660,7 +2680,7 @@ if (l_rad) then
 
     call radiation_tend(state,ptend, pbuf, &
          cam_out, cam_in, &
-         cam_in%landfrac,landm,cam_in%icefrac, cam_in%snowhland, &
+         cam_in%landfrac, cam_in%icefrac, cam_in%snowhland, &
          fsns,    fsnt, flns,    flnt,  &
          fsds, net_flx,is_cmip6_volc, ztodt)
 
@@ -2751,17 +2771,24 @@ subroutine phys_timestep_init(phys_state, cam_out, pbuf2d)
   call solar_data_advance()
 
   ! Time interpolate for chemistry.
+  call t_startf('chem_timestep_init')
   call chem_timestep_init(phys_state, pbuf2d)
+  call t_stopf('chem_timestep_init')
 
   ! Prescribed tracers
   call prescribed_ozone_adv(phys_state, pbuf2d)
   call prescribed_ghg_adv(phys_state, pbuf2d)
   call prescribed_aero_adv(phys_state, pbuf2d)
   call aircraft_emit_adv(phys_state, pbuf2d)
+
+  call t_startf('prescribed_volcaero_adv')
   call prescribed_volcaero_adv(phys_state, pbuf2d)
+  call t_stopf('prescribed_volcaero_adv')
 
   if (has_mam_mom) then
+     call t_startf('advance_ocean_data')
      call advance_ocean_data(phys_state, pbuf2d)
+     call t_stopf('advance_ocean_data')
   end if
 
   ! prescribed aerosol deposition fluxes

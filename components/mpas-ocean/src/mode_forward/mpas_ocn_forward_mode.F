@@ -70,6 +70,7 @@ module ocn_forward_mode
    use ocn_tracer_ecosys
    use ocn_tracer_DMS
    use ocn_tracer_MacroMolecules
+   use ocn_tracer_ideal_age
    use ocn_tracer_surface_restoring
    use ocn_gm
 
@@ -439,6 +440,8 @@ module ocn_forward_mode
       ierr = ior(ierr,err_tmp)
       call ocn_tracer_MacroMolecules_init(domain, err_tmp)
       ierr = ior(ierr,err_tmp)
+      call ocn_tracer_ideal_age_init(domain, err_tmp)
+      ierr = ior(ierr,err_tmp)
       if (ierr /= 0) then
          call mpas_log_write( &
               'Error initializing tracer tendency modules', &
@@ -628,6 +631,9 @@ module ocn_forward_mode
          call mpas_get_time(curr_time=currTime, dateTimeString=timeStamp, ierr=ierr)
          call mpas_log_write('Doing timestep ' // trim(timeStamp))
 
+         ! pre-timestep analysis computation
+         call ocn_analysis_precompute(domain, ierr)
+
 #ifdef MPAS_DEBUG
          call mpas_log_write( '   Computing surface flux arrays')
 #endif
@@ -778,7 +784,9 @@ module ocn_forward_mode
       ! destroy the ocean mesh structure
       call ocn_meshDestroy(ierr)
 
-      call mpas_dmpar_exch_group_destroy_reusable_buffers(domain, 'subcycleFields')
+      if ( config_time_integrator == 'split_explicit') then
+         call mpas_dmpar_exch_group_destroy_reusable_buffers(domain, 'subcycleFields')
+      end if
 
       call ocn_analysis_finalize(domain, ierr)
 

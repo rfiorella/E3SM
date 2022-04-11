@@ -363,12 +363,12 @@ add_default($nl, 'config_btr_gam3_velWt2');
 add_default($nl, 'config_btr_solve_SSH2');
 
 ####################################
-# Namelist group: semi_implicit_ts #
+# Namelist group: split_implicit_ts #
 ####################################
 
 add_default($nl, 'config_btr_si_preconditioner');
 add_default($nl, 'config_btr_si_tolerance');
-add_default($nl, 'config_n_btr_si_outer_iter');
+add_default($nl, 'config_n_btr_si_large_iter');
 add_default($nl, 'config_btr_si_partition_match_mode');
 
 #####################################
@@ -1066,4 +1066,16 @@ add_default($nl, 'config_AM_harmonicAnalysis_use_K1');
 add_default($nl, 'config_AM_harmonicAnalysis_use_O1');
 add_default($nl, 'config_AM_harmonicAnalysis_use_Q1');
 add_default($nl, 'config_AM_harmonicAnalysis_use_P1');
+
+########################################
+# Namelist group: AM_conservationCheck #
+########################################
+
+add_default($nl, 'config_AM_conservationCheck_enable');
+add_default($nl, 'config_AM_conservationCheck_compute_interval');
+add_default($nl, 'config_AM_conservationCheck_output_stream');
+add_default($nl, 'config_AM_conservationCheck_compute_on_startup');
+add_default($nl, 'config_AM_conservationCheck_write_on_startup');
+add_default($nl, 'config_AM_conservationCheck_write_to_logfile');
+add_default($nl, 'config_AM_conservationCheck_restart_stream');
 
