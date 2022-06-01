@@ -1696,6 +1696,8 @@ contains
              do j = 1, nlevs
                 if (j > nlevbed) then
                    this%h2osoi_vol(c,j) = 0.0_r8
+                   if (use_ats .or. use_pflotran) &
+                      this%h2osoi_vol(c,j) = 1._r8         ! for below soil, assuming saturated initially helps spinup
                 else
 		               if (use_fates .or. use_hydrstress) then
                       this%h2osoi_vol(c,j) = 0.70_r8*watsat_input(c,j) !0.15_r8 to avoid very dry conditions that cause errors in FATES
