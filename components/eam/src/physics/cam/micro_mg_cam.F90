@@ -1084,6 +1084,13 @@ subroutine micro_mg_cam_tend(state, ptend, dtime, pbuf)
 
    use output_aerocom_aie, only: do_aerocom_ind3
 
+   ! water tracers
+   use water_tracer_vars, only: trace_water, wtrc_indices, &
+                                wtrc_ncnst, wtrc_nwset, &
+                                wtrc_srfpcp_indices
+   use water_tracers,     only: wtrc_apply_rates, wtrc_apply_rates_mg1, wtrc_init_rates, wtrc_add_rates, &
+                                wtrc_add_rates, wtrc_mg_inter
+   use water_types,       only: pwtype, iwtvap, iwtliq, iwtice, iwtstrain, iwtstsnow
 
    type(physics_state),         intent(in)    :: state
    type(physics_ptend),         intent(out)   :: ptend
@@ -1337,6 +1344,26 @@ subroutine micro_mg_cam_tend(state, ptend, dtime, pbuf)
    real(r8), allocatable, target :: packed_des(:,:)
    real(r8), allocatable, target :: packed_dei(:,:)
 
+   ! Local packed arrays for water tracers/isotopes
+   ! RPF - changed all variables to allocatable, target
+   ! instead of just target, as had been in CAM
+   real(r8), allocatable, target :: packed_preo(:,:)              ! rain re-evaporation (kg/kg/sec)
+   real(r8), allocatable, target :: packed_prdso(:,:)             ! snow sublimation (kg/kg/sec)
+   real(r8), allocatable, target :: packed_frzro(:,:)             ! rain freezing (kg/kg/sec)
+   real(r8), allocatable, target :: packed_frzrpst(:,:)           ! rain freezing post-sedimentation (kg/kg/sec)
+   real(r8), allocatable, target :: packed_meltso(:,:)            ! snow melting  (kg/kg/sec)
+   real(r8), allocatable, target :: packed_meltspst(:,:)          ! snow melting post-sedimentation (kg/kg/sec)
+   real(r8), allocatable, target :: packed_wtfc(:,:)              ! Initial cloud liquid fall velocity
+   real(r8), allocatable, target :: packed_wtfi(:,:)              ! Initial cloud ice fall velocity
+   real(r8), allocatable, target :: packed_wtfr(:,:)              ! Initial cloud rain fall velocity
+   real(r8), allocatable, target :: packed_wtfs(:,:)              ! Initial cloud snow fall velocity
+   real(r8), allocatable, target :: packed_wtprelat(:,:)          ! Latent heat change due to pre_rates
+   real(r8), allocatable, target :: packed_wtsedlat(:,:)          ! Latent heat change during sedimenntation
+   real(r8), allocatable, target :: packed_wtpostlat(:,:)         ! Latent heat change due to post_rates 
+   real(r8), allocatable, target :: packed_wtfri_pre(:,:)         ! Is freezing rain being added to cloud ice?
+   real(r8), allocatable, target :: packed_wtfri_post(:,:)        ! Is freezing rain being added to cloud ice post-sed?
+
+
    ! Dummy arrays for cases where we throw away the MG version and
    ! recalculate sizes on the CAM grid to avoid time/subcolumn averaging
    ! issues.
@@ -1504,6 +1531,50 @@ subroutine micro_mg_cam_tend(state, ptend, dtime, pbuf)
    real(r8) :: prcio_grid(pcols,pver)
    real(r8) :: praio_grid(pcols,pver)
 
+   !Water tracers/isotopes:
+   !----------------------
+   !precipiation variables:
+   integer  ::  m 
+   real(r8) ::  wtprecr(pcols,wtrc_nwset)
+   real(r8) ::  wtpreci(pcols,wtrc_nwset)
+   real(r8) ::  wtprecr_itr(pcols,wtrc_nwset)
+   real(r8) ::  wtpreci_itr(pcols,wtrc_nwset)
+   real(r8), pointer, dimension(:) :: wtsrfpcp    
+ 
+  !Unpacked surface variables:
+   real(r8) ::  cmei_unp(pcols,pver)
+   real(r8) ::  preo_unp(pcols,pver)
+   real(r8) ::  prdso_unp(pcols,pver)
+   real(r8) ::  mnuccco_unp(pcols,pver)
+   real(r8) ::  mnuccto_unp(pcols,pver)
+   real(r8) ::  msacwio_unp(pcols,pver)
+   real(r8) ::  prao_unp(pcols,pver)
+   real(r8) ::  prco_unp(pcols,pver)
+   real(r8) ::  psacwso_unp(pcols,pver)
+   real(r8) ::  bergo_unp(pcols,pver)
+   real(r8) ::  bergso_unp(pcols,pver)
+   real(r8) ::  praio_unp(pcols,pver)
+   real(r8) ::  prcio_unp(pcols,pver)
+   real(r8) ::  pracso_unp(pcols,pver)
+   real(r8) ::  mnuccro_unp(pcols,pver)
+   real(r8) ::  qcreso_unp(pcols,pver)
+   real(r8) ::  qireso_unp(pcols,pver)
+   real(r8) ::  homoo_unp(pcols,pver)
+   real(r8) ::  melto_unp(pcols,pver)
+   real(r8) ::  frzrpst_unp(pcols,pver)
+   real(r8) ::  meltspst_unp(pcols,pver)
+   real(r8) ::  wtfri_pre_unp(pcols,pver)
+   real(r8) ::  wtfri_post_unp(pcols,pver)
+   real(r8) ::  frzro_unp(pcols,pver)
+   real(r8) ::  meltso_unp(pcols,pver)
+   real(r8) ::  wtfc_unp(pcols,pver)
+   real(r8) ::  wtfi_unp(pcols,pver)
+   real(r8) ::  wtfr_unp(pcols,pver)
+   real(r8) ::  wtfs_unp(pcols,pver) 
+   real(r8) ::  wtprelat_unp(pcols,pver)
+   real(r8) ::  wtsedlat_unp(pcols,pver)
+   real(r8) ::  wtpostlat_unp(pcols,pver)
+   !----------------------
    real(r8) :: nc_grid(pcols,pver)
    real(r8) :: ni_grid(pcols,pver)
    real(r8) :: qr_grid(pcols,pver)
@@ -1567,6 +1638,62 @@ subroutine micro_mg_cam_tend(state, ptend, dtime, pbuf)
    integer :: autocl_idx, accretl_idx  ! Aerocom IND3
    integer :: cldliqbf_idx, cldicebf_idx, numliqbf_idx, numicebf_idx
 
+   ! Local variables for water tracers/isotopes
+
+   real(r8), target :: preo(state%psetcols,pver)                              ! rain re-evaporation (kg/kg/sec)
+   real(r8), target :: prdso(state%psetcols,pver)                             ! snow sublimation (kg/kg/sec)
+   real(r8), target :: frzro(state%psetcols,pver)                             ! rain freezing (kg/kg/sec)
+   real(r8), target :: frzrpst(state%psetcols,pver)                           ! rain freezing post-sedimentation (kg/kg/sec)
+   real(r8), target :: meltso(state%psetcols,pver)                            ! snow melting  (kg/kg/sec)
+   real(r8), target :: meltspst(state%psetcols,pver)                          ! snow melting post-sedimentation (kg/kg/sec)
+   real(r8), target :: wtfc(state%psetcols,pver)                              ! Initial cloud liquid fall velocity
+   real(r8), target :: wtfi(state%psetcols,pver)                              ! Initial cloud ice fall velocity
+   real(r8), target :: wtfr(state%psetcols,pver)                              ! Initial cloud rain fall velocity
+   real(r8), target :: wtfs(state%psetcols,pver)                              ! Initial cloud snow fall velocity
+   real(r8), target :: wtprelat(state%psetcols,pver)                          ! Latent heat change due to pre_rates
+   real(r8), target :: wtsedlat(state%psetcols,pver)                          ! Latent heat changes during sedimentation
+   real(r8), target :: wtpostlat(state%psetcols,pver)                         ! Latent heat change due to post_rates 
+   real(r8), target :: wtfri_pre(state%psetcols,pver)                         ! Is freezing rain being added to cloud ice?
+   real(r8), target :: wtfri_post(state%psetcols,pver)                        ! Is freezing rain being added to cloud ice post-sed?
+
+   ! Water tracers/isotopes on the grid level
+   real(r8) :: pre_rates_grid(pcols,pver,pwtype,pwtype,pwtype)    ! Process rates (kg/kg/sec)
+   real(r8) :: sed_rates_grid(pcols,pver,pwtype)                  ! Sedimentation rates (kg/kg/sec)
+   real(r8) :: post_rates_grid(pcols,pver,pwtype,pwtype,pwtype)   ! Process rates (kg/kg/sec)
+   real(r8) :: pcmei_grid(pcols,pver)                             ! Positive cmeiout - deposition
+   real(r8) :: ncmei_grid(pcols,pver)                             ! Negative cmeiout - sublimation
+   real(r8) :: pmelts_grid(pcols,pver)                            ! Positive melts - melting
+   real(r8) :: nmelts_grid(pcols,pver)                            ! Negative melts (freezing?)
+   logical  :: isOk                                               ! Flag indicating test success
+
+   ! above water tracers/isotopes arrays on the grid level
+   ! not sure the below varaibles are needed in EAM? - RPF
+   
+   real(r8), pointer :: preo_grid(:,:)                            ! rain re-evaporation (kg/kg/sec)
+   real(r8), pointer :: prdso_grid(:,:)                           ! snow sublimation (kg/kg/sec)
+   real(r8), pointer :: frzro_grid(:,:)                           ! rain freezing (kg/kg/sec)
+   real(r8), pointer :: frzrpst_grid(:,:)                         ! rain freezing post-sedimentation (kg/kg/sec) 
+   real(r8), pointer :: meltso_grid(:,:)                          ! snow melting  (kg/kg/sec)
+   real(r8), pointer :: meltspst_grid(:,:)                        ! snow melting post-sedimentation (kg/kg/sec)
+   real(r8), pointer :: wtfc_grid(:,:)                            ! Initial cloud liquid fall velocity
+   real(r8), pointer :: wtfi_grid(:,:)                            ! Initial cloud ice fall velocity
+   real(r8), pointer :: wtfr_grid(:,:)                            ! Initial cloud rain fall velocity
+   real(r8), pointer :: wtfs_grid(:,:)                            ! Initial cloud snow fall velocity
+   real(r8), pointer :: wtprelat_grid(:,:)                        ! Latent heat change due to pre_rates
+   real(r8), pointer :: wtsedlat_grid(:,:)                        ! Latent heat change during sedimentation
+   real(r8), pointer :: wtpostlat_grid(:,:)                       ! Latent heat change due to post_rates 
+   real(r8), pointer :: wtfri_pre_grid(:,:)                       ! Is freezing rain being added to cloud ice?
+   real(r8), pointer :: wtfri_post_grid(:,:)                      ! Is freezing rain being added to cloud ice post-sed?
+
+   real(r8), pointer :: mnuccro_grid(:,:)
+   real(r8), pointer :: pracso_grid(:,:)
+   real(r8), pointer :: qcsedten_grid(:,:)
+   real(r8), pointer :: qisedten_grid(:,:)
+   real(r8), pointer :: qrsedten_grid(:,:)
+   real(r8), pointer :: qssedten_grid(:,:)
+   real(r8), pointer :: alst_mic_grid(:,:)
+   real(r8), pointer :: aist_mic_grid(:,:)
+   character(len=*), parameter :: subname = 'micro_mg_cam_tend'
    !-------------------------------------------------------------------------------
 
    call t_startf('micro_mg_cam_tend_init')
@@ -1990,6 +2117,60 @@ subroutine micro_mg_cam_tend(state, ptend, dtime, pbuf)
    allocate(packed_prer_evap(mgncol,nlev))
    call post_proc%add_field(p(prer_evap), p(packed_prer_evap), &
         accum_method=accum_null)
+   if (trace_water) then !Are water tracers enabled?
+      !NOTE:  These calls may not be needed (or only needed
+      !       for MG1 + water tracers). -JN
+      ! not sure if this is still true? -RF
+      allocate(packed_preo(mgncol,nlev))
+      call post_proc%add_field(p(preo), p(packed_preo), &
+         accum_method=accum_null)
+      allocate(packed_prdso(mgncol,nlev))
+      call post_proc%add_field(p(prdso), p(packed_prdso), &
+        accum_method=accum_null)
+      allocate(packed_meltso(mgncol,nlev))
+      call post_proc%add_field(p(meltso), p(packed_meltso), &
+         accum_method=accum_null)
+      allocate(packed_wtfc(mgncol,nlev))
+      call post_proc%add_field(p(wtfc), p(packed_wtfc), &
+        accum_method=accum_null)
+      allocate(packed_wtfi(mgncol,nlev))
+      call post_proc%add_field(p(wtfi), p(packed_wtfi), &
+         accum_method=accum_null)
+      allocate(packed_wtfr(mgncol,nlev))
+      call post_proc%add_field(p(wtfr), p(packed_wtfr), &
+        accum_method=accum_null)
+      allocate(packed_wtfs(mgncol,nlev))
+      call post_proc%add_field(p(wtfs), p(packed_wtfs), &
+         accum_method=accum_null)
+      allocate(packed_wtprelat(mgncol,nlev))
+      call post_proc%add_field(p(wtprelat), p(packed_wtprelat), &
+        accum_method=accum_null)
+      allocate(packed_wtsedlat(mgncol,nlev))
+      call post_proc%add_field(p(wtsedlat), p(packed_wtsedlat), &
+         accum_method=accum_null)
+      allocate(packed_wtpostlat(mgncol,nlev))
+      call post_proc%add_field(p(wtpostlat), p(packed_wtpostlat), &
+        accum_method=accum_null)
+      allocate(packed_frzro(mgncol,nlev))
+      call post_proc%add_field(p(frzro), p(packed_frzro), &
+         accum_method=accum_null)
+      allocate(packed_frzrpst(mgncol,nlev))
+      call post_proc%add_field(p(frzrpst), p(packed_frzrpst), &
+        accum_method=accum_null)
+      allocate(packed_meltspst(mgncol,nlev))
+      call post_proc%add_field(p(meltspst), p(packed_meltspst), &
+         accum_method=accum_null)
+      allocate(packed_wtfri_pre(mgncol,nlev))
+      call post_proc%add_field(p(wtfri_pre), p(packed_wtfri_pre), &
+        accum_method=accum_null)
+      allocate(packed_wtfri_post(mgncol,nlev))
+      call post_proc%add_field(p(wtfri_post), p(packed_wtfri_post), &
+         accum_method=accum_null)
+      
+     !initialize precipitation variables:
+      wtprecr(:ncol,:) = 0._r8
+      wtpreci(:ncol,:) = 0._r8
+   end if
 
    ! Allocate all the dummies with MG sizes.
    allocate(rel_fn_dum(mgncol,nlev))
@@ -2246,6 +2427,69 @@ subroutine micro_mg_cam_tend(state, ptend, dtime, pbuf)
          ptend_loc%q(:,:,ixnumsnow) = packer%unpack(packed_nstend, &
               -state_loc%q(:,:,ixnumsnow)/(dtime/num_steps))
       end if
+
+      !Water tracers/isotopes:
+      !----------------------
+      if(trace_water .and. (micro_mg_version == 2)) then
+         if(use_subcol_microp) then
+           !kill model if subcolumns are turned on, as water tracer
+           !and isotopes are not currently configured to use them. -JN
+           call endrun(subname // ':: ERROR water tracers are NOT configured to work with subcolumns') 
+         else
+          !unpack needed variables:
+           cmei_unp       = packer%unpack(packed_cmei,  0._r8)     
+           preo_unp       = packer%unpack(packed_preo,  0._r8)
+           prdso_unp      = packer%unpack(packed_prdso,  0._r8)
+           mnuccco_unp    = packer%unpack(packed_mnuccc,  0._r8)
+           mnuccto_unp    = packer%unpack(packed_mnucct,  0._r8)
+           msacwio_unp    = packer%unpack(packed_msacwi,  0._r8)
+           prao_unp       = packer%unpack(packed_pra,  0._r8) 
+           prco_unp       = packer%unpack(packed_prc,  0._r8)
+           psacwso_unp    = packer%unpack(packed_psacws,  0._r8)
+           bergo_unp      = packer%unpack(packed_berg,  0._r8)
+           bergso_unp     = packer%unpack(packed_bergs,  0._r8)
+           praio_unp      = packer%unpack(packed_prai,  0._r8)
+           prcio_unp      = packer%unpack(packed_prci,  0._r8)
+           pracso_unp     = packer%unpack(packed_pracs,  0._r8)
+           mnuccro_unp    = packer%unpack(packed_mnuccr,  0._r8)
+           qcreso_unp     = packer%unpack(packed_qcres,  0._r8)
+           qireso_unp     = packer%unpack(packed_qires,  0._r8)
+           homoo_unp      = packer%unpack(packed_homo, 0._r8)
+           melto_unp      = packer%unpack(packed_melt, 0._r8)
+           frzrpst_unp    = packer%unpack(packed_frzrpst, 0._r8) 
+           meltspst_unp   = packer%unpack(packed_meltspst, 0._r8)
+           wtfri_pre_unp  = packer%unpack(packed_wtfri_pre, 0._r8)
+           wtfri_post_unp = packer%unpack(packed_wtfri_post, 0._r8)  
+           frzro_unp      = packer%unpack(packed_frzro,  0._r8)
+           meltso_unp     = packer%unpack(packed_meltso, 0._r8)
+           wtfc_unp       = packer%unpack(packed_wtfc, 0._r8)
+           wtfi_unp       = packer%unpack(packed_wtfi, 0._r8)
+           wtfr_unp       = packer%unpack(packed_wtfr, 0._r8) 
+           wtfs_unp       = packer%unpack(packed_wtfs, 0._r8)
+           wtprelat_unp   = packer%unpack(packed_wtprelat, 0._r8)
+           wtsedlat_unp   = packer%unpack(packed_wtsedlat, 0._r8)
+           wtpostlat_unp  = packer%unpack(packed_wtpostlat, 0._r8)
+ 
+          !Apply changes to water tracers/isotopes:
+           call wtrc_mg_inter(state_loc, ptend_loc, pbuf, wtprecr_itr, wtpreci_itr,  &
+                          top_lev, dtime/num_steps, alst_mic, aist_mic,              &
+                          cmei_unp, preo_unp, prdso_unp, mnuccco_unp, mnuccto_unp,   &
+                          msacwio_unp, prao_unp, prco_unp, psacwso_unp, bergo_unp,   &
+                          bergso_unp, praio_unp, prcio_unp, pracso_unp, mnuccro_unp, &
+                          qcreso_unp, qireso_unp, homoo_unp, melto_unp, frzrpst_unp, &
+                          meltspst_unp, wtfri_pre_unp, wtfri_post_unp, frzro_unp,    &
+                          meltso_unp, wtfc_unp, wtfi_unp, wtfr_unp, wtfs_unp,        &
+                          wtprelat_unp, wtsedlat_unp, wtpostlat_unp)
+ 
+          !calculate sum of water tracer precip over MG iterations:
+           do m=1,wtrc_nwset
+             wtprecr(:ncol,m) = wtprecr(:ncol,m)+wtprecr_itr(:ncol,m)
+             wtpreci(:ncol,m) = wtpreci(:ncol,m)+wtpreci_itr(:ncol,m)
+           end do
+ 
+         end if  !subcolumns
+       end if    !water tracers
+       !----------------------
 
       ! Sum into overall ptend
       call physics_ptend_sum(ptend_loc, ptend, ncol)
@@ -2595,6 +2839,169 @@ subroutine micro_mg_cam_tend(state, ptend, dtime, pbuf)
 
    end if
 
+   !----------------------------------------
+   !water tracers/isotopes   (on gridlevel)
+   !----------------------------------------
+
+   if(trace_water .and. (micro_mg_version == 2)) then
+      !Output Surface precipitation to physics buffer
+      do m=1, wtrc_nwset
+         !Calculate precipitation averages:
+         wtprecr(:ncol,m) = wtprecr(:ncol,m)/num_steps
+         wtpreci(:ncol,m) = wtpreci(:ncol,m)/num_steps
+  
+         !Point to water tracer rain
+         call pbuf_get_field(pbuf, wtrc_srfpcp_indices(iwtstrain,m), wtsrfpcp)
+         wtsrfpcp(:ncol) = wtprecr(:ncol,m) !set rain precipitation variable
+ 
+         !Point to water tracer snow
+         call pbuf_get_field(pbuf, wtrc_srfpcp_indices(iwtstsnow,m), wtsrfpcp)
+         wtsrfpcp(:ncol) = wtpreci(:ncol,m) !set snow precipitation variable
+      end do
+   end if
+ 
+   ! Convert fields to grid level early, that are needed by water tracers
+   if (trace_water .and. (micro_mg_version == 1)) then
+ 
+      !Average isotope fields to the grid level , so they can be operated on
+      if (use_subcol_microp) then
+        !
+        ! EBK Apr/21/2015
+        ! In order to run on sub-columns all fields would need to 
+        ! be averaged to the grid level like so...
+        !call subcol_field_avg(preo,      ngrdcol, lchnk, preo_grid)
+        ! For the list of fields, see the "else" statement
+        ! Also "state", "ptend" and "pbuf" would all be on
+        ! sub-columns and would need to be averaged to grid level
+        ! and then copied to the sub-column level. Or all the operations
+        ! below would need to be on the sub-column level rather than
+        ! grid level. Some of this would also require changes in water_tracers.F90.
+        !
+        ! (For now just terminate early)
+        call endrun(subname // ':: ERROR water tracers are NOT configured to work with subcolumns')
+      else
+        preo_grid       => preo
+        prdso_grid      => prdso
+        frzro_grid      => frzro
+        meltso_grid     => meltso
+        frzrpst_grid    => frzrpst
+        meltspst_grid   => meltspst
+        wtfc_grid       => wtfc
+        wtfi_grid       => wtfi
+        wtfr_grid       => wtfr
+        wtfs_grid       => wtfs 
+        wtprelat_grid   => wtprelat
+        wtsedlat_grid   => wtsedlat
+        wtpostlat_grid  => wtpostlat
+        wtfri_pre_grid  => wtfri_pre
+        wtfri_post_grid => wtfri_post
+ 
+        mnuccro_grid    => mnuccro
+        pracso_grid     => pracso
+        qcsedten_grid   => qcsedten
+        qisedten_grid   => qisedten
+        qrsedten_grid   => qrsedten
+        qssedten_grid   => qssedten
+        alst_mic_grid   => alst_mic
+        aist_mic_grid   => aist_mic
+      end if
+ 
+      !Setup microphysics rates to be applied before sedimentation.
+      call wtrc_init_rates(top_lev, pre_rates_grid)
+ 
+      !initalize variables
+      pcmei_grid(:,top_lev:) = 0._r8
+      ncmei_grid(:,top_lev:) = 0._r8
+      pmelts_grid(:,top_lev:) = 0._r8
+      nmelts_grid(:,top_lev:) = 0._r8
+ 
+      !split into positive and negative tendencies - JN
+      do i=1,ncol
+        do k=top_lev,pver
+          if(cmeiout_grid(i,k) .lt. 0._r8) then
+            ncmei_grid(i,k) = cmeiout_grid(i,k) !sublimation (ice-dependent)
+          else
+            pcmei_grid(i,k) = cmeiout_grid(i,k) !deposition (vapor-dependent)
+          end if
+          if(meltso(i,k) .lt. 0._r8) then
+            nmelts_grid(i,k) = meltso_grid(i,k)
+          else
+            pmelts_grid(i,k) = meltso_grid(i,k)
+          end if
+        end do
+      end do
+ 
+      !Processes that consume water vapor:
+      !+++++++++++++++++++++++++++++++++++
+      call wtrc_add_rates(pre_rates_grid, ncol, top_lev, iwtvap, iwtice, iwtvap, pcmei_grid) !deposition
+      call wtrc_add_rates(pre_rates_grid, ncol, top_lev, iwtvap, iwtice, iwtice, ncmei_grid) !sublimation  
+ 
+      call wtrc_add_rates(pre_rates_grid, ncol, top_lev, iwtvap,    iwtstrain, iwtstrain, preo_grid)  !rain re-evaporation
+      call wtrc_add_rates(pre_rates_grid, ncol, top_lev, iwtvap,    iwtstsnow, iwtstsnow, prdso_grid) !snow sublimation
+      !+++++++++++++++++++++++++++++++++++
+ 
+      !Processes that consume liquid:
+      !++++++++++++++++++++++++++++++
+      !Freezing,accretion on ice,and evaporation to deposition:
+      call wtrc_add_rates(pre_rates_grid, ncol, top_lev, iwtliq,    &
+                          iwtice,    iwtliq,                        &
+                          mnuccco_grid + mnuccto_grid + msacwio_grid) 
+      !Accretion on rain,autoconversion: 
+      call wtrc_add_rates(pre_rates_grid, ncol, top_lev, iwtliq,    iwtstrain, iwtliq, prao_grid + prco_grid)
+      !Accretion on snow, Bergeron process on snow:
+      call wtrc_add_rates(pre_rates_grid, ncol, top_lev, iwtliq,    iwtstsnow, iwtliq, psacwso_grid)
+ 
+      !Bergeron processes to ice and snow (NOTE:  This is handled specifically in apply_rates, so the sources and sinks are not
+      !physical here.  It might be good to figure out a logical switch instead of using specific water type variables. - JN).
+      call wtrc_add_rates(pre_rates_grid, ncol, top_lev, iwtliq, iwtliq, iwtliq, bergo_grid)
+      call wtrc_add_rates(pre_rates_grid, ncol, top_lev, iwtice, iwtice, iwtice, bergso_grid) 
+      !++++++++++++++++++++++++++++++
+ 
+      !Processes that consume ice:
+      !Ice accretion on snow,autoncversion of snow:
+      call wtrc_add_rates(pre_rates_grid, ncol, top_lev, iwtice, iwtstsnow, iwtice, praio_grid + prcio_grid)
+ 
+      !Processes that consume rain:
+      !Accretion on snow, freezing (hetero and homo?):
+      !Don't include freezing of rain (frzro_grid) as handled separately
+      call wtrc_add_rates(pre_rates_grid, ncol, top_lev, iwtstrain, &
+                          iwtstsnow, iwtstrain,                     &
+                          pracso_grid + mnuccro_grid)
+ 
+      !Setup microphysics rates to be applied after sedimentation:
+      call wtrc_init_rates(top_lev, post_rates_grid)
+ 
+      !Processes that consume water vapor:
+      !Condenstation (sets supersat = 0):
+      call wtrc_add_rates(post_rates_grid, ncol, top_lev, iwtvap,    iwtliq,   iwtvap, qcreso_grid)
+      !Deposition (sets supersat = 0): 
+      call wtrc_add_rates(post_rates_grid, ncol, top_lev, iwtvap,    iwtice,   iwtvap, qireso_grid) !positive
+ 
+      !Processes that consume liquid:
+      !
+      !NOTE: The evaporation is of liquid that sedimented from a higher
+      !level. The source of the vapor has already been include in the
+      !sedimentation tendency. (NOTE:  managed in wtrc_sediment -JN)
+      !Freezing:
+      call wtrc_add_rates(post_rates_grid, ncol, top_lev, iwtliq,    iwtice,   iwtliq, homoo_grid) !positive
+ 
+      !Processes that consume ice:
+      !
+      !NOTE: The evaporation is of ice that sedimented from a higher
+      !level. The source of the vapor has already been include in the
+      !sedimentation tendency. (NOTE:  managed in wtrc_sediment - JN)
+      !Melting:
+      call wtrc_add_rates(post_rates_grid, ncol, top_lev, iwtice,    iwtliq,   iwtice, melto_grid) !positive
+ 
+ 
+      call wtrc_apply_rates_mg1(state, ptend, pbuf,top_lev, dtime/num_steps, .true., pre_rates=pre_rates_grid,              &
+                                sed_rates=sed_rates_grid, post_rates=post_rates_grid, do_stprecip=.true., liqcldf=alst_mic,       &
+                                icecldf=aist_mic, fc=wtfc_grid, fi=wtfi_grid, prelat=wtprelat_grid, postlat=wtpostlat_grid,       &
+                                frzro=frzro_grid, meltso=meltso_grid)
+ 
+    end if !water tracers
+ 
+    !-------------------------------------
    ! ------------------------------------- !
    ! Size distribution calculation         !
    ! ------------------------------------- !

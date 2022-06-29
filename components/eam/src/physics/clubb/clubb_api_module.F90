@@ -504,11 +504,15 @@ contains
 
   subroutine advance_clubb_core_api( &
     l_implemented, dt, fcor, sfc_elevation, hydromet_dim, & ! intent(in)
-    thlm_forcing, rtm_forcing, um_forcing, vm_forcing, &    ! intent(in)
+    thlm_forcing, rtm_forcing, wtrc_rtm_forcing, &          ! intent(in)
+    um_forcing, vm_forcing, &    ! intent(in)
     sclrm_forcing, edsclrm_forcing, wprtp_forcing, &        ! intent(in)
-    wpthlp_forcing, rtp2_forcing, thlp2_forcing, &          ! intent(in)
-    rtpthlp_forcing, wm_zm, wm_zt, &                        ! intent(in)
-    wpthlp_sfc, wprtp_sfc, upwp_sfc, vpwp_sfc, &            ! intent(in)
+    wtrc_wprtp_forcing, wpthlp_forcing, & 
+    rtp2_forcing, wtrc_rtp2_forcing, thlp2_forcing, &          ! intent(in)
+    rtpthlp_forcing, wtrc_rtpthlp_forcing, & 
+    wm_zm, wm_zt, &                        ! intent(in)
+    wpthlp_sfc, wprtp_sfc, wtrc_wprtp_sfc, &
+    upwp_sfc, vpwp_sfc, &            ! intent(in)
     wpsclrp_sfc, wpedsclrp_sfc, &                           ! intent(in)
     p_in_Pa, rho_zm, rho, exner, &                          ! intent(in)
     rho_ds_zm, rho_ds_zt, invrs_rho_ds_zm, &                ! intent(in)
@@ -520,15 +524,16 @@ contains
     wphydrometp, wp2hmp, rtphmp, thlphmp, &                 ! intent(in)
     host_dx, host_dy, &                                     ! intent(in)
     um, vm, upwp, vpwp, up2, vp2, &                         ! intent(inout)
-    thlm, rtm, wprtp, wpthlp, &                             ! intent(inout)
-    wp2, wp3, rtp2, rtp3, thlp2, thlp3, rtpthlp, &          ! intent(inout)
+    thlm, rtm, wtrc_rtm, wprtp, wtrc_wprtp, wpthlp, &                             ! intent(inout)
+    wp2, wp3, rtp2, wtrc_rtp2, rtp3, wtrc_rtp3, & 
+    thlp2, thlp3, rtpthlp, wtrc_rtpthlp, &          ! intent(inout)
     sclrm,   &
 #ifdef GFDL
                sclrm_trsport_only,  &  ! h1g, 2010-06-16    ! intent(inout)
 #endif
     sclrp2, sclrprtp, sclrpthlp, &                          ! intent(inout)
     wpsclrp, edsclrm, err_code_api, &                       ! intent(inout)
-    rcm, cloud_frac, &                                      ! intent(inout)
+    rcm, wtrc_rcm, cloud_frac, &                                      ! intent(inout)
     wpthvp, wp2thvp, rtpthvp, thlpthvp, &                   ! intent(inout)
     sclrpthvp, &                                            ! intent(inout)
     pdf_params, pdf_params_zm, &                            ! intent(inout)
@@ -553,6 +558,8 @@ contains
       sclr_dim, & ! Variable(s)
       edsclr_dim
 
+    !water tracers:
+    use water_tracer_vars, only: wtrc_nwset
     implicit none
       !!! Input Variables
     logical, intent(in) ::  &
@@ -692,6 +699,27 @@ contains
       rcm_in_layer, & ! rcm in cloud layer                              [kg/kg]
       cloud_cover     ! cloud cover                                     [-]
 
+    !water tracers:
+    !-------------
+    real( kind = core_rknd ), intent(in), dimension(gr%nz,wtrc_nwset) ::  &
+    wtrc_rtm_forcing,   & ! r_t forcing (thermodynamic levels) [(kg/kg)/s]
+    wtrc_rtp2_forcing,  & ! r_t^2 forcing (thermodynamic levels) [(kg/kg)/s]
+    wtrc_wprtp_forcing, & ! wtrc_rt'w' forcing 
+    wtrc_rtpthlp_forcing  ! wtrc_rt'th_l' forcing 
+
+  real( kind = core_rknd ), intent(in), dimension(wtrc_nwset) ::  &
+    wtrc_wprtp_sfc  ! water tracer/isotope surface fluxes [(kg m)/(kg s)]
+
+  real( kind = core_rknd ), intent(inout), dimension(gr%nz,wtrc_nwset) :: &
+    wtrc_rtm,   &   ! water tracer/isotope total water mixing ratio (thermo levels).
+    wtrc_wprtp, &   ! w'wtrc_rt' [(kg/kg)(m/s)]
+    wtrc_rtp2,  &   ! (wtrc_rt')^2 [(kg/kg)^2] 
+    wtrc_rtp3,  &   ! (wtrc_rt')^3 [(kg/kg)^3]
+    wtrc_rtpthlp
+
+  real( kind = core_rknd ), intent(out), dimension(gr%nz,wtrc_nwset) :: &
+    wtrc_rcm        ! water tracer/isotope cloud water mixing ratio (thermo levels).
+  !-------------
     ! Variables that need to be output for use in host models
     real( kind = core_rknd ), intent(out), dimension(gr%nz) ::  &
       wprcp,            & ! w'r_c' (momentum levels)                  [(kg/kg) m/s]
@@ -726,13 +754,19 @@ contains
       vm_pert,      & ! pertubed northward grid-mean wind component (thermodynamic levels)   [m/s]
       upwp_pert,    & ! pertubed u'w' (momentum levels)                         [m^2/s^2]
       vpwp_pert       ! pertubed v'w' (momentum levels)                         [m^2/s^2]
+
     call advance_clubb_core( &
       l_implemented, dt, fcor, sfc_elevation, hydromet_dim, & ! intent(in)
-      thlm_forcing, rtm_forcing, um_forcing, vm_forcing, &    ! intent(in)
-      sclrm_forcing, edsclrm_forcing, wprtp_forcing, &        ! intent(in)
-      wpthlp_forcing, rtp2_forcing, thlp2_forcing, &          ! intent(in)
-      rtpthlp_forcing, wm_zm, wm_zt, &                        ! intent(in)
-      wpthlp_sfc, wprtp_sfc, upwp_sfc, vpwp_sfc, &            ! intent(in)
+      thlm_forcing, rtm_forcing, wtrc_rtm_forcing, &          ! intent(in) 
+      um_forcing, vm_forcing, &    ! intent(in)
+      sclrm_forcing, edsclrm_forcing, wprtp_forcing, &
+      wtrc_wprtp_forcing, &                                   ! intent(in)
+      wpthlp_forcing, rtp2_forcing, wtrc_rtp2_forcing, &
+      thlp2_forcing, &          ! intent(in)
+      rtpthlp_forcing, wtrc_rtpthlp_forcing, &
+      wm_zm, wm_zt, &                        ! intent(in)
+      wpthlp_sfc, wprtp_sfc, wtrc_wprtp_sfc, &
+      upwp_sfc, vpwp_sfc, &            ! intent(in)
       wpsclrp_sfc, wpedsclrp_sfc, &                           ! intent(in)
       p_in_Pa, rho_zm, rho, exner, &                          ! intent(in)
       rho_ds_zm, rho_ds_zt, invrs_rho_ds_zm, &                ! intent(in)
@@ -744,15 +778,16 @@ contains
       wphydrometp, wp2hmp, rtphmp, thlphmp, &                 ! intent(in)
       host_dx, host_dy, &                                     ! intent(in)
       um, vm, upwp, vpwp, up2, vp2, &                         ! intent(inout)
-      thlm, rtm, wprtp, wpthlp, &                             ! intent(inout)
-      wp2, wp3, rtp2, rtp3, thlp2, thlp3, rtpthlp, &          ! intent(inout)
+      thlm, rtm, wtrc_rtm, wprtp, wtrc_wprtp, wpthlp, &                             ! intent(inout)
+      wp2, wp3, rtp2, wtrc_rtp2, rtp3, wtrc_rtp3, &
+      thlp2, thlp3, rtpthlp, wtrc_rtpthlp, &          ! intent(inout)
       sclrm,   &
 #ifdef GFDL
                sclrm_trsport_only,  &  ! h1g, 2010-06-16      ! intent(inout)
 #endif
       sclrp2, sclrprtp, sclrpthlp, &                          ! intent(inout)
       wpsclrp, edsclrm, &                                     ! intent(inout)
-      rcm, cloud_frac, &                                      ! intent(inout)
+      rcm, wtrc_rcm, cloud_frac, &                                      ! intent(inout)
       wpthvp, wp2thvp, rtpthvp, thlpthvp, &                   ! intent(inout)
       sclrpthvp, &                                            ! intent(inout)
       pdf_params, pdf_params_zm, &                            ! intent(inout)
@@ -766,7 +801,7 @@ contains
 #ifdef CLUBB_CAM
                qclvar, thlprcp_out, &                         ! intent(out)
 #endif
-      wprcp, ice_supersat_frac, &                             ! intent(out)
+      wprcp, ice_supersat_frac, &                   ! intent(out)
       rcm_in_layer, cloud_cover, &                            ! intent(out)
       upwp_sfc_pert, vpwp_sfc_pert, &                         ! intent(in)
       um_pert, vm_pert, upwp_pert, vpwp_pert )                ! intent(inout)

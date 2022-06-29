@@ -86,6 +86,12 @@ Chemistry package: waccm_mozart, waccm_mozart_mam3, waccm_mozart_sulfur, waccm_g
 <entry id="vbs" valid_values="0,1" value="0">
 Option to turn on vbs soa processes in the modal aerosol model: 0 => no, 1 => yes
 </entry>
+<entry id="water_tracer" valid_values="none,h2o,h2o_hdo,h2o_h218o,h2o_hdo_h218o,h2o_h216o_hdo_h218o,h2o_h216o_h218o_h217o,h2o_h216o_hdo_hto,all_stable_wiso,all_wiso" value="">
+Water tracer (isotope or tag) package: none, h2o, h2o_hdo, h2o_h218o, h2o_hdo_h218o, h2o_h216o_hdo_h218o, h2o_h216o_h218o_h217o, h2o_h216o_hdo_hto, all_stable_wiso, all_wiso.
+</entry>
+<entry id="water_tag_num" value="0">
+Number of water tags for this simulation.
+</entry>
 <entry id="prog_species" valid_values="DST,SSLT,SO4,GHG,OC,BC,CARBON16" value="" list="1">
 Prognostic mozart species packages: list of any subset of the following: DST,SSLT,SO4,GHG,OC,BC,CARBON16
 </entry>

@@ -41,12 +41,17 @@ module advance_xp2_xpyp_module
   contains
 
   !=============================================================================
-  subroutine advance_xp2_xpyp( tau_zm, wm_zm, rtm, wprtp, thlm,        & ! In
+  ! RPF - this seems to be a newer version of CLUBB, and this function may 
+  ! need additional updates to work with water tracers (seem to be higher order moments)
+  subroutine advance_xp2_xpyp( tau_zm, wm_zm, rtm, wtrc_rtm, wprtp,    & ! In 
+                               wtrc_wprtp, thlm,                       & ! In
                                wpthlp, wpthvp, um, vm, wp2, wp2_zt,    & ! In
                                wp3, upwp, vpwp, sigma_sqd_w, Skw_zm,   & ! In
                                wprtp2, wpthlp2, wprtpthlp,             & ! In
-                               Kh_zt, rtp2_forcing, thlp2_forcing,     & ! In
-                               rtpthlp_forcing, rho_ds_zm, rho_ds_zt,  & ! In
+                               Kh_zt, rtp2_forcing, wtrc_rtp2_forcing, & ! In
+                               thlp2_forcing,                          & ! In
+                               rtpthlp_forcing, wtrc_rtpthlp_forcing,  & ! In 
+                               rho_ds_zm, rho_ds_zt,                   & ! In
                                invrs_rho_ds_zm, thv_ds_zm, cloud_frac, & ! In
                                Lscale, wp3_on_wp2, wp3_on_wp2_zt,      & ! In
                                pdf_implicit_coefs_terms,               & ! In
@@ -54,7 +59,8 @@ module advance_xp2_xpyp_module
                                sclrm, wpsclrp,                         & ! In
                                wpsclrp2, wpsclrprtp, wpsclrpthlp,      & ! In
                                wp2_splat,                              & ! In
-                               rtp2, thlp2, rtpthlp, up2, vp2,         & ! Inout
+                               rtp2, wtrc_rtp2, thlp2, rtpthlp,        & ! In
+                               wtrc_rtpthlp, up2, vp2,                 & ! Inout
                                sclrp2, sclrprtp, sclrpthlp)              ! Inout
 
     ! Description:
@@ -180,6 +186,10 @@ module advance_xp2_xpyp_module
         iisclr_rt, &
         iisclr_thl
 
+    !water tracers
+    use water_tracer_vars, only: &
+        wtrc_nwset
+
     implicit none
 
     ! Intrinsic functions
@@ -230,6 +240,14 @@ module advance_xp2_xpyp_module
     type(implicit_coefs_terms), dimension(gr%nz), intent(in) :: &
       pdf_implicit_coefs_terms    ! Implicit coefs / explicit terms [units vary]
 
+    !water tracers
+    ! need to confirm: are wtrc_wprtp2, wtrc_wpthlp2, wtrc_wprtpthlp needed? quite possibly - RPF
+    real( kind = core_rknd ), intent(in), dimension(gr%nz,wtrc_nwset) :: &
+    wtrc_rtm,          & ! water tracer total water [kg/kg]
+    wtrc_wprtp,        & ! water tracer moisture flux [(m/s)(kg/kg)]
+    wtrc_rtp2_forcing, & ! water tracer variance forcing [?]
+    wtrc_rtpthlp_forcing ! water tracer water/theta_l covariance forcing [?]
+
     logical, intent(in) :: l_iter ! Whether variances are prognostic
 
     real( kind = core_rknd ), intent(in) :: &
@@ -256,6 +274,12 @@ module advance_xp2_xpyp_module
       up2,     & ! <u'^2>                        [m^2/s^2]
       vp2        ! <v'^2>                        [m^2/s^2]
 
+    !water tracers
+      real( kind = core_rknd ), intent(inout), dimension(gr%nz,wtrc_nwset) :: &
+      wtrc_rtp2, & !<wtrc_r_t'^2>                [(kg/kg)^2]
+      wtrc_rtpthlp !<wtrc_r_t'th_l'>             [(kg/kg) K]
+
+
     ! Passive scalar output
     real( kind = core_rknd ), intent(inout), dimension(gr%nz, sclr_dim) ::  & 
       sclrp2, sclrprtp, sclrpthlp
@@ -279,8 +303,16 @@ module advance_xp2_xpyp_module
     real( kind = core_rknd ), dimension(3,gr%nz) ::  & 
       lhs ! Tridiagonal matrix
 
+    !water tracers
+    real( kind = core_rknd ), dimension(3,gr%nz,wtrc_nwset) :: &
+    wtrc_lhs
+
     real( kind = core_rknd ), dimension(gr%nz,1) :: & 
       rhs ! RHS vector of tridiagonal matrix
+
+    !water tracers
+    real( kind = core_rknd ), dimension(gr%nz,1,wtrc_nwset) :: &
+    wtrc_rhs
 
     real( kind = core_rknd ), dimension(gr%nz,2) :: & 
       uv_rhs,    &! RHS vectors of tridiagonal system for up2/vp2
@@ -372,6 +404,11 @@ module advance_xp2_xpyp_module
       wprtp_zt,  & ! w'r_t' interpolated to thermodynamic levels   [(kg/kg) m/s]
       wpthlp_zt    ! w'th_l' interpolated to thermodyamnic levels  [K m/s]
 
+    ! water tracers
+    real( kind = core_rknd ), dimension(gr%nz, wtrc_nwset) :: &
+    wtrc_wprtp_zt, &   ! w'wtrc_r_t' interpolated to thermo levels [(kg/kg)(m/s)]
+    wtrc_rtpthlp_chnge ! Net change in wtrc_rt'th_l' due to clipping [ (kg/kg) K]
+
     real( kind = core_rknd ), dimension(gr%nz) :: &
       rtpthlp_chnge    ! Net change in r_t'th_l' due to clipping [(kg/kg) K]
 
@@ -394,6 +431,7 @@ module advance_xp2_xpyp_module
     ! Loop indices
     integer :: i, k
 
+    integer :: m ! water tracer loop index
     !---------------------------- Begin Code ----------------------------------
 
     if ( clubb_at_least_debug_level( 0 ) ) then
@@ -564,6 +602,10 @@ module advance_xp2_xpyp_module
           ! advection terms for the ADG1 PDF.
           wprtp_zt  = zm2zt( wprtp )
           wpthlp_zt = zm2zt( wpthlp )
+          !water tracers
+          do m=1,wtrc_nwset
+            wtrc_wprtp_zt(:,m) = zm2zt( wtrc_wprtp(:,m) )
+          end do
 
           ! Implicit coefficient on <rt'^2> in <w'rt'^2> equation.
           coef_wprtp2_implicit = one_third * beta * a1_zt * wp3_on_wp2_zt
@@ -828,6 +870,34 @@ module advance_xp2_xpyp_module
     ! Solve the tridiagonal system
     call xp2_xpyp_solve( xp2_xpyp_rtp2, 1, & ! Intent(in)
                          rhs, lhs, rtp2 )    ! Intent(inout)
+    !water tracers
+    !-------------
+    do m=1,wtrc_nwset
+      ! Implicit contributions to term rtp2
+      call xp2_xpyp_lhs( dt, l_iter, & ! In
+                         coef_wprtp2_implicit, coef_wprtp2_implicit_zm, & ! In
+                         sgn_t_vel_rtp2, tau_zm, wm_zm, Kw2, & ! In
+                         rho_ds_zt, rho_ds_zm, invrs_rho_ds_zm, & ! In
+                         C2rt_1d, nu2_vert_res_dep, & ! In
+                         wtrc_lhs(:,:,m) ) ! Out                   
+
+                       ! this is also called below, not sure why?
+      call xp2_xpyp_rhs( xp2_xpyp_sclrpthlp, dt, l_iter, &  ! In
+                       coef_wprtpthlp_implicit, coef_wprtpthlp_implicit_zm, &!In
+                       term_wprtpthlp_explicit, term_wprtpthlp_explicit_zm, &!In
+                       sgn_t_vel_rtpthlp, wprtp, wpthlp, & !In
+                       rtm, thlm, wtrc_rtpthlp(:,m), & !In
+                       wtrc_rtpthlp_forcing(:,m), & !In
+                       rho_ds_zm, rho_ds_zt, invrs_rho_ds_zm, & ! In
+                       C2rtthl_1d, tau_zm, zero_threshold, & ! In
+                       wtrc_rhs(:,:,m) )                      ! Intent(out)
+
+      ! Solve the tridiagonal system
+      call xp2_xpyp_solve( xp2_xpyp_sclrprtp, 1, &                  ! Intent(in)
+                           wtrc_rhs(:,:,m), wtrc_lhs(:,:,m), &      ! Intent(in)
+                           wtrc_rtp2(:,m) )                         ! Intent(inout)            
+    end do
+    !-------------
 
     if ( l_stats_samp ) then
       call xp2_xpyp_implicit_stats( xp2_xpyp_rtp2, rtp2 ) ! Intent(in)
@@ -872,6 +942,11 @@ module advance_xp2_xpyp_module
                        C2rtthl_1d, nu2_vert_res_dep, & ! In
                        lhs ) ! Out
 
+    !water tracers:
+    do m=1,wtrc_nwset
+      wtrc_lhs(:,:,m) = lhs !Copy LHS
+    end do
+
     ! Explicit contributions to rtpthlp
     call xp2_xpyp_rhs( xp2_xpyp_rtpthlp, dt, l_iter, & ! In
                        coef_wprtpthlp_implicit, coef_wprtpthlp_implicit_zm, &!In
@@ -882,9 +957,76 @@ module advance_xp2_xpyp_module
                        C2rtthl_1d, tau_zm, zero_threshold, & ! In
                        rhs ) ! Out
 
+                           !water tracers:
+    !-------------
+    do m=1,wtrc_nwset
+      ! if(m .le. 3) then
+      ! RPF - note function arguments to xp2_xpyp_rhs has changed:
+         call xp2_xpyp_rhs( xp2_xpyp_sclrpthlp, dt, l_iter, &  ! In
+                            coef_wprtpthlp_implicit, coef_wprtpthlp_implicit_zm, &!In
+                            term_wprtpthlp_explicit, term_wprtpthlp_explicit_zm, &!In
+                            sgn_t_vel_rtpthlp, wprtp, wpthlp, & !In
+                            rtm, thlm, wtrc_rtpthlp(:,m), & !In
+                            wtrc_rtpthlp_forcing(:,m), & !In
+                            rho_ds_zm, rho_ds_zt, invrs_rho_ds_zm, & ! In
+                            C2rtthl_1d, tau_zm, zero_threshold, & ! In
+                            wtrc_rhs(:,:,m) ) ! Out
+      ! else if(m .eq. 4) then !DEBUGGING
+      !   if(wtrc_rtm(2,4) .lt. 0.5*wtrc_rtm(2,2)) then
+      !     call xp2_xpyp_rhs( xp2_xpyp_sclrpthlp, dt, l_iter, a1,  &    ! Intent(in)
+      !                      a1_zt, wp2_zt, wtrc_wprtp(:,m), &           ! Intent(in)
+      !                      wtrc_wprtp_zt(:,m), wp3_on_wp2, &           ! Intent(in)
+      !                      wp3_on_wp2_zt, wpthlp, wpthlp_zt, &         ! Intent(in)
+      !                      wtrc_rtm(:,m), thlm, wtrc_rtpthlp(:,m), &   ! Intent(in)
+      !                      wtrc_rtpthlp_forcing(:,m), &                ! Intent(in)
+      !                      rho_ds_zm, rho_ds_zt, invrs_rho_ds_zm, &    ! Intent(in)
+      !                      C2rtthl_1d, tau_zm, zero_threshold, beta, & ! Intent(in)
+      !                      wtrc_rhs(:,:,m), debug=.true. )             ! Intent(out)
+      !   else
+      !     call xp2_xpyp_rhs( xp2_xpyp_sclrpthlp, dt, l_iter, a1,  &    ! Intent(in)
+      !                      a1_zt, wp2_zt, wtrc_wprtp(:,m), &           ! Intent(in)
+      !                      wtrc_wprtp_zt(:,m), wp3_on_wp2, &           ! Intent(in)
+      !                      wp3_on_wp2_zt, wpthlp, wpthlp_zt, &         ! Intent(in)
+      !                      wtrc_rtm(:,m), thlm, wtrc_rtpthlp(:,m), &   ! Intent(in)
+      !                      wtrc_rtpthlp_forcing(:,m), &                ! Intent(in)
+      !                      rho_ds_zm, rho_ds_zt, invrs_rho_ds_zm, &    ! Intent(in)
+      !                      C2rtthl_1d, tau_zm, zero_threshold, beta, & ! Intent(in)
+      !                      wtrc_rhs(:,:,m), debug=.false. )             ! Intent(out)
+      !   end if  
+      ! end if !DEBUGGING
+     end do
+     !-------------
+
     ! Solve the tridiagonal system
     call xp2_xpyp_solve( xp2_xpyp_rtpthlp, 1, & ! Intent(in)
                          rhs, lhs, rtpthlp )    ! Intent(inout)
+    !water tracers
+    !-------------
+    do m=1,wtrc_nwset
+      ! Implicit contributions to term rtp2
+!      call xp2_xpyp_lhs( dt, l_iter, wp3_on_wp2_zt, wp3_on_wp2, &  ! Intent(in)
+!                       a1, a1_zt, tau_zm, wm_zm, Kw2, &            ! Intent(in)
+!                       rho_ds_zt, rho_ds_zm, invrs_rho_ds_zm, &    ! Intent(in)
+!                       C2rt_1d, nu2_vert_res_dep, beta, &          ! Intent(in)
+!                       wtrc_lhs(:,:,m))                            ! Intent(out)
+
+!       call xp2_xpyp_rhs( xp2_xpyp_sclrpthlp, dt, l_iter, a1,  &   ! Intent(in)
+!                       a1_zt, wp2_zt, wtrc_wprtp(:,m), &           ! Intent(in)
+!                       wtrc_wprtp_zt(:,m), wp3_on_wp2, &           ! Intent(in)
+!                       wp3_on_wp2_zt, wpthlp, wpthlp_zt, &         ! Intent(in)
+!                       wtrc_rtm(:,m), thlm, wtrc_rtpthlp(:,m), &   ! Intent(in)
+!                       wtrc_rtpthlp_forcing(:,m), &                ! Intent(in)
+!                       rho_ds_zm, rho_ds_zt, invrs_rho_ds_zm, &    ! Intent(in)
+!                       C2rtthl_1d, tau_zm, zero_threshold, beta, & ! Intent(in)
+!                       wtrc_rhs(:,:,m) )                           ! Intent(out)
+
+      ! Solve the tridiagonal system
+      call xp2_xpyp_solve( xp2_xpyp_sclrprtp, 1, &                 ! Intent(in)
+                           wtrc_rhs(:,:,m), wtrc_lhs(:,:,m), &     ! Intent(in)
+                           wtrc_rtpthlp(:,m) )                     ! Intent(out)
+    end do
+    !-------------
+
 
     if ( l_stats_samp ) then
       call xp2_xpyp_implicit_stats( xp2_xpyp_rtpthlp, rtpthlp ) ! Intent(in)
@@ -954,6 +1096,12 @@ module advance_xp2_xpyp_module
       call pos_definite_variances( xp2_xpyp_vp2, dt, w_tol_sqd, & ! Intent(in)
                                    rho_ds_zm, rho_ds_zt, &        ! Intent(in)
                                    vp2 )                          ! Intent(inout)
+      !water tracers
+      do m=1,wtrc_nwset
+        call pos_definite_variances( xp2_xpyp_sclrprtp, dt, rt_tol**2, & ! Intent(in)
+                                   rho_ds_zm, rho_ds_zt, &               ! Intent(in)
+                                   wtrc_rtp2(:,m) )           
+      end do
     endif
 
 
@@ -993,6 +1141,12 @@ module advance_xp2_xpyp_module
           call clip_variance_level( xp2_xpyp_rtp2, dt, threshold, k, & ! In
                                     rtp2(k) )                          ! In/out
 
+          !water tracers
+          do m=1,wtrc_nwset
+            call clip_variance_level( 0, dt, threshold, k, & ! In
+                                      wtrc_rtp2(k,m))
+
+          end do ! m 
        enddo ! k = 1, gr%nz, 1
 
     else
@@ -1003,6 +1157,12 @@ module advance_xp2_xpyp_module
        call clip_variance( xp2_xpyp_rtp2, dt, threshold, & ! Intent(in)
                            rtp2 )                          ! Intent(inout)
 
+       !water tracers
+       do m=1,wtrc_nwset
+        call clip_variance( 0, dt, threshold, & ! Intent(in)
+                           wtrc_rtp2(:,m) )             
+       end do
+                      
     endif ! l_min_xp2_from_corr_wx
 
     ! Special clipping on the variance of rt to prevent a large variance at
@@ -1021,7 +1181,16 @@ module advance_xp2_xpyp_module
         threshold = rtp2_clip_coef * rtm(k)**2
         if ( rtp2(k) > threshold ) then
           rtp2(k) = threshold
-        end if
+        end if       
+        !water tracers
+        !-------------
+        do m=1,wtrc_nwset
+          threshold = rtp2_clip_coef * wtrc_rtm(k,m)**2
+          if( wtrc_rtp2(k,m) > threshold ) then
+            wtrc_rtp2(k,m) = threshold
+          end if
+        end do
+        !-------------
       end do ! k = 1..gr%nz
       
       if ( l_stats_samp ) then
@@ -1162,6 +1331,13 @@ module advance_xp2_xpyp_module
                      l_last_clip_ts, dt, rtp2, thlp2,  &  ! Intent(in)
                      rtpthlp, rtpthlp_chnge )     ! Intent(inout)
 
+     !water tracers:
+     do m=1,wtrc_nwset
+      call clip_covar( xp2_xpyp_sclrpthlp, l_first_clip_ts,  &     ! Intent(in)
+                    l_last_clip_ts, dt, wtrc_rtp2(:,m), thlp2,  &  ! Intent(in)
+                    wtrc_rtpthlp(:,m), wtrc_rtpthlp_chnge )        ! Intent(inout)
+    end do
+    
     if ( l_scalar_calc ) then
 
       ! Implicit contributions to passive scalars
