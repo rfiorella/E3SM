@@ -20,19 +20,16 @@ module water_isotopes
 !
 ! Module added to CESM's csm_share by:  Jesse Nusbaumer <nusbaume@colorado.edu> - March 2011
 !
+! Module added to E3SM by: Rich Fiorella <rfiorella@lanl.gov> - June 2022
+!
 !-----------------------------------------------------------------------
 #undef NOFRAC          /* all fractionation factors = 1 */
 #undef NOKIN           /* all kinetic effects off */
 !-----------------------------------------------------------------------
 
   use shr_kind_mod,  only: r8 => shr_kind_r8
-!  use abortutils,    only: endrun
+  use shr_sys_mod,   only: shr_sys_abort
   use shr_const_mod, only: SHR_CONST_TKTRIP
-!                           SHR_CONST_RSTD_H2ODEV, &
-!                           SHR_CONST_VSMOW_16O, &
-!                           SHR_CONST_VSMOW_18O, &
-!                           SHR_CONST_VSMOW_D , &
-!                           SHR_CONST_VSMOW_H
 
   implicit none
 
@@ -61,6 +58,7 @@ module water_isotopes
   public :: wiso_flxoce          ! calculate isotopic ocean evaporation.
   public :: wiso_ssatf           ! supersaturation function
   public :: wiso_heff            ! effective humidity function
+  public :: wiso_decay           ! radioactive decay (HTO)
 
   !Data checking routines:
 
@@ -81,12 +79,14 @@ module water_isotopes
   integer, parameter, public  :: isph216o = 2    ! H216O  ! H216O, nearly the same as "regular" water
   integer, parameter, public  :: isphdo   = 3    ! HDO
   integer, parameter, public  :: isph218o = 4    ! H218O
+  integer, parameter, public  :: isph217o = 5    ! H217O
+  integer, parameter, public  :: isphto   = 6    ! HTO
 
 ! Module parameters
-  integer , parameter, public :: pwtspec = 4    ! number of water species (h2o,hdo,h218o,h216o)
+  integer , parameter, public :: pwtspec = 6     ! number of water species (h2o,hdo,h218o,h216o,h217o,hto)
 
 ! Tunable prameters for fractionation scheme
-  real(r8), parameter :: dkfac    = 0.58_r8           ! diffusive evap. kinetic power law
+  real(r8), parameter, public :: dkfac    = 0.58_r8    ! diffusive evap. kinetic power law (Stewart, 1975?)
 !  real(r8), parameter :: tkini    = SHR_CONST_TKTRIP  ! min temp. for kinetic effects as ice appears
 !  real(r8), parameter :: tkini    = 258.15_r8         !From Bony et. al., 2008
   real(r8), parameter :: tkini    = 253.15_r8         !From Jouzel and Merlivat, 1984
@@ -103,7 +103,7 @@ module water_isotopes
   real(r8), parameter :: tzero    = SHR_CONST_TKTRIP  ! supercooled water in stratiform
 
   character(len=8), dimension(pwtspec), parameter, public :: & ! species names
-      spnam  = (/ 'H2O     ', 'H216O   ', 'HD16O   ', 'H218O   ' /)
+      spnam  = (/ 'H2O     ', 'H216O   ', 'HD16O   ', 'H218O   ', 'H217O   ', 'HT16O   ' /)
 
 ! Private isotopic constants
 !
@@ -112,39 +112,47 @@ module water_isotopes
 ! Physical constants for isotopic molecules
 !
   real(r8), dimension(pwtspec), parameter :: &  ! isotopic subs.
-      fisub = (/ 1._r8, 1._r8, 2._r8, 1._r8 /)
+      fisub = (/ 1._r8, 1._r8, 2._r8, 1._r8, 1._r8, 2._r8 /)
+
+  real(r8), dimension(pwtspec), parameter :: &  ! molecular weights
+      mwisp = (/ 18._r8, 18._r8, 19._r8, 20._r8, 19._r8, 20._r8 /)
+
+  real(r8), dimension(pwtspec), parameter :: &  ! mol. weight ratio
+      epsmw = (/ 1._r8, 1._r8, 19._r8/18._r8, 20._r8/18._r8, 19._r8/18._r8, 20._r8/18._r8 /)
+
+  ! Isotopic ratios in natural abundance (SMOW)
+  real(r8), dimension(pwtspec), parameter :: &  ! SMOW isotope ratios
+      rnat  = (/ 1._r8, 0.9976_r8, 155.76e-6_r8, 2005.20e-6_r8, 402.00e-6_r8, 77.88e-06_r8 /)
 
   ! TBD: Ideally this should be controlled by something like a namelist parameter,
   ! but it needs to be something that can be made consistent between models.
-  real(r8), dimension(pwtspec), parameter :: &  ! diffusivity ratio (note D/H, not HDO/H2O)
-!     difrm = (/ 1._r8, 1._r8, 0.9836504_r8, 0.9686999_r8 /)   ! kinetic theory
-!      difrm = (/ 1._r8, 1._r8, 1._r8, 1._r8 /)                 ! no kinetic fractination
-!      difrm = (/ 1._r8, 1._r8, 0.9836504_r8, 0.9686999_r8 /)   ! this with expk
-!      difrm = (/ 1._r8, 1._r8, 0.9755_r8, 0.9723_r8 /)         ! Merlivat 1978 (tuned for isoCAM3)
-       difrm = (/ 1._r8, 1._r8, 0.9757_r8, 0.9727_r8 /)         ! Merlivat 1978 (direct from paper)
-!      difrm = (/ 1._r8, 1._r8, 0.9839_r8, 0.9691_r8 /)         ! Cappa etal 2003
+  ! NOTE:  HT16O values pulled from GISS ModelE2.1 and isoCAM3
+  real(r8), dimension(pwtspec), parameter, public :: &  ! diffusivity ratio (note D/H, not HDO/H2O)
+!      difrm = (/ 1._r8, 1._r8, 1._r8, 1._r8, 1._r8, 1._r8 /)                 ! No kinetic fractination
+!      difrm = (/ 1._r8, 1._r8, 0.9757_r8, 0.9727_r8, 0.9856_r8, 0.9679_r8/) ! Merlivat 1978 (direct from paper)
+      difrm = (/ 1._r8, 1._r8, 0.9757_r8, 0.9727_r8, 0.9858_r8, 0.9679_r8 /) ! Merlivat 1978 + Schoenemann et. al., 2014
+!      difrm = (/ 1._r8, 1._r8, 0.9839_r8, 0.9691_r8, 0.9856_r8, 0.9679_r8 /) ! Cappa et. al., 2003 + Merlivat 1978
 
 ! Prescribed isotopic ratios (largely arbitrary and tunable)
   real(r8), dimension(pwtspec), parameter :: &  ! model standard isotope ratio
-!suggested by D. Noone:
-       rstd  = (/ 1._r8, 1._r8, 1._r8, 1._r8 /)                    ! best numerics
-!      rstd  = (/ 1._r8, 0.5_r8, 0.25_r8, 0.2_r8, 0.1_r8 /)         ! test numerics
-!     rstd  = (/ 1._r8, 0.9976_r8, 155.76e-6_r8, 2005.20e-6_r8 /)   ! natural abundance
-!     rstd  = (/ SHR_CONST_RSTD_H2ODEV, SHR_CONST_VSMOW_16O, SHR_CONST_VSMOW_D, SHR_CONST_VSMOW_18O /)   ! natural abundance
-!     rstd  = (/ SHR_CONST_RSTD_H2ODEV, SHR_CONST_RSTD_H2ODEV, SHR_CONST_RSTD_H2ODEV, SHR_CONST_RSTD_H2ODEV /)   !all 1.0
+      rstd  = (/ 1._r8, 1._r8, 1._r8, 1._r8, 1._r8, 1._r8 /)       ! best numerics
+!      rstd  = (/ 1._r8, 1.0_r8, 0.5_r8, 0.25_r8, 0.1_r8, 1._r8 /)  ! test numerics
+!      rstd  = rnat                                                 ! natural abundance
+!      rstd  = (/ SHR_CONST_RSTD_H2ODEV, SHR_CONST_VSMOW_16O, SHR_CONST_VSMOW_D, SHR_CONST_VSMOW_18O /)   ! natural abundance
+!      rstd  = (/ SHR_CONST_RSTD_H2ODEV, SHR_CONST_RSTD_H2ODEV, SHR_CONST_RSTD_H2ODEV, SHR_CONST_RSTD_H2ODEV /)   !all 1.0
 
 ! Isotope enrichment at ocean surface (better to be computed or read from file)
   real(r8), dimension(pwtspec), parameter :: &  ! mean ocean surface enrichent
 !      boce  = (/ 1._r8, 1._r8, 1.004_r8, 1.0005_r8 /)
 !      boce  = (/ 1._r8, 1._r8, 1.0128_r8, 1.0016_r8, 1.0008_r8, 1.00671_r8 /)  ! LGM
-      boce  = (/ 1._r8, 1._r8, 1._r8, 1._r8 /)
+      boce  = (/ 1._r8, 1._r8, 1._r8, 1._r8, 1._r8, 1._r8 /)
 
 ! Ocean surface kinetic fractionation parameters for M&J method:
 ! TBD: Check to make sure that the entries for h216o are correct.
   real(r8), parameter, dimension(pwtspec) :: &  ! surface kinetic exchange
-      aksmc = (/ 0._r8, 0._r8, 0.00528_r8,   0.006_r8    /), &
-      akrfa = (/ 0._r8, 0._r8, 0.2508e-3_r8, 0.285e-3_r8 /), &
-      akrfb = (/ 0._r8, 0._r8, 0.7216e-3_r8, 0.82e-3_r8  /)
+      aksmc = (/ 0._r8, 0._r8, 0.00528_r8,   0.006_r8, 0.00314_r8, 0.01056_r8 /), &
+      akrfa = (/ 0._r8, 0._r8, 0.2508e-3_r8, 0.285e-3_r8, 0.1495e-3_r8, 0.5016e-3_r8 /), &
+      akrfb = (/ 0._r8, 0._r8, 0.7216e-3_r8, 0.82e-3_r8, 0.430e-3_r8, 1.4432e-3_r8 /)
 
 ! Coefficients for fractionation
 ! TBD: Check to make sure that the entries for h216o are correct.
@@ -154,13 +162,15 @@ module water_isotopes
 !      alpbl = (/ 0._r8, 0._r8, -76.248_r8,   -0.4156_r8    /) , &
 !      alpcl = (/ 0._r8, 0._r8, 52.612e-3_r8, -2.0667e-3_r8 /)
 
-!From Horita and Wesolowski, 1994:
+! From Horita and Wesolowski, 1994:
+! NOTE:  H217O is modified later, so keep values here the same as H218O.
+! NOTE:  HT16O is modified later, so keep values here the same as HD16O.
   real(r8), parameter, dimension(pwtspec) :: &  ! liquid/vapour
-      alpal = (/ 0._r8, 0._r8, 1158.8e-12_r8, 0.35041e+6_r8 /), &
-      alpbl = (/ 0._r8, 0._r8, -1620.1e-9_r8, -1.6664e+3_r8 /), &
-      alpcl = (/ 0._r8, 0._r8, 794.84e-6_r8, 6.7123_r8      /), &
-      alpdl = (/ 0._r8, 0._r8, -161.04e-3_r8, -7.685e-3_r8  /), &
-      alpel = (/ 0._r8, 0._r8, 2.9992e+6_r8, 0._r8 /)
+      alpal = (/ 0._r8, 0._r8, 1158.8e-12_r8, 0.35041e+6_r8, 0.35041e+6_r8, 1158.8e-12_r8 /), &
+      alpbl = (/ 0._r8, 0._r8, -1620.1e-9_r8, -1.6664e+3_r8, -1.6664e+3_r8, -1620.1e-9_r8 /), &
+      alpcl = (/ 0._r8, 0._r8, 794.84e-6_r8,  6.7123_r8,     6.7123_r8,     794.84e-6_r8 /), &
+      alpdl = (/ 0._r8, 0._r8, -161.04e-3_r8, -7.685e-3_r8, -7.685e-3_r8,   -161.04e-3_r8 /), &
+      alpel = (/ 0._r8, 0._r8, 2.9992e+6_r8,  0._r8,        0._r8,          2.9992e+6_r8 /)
 
 !isoCAM3 values:
 !  real(r8), parameter, dimension(pwtspec) :: &  ! ice/vapour
@@ -168,11 +178,17 @@ module water_isotopes
 !      alpbi = (/ 0._r8, 0._r8, 0._r8,       11.839_r8     /), &
 !      alpci = (/ 0._r8, 0._r8, -9.34e-2_r8, -28.224e-3_r8 /)
 
-!From Merlivat & Nief,1967 for HDO, and Majoube, 1971b for H218O:
- real(r8), parameter, dimension(pwtspec) :: &  ! ice/vapour
-      alpai = (/ 0._r8, 0._r8, 16289._r8,   0._r8         /), &
-      alpbi = (/ 0._r8, 0._r8, 0._r8,       11.839_r8     /), &
-      alpci = (/ 0._r8, 0._r8, -9.45e-2_r8, -28.224e-3_r8 /)
+! From Merlivat & Nief,1967 for HDO, and Majoube, 1971b for H218O/H217O:
+! NOTE:  H217O is modified later, so keep values here the same as H218O.
+! NOTE:  HT16O is modified later, so keep values here the same as HD16O.
+  real(r8), parameter, dimension(pwtspec) :: &  ! ice/vapour
+      alpai = (/ 0._r8, 0._r8, 16289._r8,   0._r8,         0._r8,         16289._r8 /), &
+      alpbi = (/ 0._r8, 0._r8, 0._r8,       11.839_r8,     11.839_r8,     0._r8 /), &
+      alpci = (/ 0._r8, 0._r8, -9.45e-2_r8, -28.224e-3_r8, -28.224e-3_r8, -9.45e-2_r8 /)
+
+! Half-life of HTO (4500 days):
+! reference doi: 10.6028/jres.105.043
+  real(r8), parameter :: hlhto = 3.888e+8_r8 !seconds
 
 contains
 
@@ -343,10 +359,20 @@ contains
 !    wiso_alpl = exp(alpal(isp)/tk**2 + alpbl(isp)/tk + alpcl(isp))
 
 !Horita and Wesolowski, 1994:
-    if(isp == isphdo) then !HDO has different formulation:
+    if(isp == isphdo .or. isp == isphto) then !HDO and HTO have different formulations:
       wiso_alpl = exp(alpal(isp)*tk**3 + alpbl(isp)*tk**2 + alpcl(isp)*tk + alpdl(isp) + alpel(isp)/tk**3)
     else
       wiso_alpl = exp(alpal(isp)/tk**3 + alpbl(isp)/tk**2 + alpcl(isp)/tk + alpdl(isp))
+    end if
+
+    !Apply H217O fractionation factor adjustment:
+    if(isp == isph217o) then
+      wiso_alpl = wiso_alpl**0.529_r8 !From Schoenemann et. al., 2014
+    end if
+
+    !Apply HT16O fractionation factor adjustment:
+    if(isp == isphto) then
+      wiso_alpl = wiso_alpl**2.0_r8 !From IsoCAM3
     end if
 
 #ifdef NOFRAC
@@ -372,6 +398,16 @@ contains
     end if
 
     wiso_alpi = exp(alpai(isp)/tk**2 + alpbi(isp)/tk + alpci(isp))
+
+    !Apply H217O fractionation factor adjustment:
+    if(isp == isph217o) then
+      wiso_alpi = wiso_alpi**0.529_r8 !From Schoenemann et. al., 2014
+    end if
+
+    !Apply HT16O fractionation factor adjustment:
+    if(isp == isphto) then
+      wiso_alpi = wiso_alpi**2.0_r8 !From IsoCAM3
+    end if
 
 #ifdef NOFRAC
     wiso_alpi = 1._r8
@@ -420,24 +456,34 @@ function wiso_akel(isp,tk,hum0,alpeq)
 end function wiso_akel
 
 !=======================================================================
-  function wiso_akci(isp,tk,alpeq)
+  function wiso_akci(isp,tk,alpeq,rh)
 !-----------------------------------------------------------------------
 ! Purpose: return modified fractination for kinetic effects during
 !          condensation to ice.
 !          Make use of supersaturation function.
 ! Author:  David Noone <dcn@caltech.edu> - Tue Jul  1 12:02:24 MDT 2003
+!
+! Modified for direct RH-ice (RHi) use by Marina Dutsch
+!
 !-----------------------------------------------------------------------
-    integer , intent(in)        :: isp   ! species indes
-    real(r8), intent(in)        :: tk    ! temperature (k)
-    real(r8), intent(in)        :: alpeq ! equilibrium fractionation factor
-    real(r8) :: wiso_akci               ! return effective fractionation
-    real(r8) :: sat1                    ! super sturation
-    real(r8) :: difrmj                  ! isotopic diffusion for subs. molec.
-    real(r8) :: dondi                   ! D / Di, (rather than Di/D)
+    integer , intent(in)           :: isp   ! species indes
+    real(r8), intent(in)           :: tk    ! temperature (k)
+    real(r8), intent(in)           :: alpeq ! equilibrium fractionation factor
+    real(r8), intent(in), optional :: rh    ! relative humidity (unitless)
+    real(r8) :: wiso_akci                   ! return effective fractionation
+    real(r8) :: sat1                        ! super sturation
+    real(r8) :: difrmj                      ! isotopic diffusion for subs. molec.
+    real(r8) :: dondi                       ! D / Di, (rather than Di/D)
 !-----------------------------------------------------------------------
 !
     if (tk < tkini) then                ! anytime below freezing
-      sat1 = max(1._r8, wiso_ssatf(tk))
+      if(present(rh)) then              !Is RH wrt ice provided?
+        !then calculate fractionation directly from RH:
+        sat1 = min(max(1._r8, rh),ssatmx)
+      else
+        !otherwise, use Jouzel temperature approximation:
+        sat1 = max(1._r8, wiso_ssatf(tk))
+      end if
 !!      difrmj = difrm(isp)/fisub(isp)
       difrmj = difrm(isp)
       dondi = 1._r8/difrmj
@@ -589,6 +635,22 @@ end function wiso_akci
 
   return
 end subroutine wiso_flxoce
+
+!=======================================================================
+subroutine wiso_decay(isp, dtime, q, dqdcy)
+!-----------------------------------------------------------------------
+! Impliments radioactive decay (for tritium, etc)
+! Author: David Noone <david.noone@auckland.ac.nz>
+!-----------------------------------------------------------------------
+  integer , intent(in)  :: isp          ! species index (MUST BE isphto, for now)
+  real(r8), intent(in)  :: q            ! mass of stuff
+  real(r8), intent(in)  :: dtime        ! time interval of decay
+  real(r8), intent(out) :: dqdcy        ! change in mass due to decay
+!-----------------------------------------------------------------------
+  if (isp /= isphto) call shr_sys_abort('(wiso_decay) isp /= isphto: TRITIUM ONLY')
+    dqdcy = q * (0.5_r8**(dtime/hlhto) - 1._r8) / dtime
+  return
+end subroutine wiso_decay
 
 !=======================================================================
  function wiso_heff(h0)
