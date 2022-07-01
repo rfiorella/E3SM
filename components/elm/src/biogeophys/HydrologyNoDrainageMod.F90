@@ -289,7 +289,7 @@ contains
 
                ! need to assign col_ws%soilp
                ! for later use, e.g. in emi/ats
-               col_ws%soilp(c,j) = soilpsi(c,j)*1.0e6_r8 + 101325.0_r8  ! (TODO - adding the real 'forc_pbot')
+               col_ws%soilp(c,j) = soilpsi(c,j) + 0.1013250_r8  ! (TODO - adding the real 'forc_pbot')
 
             end do
          end do
@@ -578,7 +578,7 @@ contains
 
                ! need to assign value to col_ws%soilp
                ! for later use, e.g. in emi/ats
-               col_ws%soilp(c,j) = soilpsi(c,j)*1.0e6_r8 + 101325.0_r8  ! (TODO - adding the real 'forc_pbot')
+               col_ws%soilp(c,j) = soilpsi(c,j) + 0.1013250_r8  ! (TODO - adding the real 'forc_pbot')
 
             end do
          end do
