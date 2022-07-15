@@ -2144,8 +2144,9 @@ subroutine diag_conv(state, ztodt, pbuf)
          call outfld('PRECT_'//trim(wtrc_out_names(m)), wtprect, pcols, lchnk)
       end do
       !----------------------------------
-      end  if
-      **********************
+   end if
+   !**********************
+   
    call outfld('PRECLav ', precl, pcols, lchnk )
    call outfld('PRECCav ', precc, pcols, lchnk )
 

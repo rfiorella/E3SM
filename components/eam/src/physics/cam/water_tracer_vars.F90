@@ -24,7 +24,10 @@ module water_tracer_vars
   save
 
 !------------------- Module Variable Declarations -----------------------
-integer, parameter, public    :: WTRC_MAX_CNST  = SET_WTRC_MAX_CNST   ! Maximum number of water tracers allowed
+! RPF - testing to see if setting explicitly here allows model to build - water_isotopes.F90 not 
+! available to this module evidently. 220715.
+integer, parameter, public    :: WTRC_MAX_CNST  = 200   ! Maximum number of water tracers allowed
+!integer, parameter, public    :: WTRC_MAX_CNST  = SET_WTRC_MAX_CNST   ! Maximum number of water tracers allowed
 integer, parameter, public    :: WTRC_WSET_STD  = 1     ! water set index for "regular" water
 
 

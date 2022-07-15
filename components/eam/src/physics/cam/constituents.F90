@@ -89,7 +89,50 @@ module constituents
 !==============================================================================================
 CONTAINS
 !==============================================================================================
+! RPF - 220715 - this was present in CAM code, not sure if it's needed in the EAM code yet.
+! probably no harm in uncommenting in the future though?
 
+!subroutine cnst_readnl(nlfile)
+!
+!   use namelist_utils,  only: find_group_name
+!   use units,           only: getunit, freeunit
+!   use spmd_utils,      only: mpicom, mstrid=>masterprocid, mpi_logical
+!
+!
+!   character(len=*), intent(in) :: nlfile  ! filepath for file containing namelist input
+!
+!   ! Local variables
+!   integer :: unitn, ierr
+!   character(len=*), parameter :: sub = 'cnst_readnl'
+!
+!   namelist /constituents_nl/ readtrace
+!   !-----------------------------------------------------------------------------
+!
+!   if (masterproc) then
+!      unitn = getunit()
+!      open( unitn, file=trim(nlfile), status='old' )
+!      call find_group_name(unitn, 'constituents_nl', status=ierr)
+!      if (ierr == 0) then
+!         read(unitn, constituents_nl, iostat=ierr)
+!         if (ierr /= 0) then
+!            call endrun(sub//': FATAL: reading namelist')
+!         end if
+!      end if
+!      close(unitn)
+!      call freeunit(unitn)
+!   end if
+!
+!   call mpi_bcast(readtrace, 1, mpi_logical, mstrid, mpicom, ierr)
+!   if (ierr /= 0) call endrun(sub//": FATAL: mpi_bcast: readtrace")
+!
+!   if (masterproc) then
+!      write(iulog,*)'Summary of constituent module options:'
+!      write(iulog,*)'  Read constituent initial values from initial file by default: ', readtrace
+!   end if
+!
+!end subroutine cnst_readnl
+
+!=========================================================================================
   subroutine cnst_add (name, mwc, cpc, qminc, &
                        ind, longname, readiv, mixtype, molectype, cam_outfld, &
                        fixed_ubc, fixed_ubflx, is_convtran1)
