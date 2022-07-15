@@ -11,8 +11,6 @@ use ppgrid,        only: pcols, pver, pverp, begchunk, endchunk
 use physics_buffer, only: physics_buffer_desc, pbuf_add_field, dtype_r8, dyn_time_lvls, &
                           pbuf_get_field, pbuf_get_index, pbuf_old_tim_idx
 
-
-
 use cam_history,   only: outfld, write_inithist, hist_fld_active
 use constituents,  only: pcnst, cnst_name, cnst_longname, cnst_cam_outfld, ptendnam, dmetendnam, apcnst, bpcnst, &
                          cnst_get_ind
@@ -25,6 +23,11 @@ use physconst,     only: cpair, rair, gravit, latvap, epsilo
 
 use scamMod,       only: single_column, wfld
 use cam_abortutils,    only: endrun
+
+use water_tracer_vars, only: trace_water, wtrc_nwset, wtrc_iatype, wtrc_srfvap_names, wtrc_srfpcp_indices, &
+                             wtrc_out_names
+use water_types,       only: iwtvap, iwtcvrain, iwtcvsnow, iwtstrain, iwtstsnow
+
 
 implicit none
 private
@@ -363,6 +366,21 @@ subroutine diag_init()
 
    call addfld ('TT',(/ 'lev' /), 'A','K2','Eddy temperature variance' )
 
+   !**********************
+    !Water tracers/isotopes
+    !**********************
+     if(trace_water) then
+       do m=1,wtrc_nwset !loop over water tracers
+         call addfld ('TMQ_'//trim(wtrc_out_names(m)), horiz_only, 'A', 'kg/m2   ',&
+                      'Total (vertically integrated) precipitable water for '//trim(wtrc_out_names(m)))
+         call addfld ('TVQ_'//trim(wtrc_out_names(m)), horiz_only, 'A','kg/m/s   ',&
+                      'Total (vertically integrated) meridional flux for '//trim(wtrc_out_names(m)))
+         call addfld ('TUQ_'//trim(wtrc_out_names(m)), horiz_only, 'A','kg/m/s   ',&
+                      'Total (vertically integrated) zonal flux for '//trim(wtrc_out_names(m)))
+       end do
+     end if
+    !**********************
+
    call addfld ('UBOT',horiz_only,    'A','m/s','Lowest model level zonal wind')
    call addfld ('VBOT',horiz_only,    'A','m/s','Lowest model level meridional wind')
    call addfld ('QBOT',horiz_only,    'A','kg/kg','Lowest model level water vapor mixing ratio')
@@ -434,6 +452,17 @@ subroutine diag_init()
       call addfld('QRS', (/ 'lev' /), 'A', 'K/s', 'Solar heating rate')
    end if
  
+    ! Water tracers:
+    ! NOTE:  may need better method for handling multiple water tracers versus
+    ! just hard-coding them in, but for now, this will do, at least for water
+    ! isotopes. -JN
+   if(trace_water) then !Are water tracers on?
+      do m=1,wtrc_nwset
+        call addfld (trim(wtrc_srfvap_names(m))//'BT', horiz_only,   'A','kg/kg   ',&
+                     'Lowest model level mixing ratio for '//trim(wtrc_srfvap_names(m)))
+      end do
+   end if
+
    ! ----------------------------
    ! determine default variables
    ! ----------------------------
@@ -589,6 +618,9 @@ subroutine diag_init()
       dcconnam(m) = 'DC'//cnst_name(m)
    end do
 
+
+
+
    if (diag_cnst_conv_tend == 'q_only' .or. diag_cnst_conv_tend == 'all' .or. history_budget) then
       call addfld (dcconnam(1),(/ 'lev' /),'A', 'kg/kg/s',trim(cnst_name(1))//' tendency due to moist processes')
       if ( diag_cnst_conv_tend == 'q_only' .or. diag_cnst_conv_tend == 'all' ) then
@@ -610,6 +642,8 @@ subroutine diag_init()
       end if
    end if
 
+
+
    call addfld ('PRECL',horiz_only,    'A','m/s','Large-scale (stable) precipitation rate (liq + ice)'                )
    call addfld ('PRECC',horiz_only,    'A','m/s','Convective precipitation rate (liq + ice)'                          )
    call addfld ('PRECT',horiz_only,    'A','m/s','Total (convective and large-scale) precipitation rate (liq + ice)'  )
@@ -620,6 +654,17 @@ subroutine diag_init()
    call addfld ('PRECSC',horiz_only,    'A','m/s','Convective snow rate (water equivalent)'                            )
    call addfld ('PRECCav',horiz_only,    'A','m/s','Average large-scale precipitation (liq + ice)'                      )
    call addfld ('PRECLav',horiz_only,    'A','m/s','Average convective precipitation  (liq + ice)'                      )
+
+    !**********************
+    !water tracers/isotopes
+    !**********************
+    if(trace_water) then
+      do m=1,wtrc_nwset
+        call addfld ('PRECT_'//trim(wtrc_out_names(m)), horiz_only, 'A', 'm/s     ',&
+                     'Total (convective and large-scale) precipitation rate (liq + ice) for '//trim(wtrc_out_names(m)))
+      end do
+    end if
+    !**********************
 
    if (linearize_pbl_winds) then
       call addfld ('wsresp',horiz_only,    'A','m/s/Pa','first order response of winds to stress')
@@ -634,6 +679,14 @@ subroutine diag_init()
    standard_name = 'surface_upward_latent_heat_flux')
    call addfld ('QFLX',horiz_only,    'A','kg/m2/s','Surface water flux', &
    standard_name = 'water_evapotranspiration_flux')
+
+! Water tracers:
+    if(trace_water) then !Are water tracers on?
+      do m=1,wtrc_nwset
+        call addfld ('QFLX_'//trim(wtrc_out_names(m)),horiz_only, 'A','kg/m2/s ',&
+                     'Surface water flux for '//trim(wtrc_out_names(m)))
+      end do
+    end if
 
    call addfld ('TAUX',horiz_only,    'A','N/m2','Zonal surface stress')
    call addfld ('TAUY',horiz_only,    'A','N/m2','Meridional surface stress')
@@ -1330,6 +1383,33 @@ end subroutine diag_conv_tend_ini
        ftem(:ncol,1) = ftem(:ncol,1) + ftem(:ncol,k)
     end do
     call outfld ('TMQ     ',ftem, pcols   ,lchnk     )
+    !**********************
+    !Water tracers/isotopes
+    !**********************
+     if(trace_water) then
+       do m=1,wtrc_nwset
+       !-----------
+         ftem(:ncol,:) = state%q(:ncol,:,wtrc_iatype(m,iwtvap)) * state%pdel(:ncol,:) * rga
+         do k=2,pver
+           ftem(:ncol,1) = ftem(:ncol,1) + ftem(:ncol,k)
+         end do
+         call outfld ('TMQ_'//trim(wtrc_out_names(m)), ftem, pcols, lchnk)
+       !-----------
+         ftem(:ncol,:) = state%v(:ncol,:)*state%q(:ncol,:,wtrc_iatype(m,iwtvap)) * state%pdel(:ncol,:) * rga
+         do k=2,pver
+           ftem(:ncol,1) = ftem(:ncol,1) + ftem(:ncol,k)
+         end do
+         call outfld ('TVQ_'//trim(wtrc_out_names(m)), ftem, pcols, lchnk)
+       !-----------
+         ftem(:ncol,:) = state%u(:ncol,:)*state%q(:ncol,:,wtrc_iatype(m,iwtvap)) * state%pdel(:ncol,:) * rga
+         do k=2,pver
+           ftem(:ncol,1) = ftem(:ncol,1) + ftem(:ncol,k)
+         end do
+         call outfld ('TUQ_'//trim(wtrc_out_names(m)), ftem, pcols, lchnk)
+       end do
+       !-----------
+     end if
+    !**********************
 !
 ! Mass of vertically integrated water vapor flux
 !
@@ -1959,6 +2039,9 @@ subroutine diag_conv(state, ztodt, pbuf)
 !-----------------------------------------------------------------------
    use physconst,     only: cpair
    use tidal_diag,    only: get_tidal_coeffs
+   
+   !water tracers:
+   use water_tracers, only: wtrc_output_precip
 
 ! Arguments:
 
@@ -1979,6 +2062,10 @@ subroutine diag_conv(state, ztodt, pbuf)
 
    real(r8), pointer :: wsresp(:)                  ! first order response of winds to stress
    real(r8), pointer :: tau_est(:)                 ! estimated equilibrium stress
+
+   !water tracers/isotopes:
+   real(r8), pointer :: wtprec(:)      !water tracer precipitation
+   real(r8)          :: wtprect(pcols) !total water tracer precipitation
 
 ! Local variables:
    
@@ -2031,6 +2118,34 @@ subroutine diag_conv(state, ztodt, pbuf)
    call outfld('PRECT   ', prect, pcols, lchnk )
    call outfld('PRECTMX ', prect, pcols, lchnk )
 
+   !**********************
+   !Water tracers/isotopes
+   !**********************
+   if(trace_water) then
+      ! Output water tracer precipitation fields:
+      call wtrc_output_precip(state, pbuf)
+
+      !calculate total tracer precipitation:
+      !------------------------------------
+      do m=1,wtrc_nwset
+         !convective rain:
+         call pbuf_get_field(pbuf, wtrc_srfpcp_indices(iwtcvrain,m), wtprec)
+         wtprect(:ncol) = wtprec(:ncol) !add to sum
+         !convective snow:
+         call pbuf_get_field(pbuf, wtrc_srfpcp_indices(iwtcvsnow,m), wtprec)
+         wtprect(:ncol) = wtprect(:ncol) + wtprec(:ncol)
+         !stratiform rain:
+         call pbuf_get_field(pbuf, wtrc_srfpcp_indices(iwtstrain,m), wtprec)
+         wtprect(:ncol) = wtprect(:ncol) + wtprec(:ncol)
+         !stratiform snow:
+         call pbuf_get_field(pbuf, wtrc_srfpcp_indices(iwtstsnow,m), wtprec)
+         wtprect(:ncol) = wtprect(:ncol) + wtprec(:ncol)
+         !add to output variable:
+         call outfld('PRECT_'//trim(wtrc_out_names(m)), wtprect, pcols, lchnk)
+      end do
+      !----------------------------------
+      end  if
+      **********************
    call outfld('PRECLav ', precl, pcols, lchnk )
    call outfld('PRECCav ', precc, pcols, lchnk )
 
