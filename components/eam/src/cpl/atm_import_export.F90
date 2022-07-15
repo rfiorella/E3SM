@@ -19,6 +19,11 @@ contains
     use co2_cycle     , only: data_flux_ocn, data_flux_fuel
     use physconst     , only: mwco2
     use time_manager  , only: is_first_step
+       !Water isotopes:
+    use water_tracer_vars, only: wtrc_nsrfvap, wtrc_iasrfvap, wtrc_indices, wtrc_species, &
+                                 trace_water
+    use water_tracers    , only: wtrc_ratio
+    use water_isotopes   , only: isph2o, isph216o, isphdo, isph218o, isph217o, isphto
     !
     ! Arguments
     !
@@ -79,6 +84,30 @@ contains
              cam_in(c)%cflx(i,1) = -x2a(index_x2a_Faxx_evap,ig)                
              cam_in(c)%lhf(i)    = -x2a(index_x2a_Faxx_lat, ig)     
           endif
+          ! Iterate over the isotopes that need to go to the surface, and try
+          ! to match the ones specified with the surface field names.
+          !
+          ! NOTE: isph2o is total water, so is the same as Q
+          !
+
+          if (trace_water) then
+            do j = 1, wtrc_nsrfvap
+              select case(wtrc_species(wtrc_iasrfvap(j)))
+                case (isph2o)
+                  cam_in(c)%cflx(i,wtrc_indices(wtrc_iasrfvap(j))) = -x2a(index_x2a_Faxx_evap,ig)
+                case (isph216o)
+                  cam_in(c)%cflx(i,wtrc_indices(wtrc_iasrfvap(j))) = -x2a(index_x2a_Faxx_evap_16O,ig)
+                case (isphdo)
+                  cam_in(c)%cflx(i,wtrc_indices(wtrc_iasrfvap(j))) = -x2a(index_x2a_Faxx_evap_HDO,ig)
+                case (isph218o)
+                  cam_in(c)%cflx(i,wtrc_indices(wtrc_iasrfvap(j))) = -x2a(index_x2a_Faxx_evap_18O,ig)
+                case (isph217o)
+                  cam_in(c)%cflx(i,wtrc_indices(wtrc_iasrfvap(j))) = -x2a(index_x2a_Faxx_evap_17O,ig)
+                case (isphto)
+                  cam_in(c)%cflx(i,wtrc_indices(wtrc_iasrfvap(j))) = -x2a(index_x2a_Faxx_evap_HTO,ig)
+              end select
+            end do
+         end if
 
           if (index_x2a_Faoo_h2otemp /= 0) then
              cam_in(c)%h2otemp(i) = -x2a(index_x2a_Faoo_h2otemp,ig)
@@ -243,6 +272,12 @@ contains
     use cam_cpl_indices
     use phys_control, only: phys_getopts
     use lnd_infodata, only: precip_downscaling_method
+
+        !Water isotopes:
+    use water_tracer_vars, only: wtrc_nsrfvap, wtrc_iasrfvap, wtrc_indices, wtrc_species, &
+                                 trace_water
+    use water_tracers    , only: wtrc_ratio
+    use water_isotopes   , only: isph2o, isph216o, isphdo, isph218o, isph217o, isphto
     !
     ! Arguments
     !
@@ -255,6 +290,8 @@ contains
     integer :: i,m,c,n,ig       ! indices
     integer :: ncols            ! Number of columns
     logical :: linearize_pbl_winds, export_gustiness
+    !water tracers:
+    logical :: pass16, passD, pass18, pass17, passT !logicals that prevent the passing of water tag info to surface comps.
     !-----------------------------------------------------------------------
 
     call phys_getopts(linearize_pbl_winds_out=linearize_pbl_winds, &
@@ -283,6 +320,57 @@ contains
           a2x(index_a2x_Sa_ptem   ,ig) = cam_out(c)%thbot(i)  
           a2x(index_a2x_Sa_pbot   ,ig) = cam_out(c)%pbot(i)   
           a2x(index_a2x_Sa_shum   ,ig) = cam_out(c)%qbot(i,1) 
+                    !water tracers/isotopes:
+          !----------------------
+          !
+          ! Iterate over the isotopes that need to go to the surface, and try
+          ! to match the ones specified with the surface field names.
+          !
+          ! NOTE: isph2o is total water, so is the same as Q
+          if(trace_water) then
+            a2x(index_a2x_Sa_shum_16O   ,ig) = 0._r8
+            a2x(index_a2x_Sa_shum_HDO   ,ig) = 0._r8
+            a2x(index_a2x_Sa_shum_18O   ,ig) = 0._r8
+            a2x(index_a2x_Sa_shum_17O   ,ig) = 0._r8
+            a2x(index_a2x_Sa_shum_HTO   ,ig) = 0._r8
+
+           !logical to prevent surface vapor from tags being passed on. -JN
+            pass16 = .true.
+            passD  = .true.
+            pass18 = .true.
+            pass17 = .true.
+            passT  = .true.
+
+            do j = 1, wtrc_nsrfvap
+               select case(wtrc_species(wtrc_iasrfvap(j)))
+                 case (isph216o)
+                   if(pass16) then !pass on H216O?
+                     a2x(index_a2x_Sa_shum_16O   ,ig) = cam_out(c)%qbot(i,wtrc_indices(wtrc_iasrfvap(j)))
+                     pass16 = .false.
+                   end if
+                 case (isphdo)
+                   if(passD) then !pass on HD16O?
+                     a2x(index_a2x_Sa_shum_HDO   ,ig) = cam_out(c)%qbot(i,wtrc_indices(wtrc_iasrfvap(j)))
+                     passD = .false.
+                   end if
+                 case (isph218o)
+                   if(pass18) then !pass on H218O?
+                     a2x(index_a2x_Sa_shum_18O   ,ig) = cam_out(c)%qbot(i,wtrc_indices(wtrc_iasrfvap(j)))
+                     pass18 = .false.
+                   end if
+                 case (isph217o)
+                   if(pass17) then !pass on H217O?
+                     a2x(index_a2x_Sa_shum_17O   ,ig) = cam_out(c)%qbot(i,wtrc_indices(wtrc_iasrfvap(j)))
+                     pass17 = .false.
+                   end if
+                 case (isphto)
+                   if(passT) then !pass on HT16O?
+                     a2x(index_a2x_Sa_shum_HTO   ,ig) = cam_out(c)%qbot(i,wtrc_indices(wtrc_iasrfvap(j)))
+                     passT = .false.
+                   end if
+               end select
+             end do
+            end if 
 	  a2x(index_a2x_Sa_dens   ,ig) = cam_out(c)%rho(i)
 
           if (trim(adjustl(precip_downscaling_method)) == "FNM") then
@@ -299,6 +387,32 @@ contains
           a2x(index_a2x_Faxa_swvdr,ig) = cam_out(c)%sols(i)   
           a2x(index_a2x_Faxa_swndf,ig) = cam_out(c)%solld(i)  
           a2x(index_a2x_Faxa_swvdf,ig) = cam_out(c)%solsd(i)  
+                    !water tracers/isotopes:
+          !----------------------
+          if(trace_water) then
+            !NOTE:  converting m/s to kg/m2/s here too(may need to convert snow to equiv. water???):
+              a2x(index_a2x_Faxa_rainl_16O,ig)=cam_out(c)%precrl_16O(i)*1000._r8
+              a2x(index_a2x_Faxa_snowl_16O,ig)=cam_out(c)%precsl_16O(i)*1000._r8
+              a2x(index_a2x_Faxa_rainc_16O,ig)=cam_out(c)%precrc_16O(i)*1000._r8
+              a2x(index_a2x_Faxa_snowc_16O,ig)=cam_out(c)%precsc_16O(i)*1000._r8
+              a2x(index_a2x_Faxa_rainl_HDO,ig)=cam_out(c)%precrl_HDO(i)*1000._r8
+              a2x(index_a2x_Faxa_snowl_HDO,ig)=cam_out(c)%precsl_HDO(i)*1000._r8
+              a2x(index_a2x_Faxa_rainc_HDO,ig)=cam_out(c)%precrc_HDO(i)*1000._r8
+              a2x(index_a2x_Faxa_snowc_HDO,ig)=cam_out(c)%precsc_HDO(i)*1000._r8
+              a2x(index_a2x_Faxa_rainl_18O,ig)=cam_out(c)%precrl_18O(i)*1000._r8
+              a2x(index_a2x_Faxa_snowl_18O,ig)=cam_out(c)%precsl_18O(i)*1000._r8
+              a2x(index_a2x_Faxa_rainc_18O,ig)=cam_out(c)%precrc_18O(i)*1000._r8
+              a2x(index_a2x_Faxa_snowc_18O,ig)=cam_out(c)%precsc_18O(i)*1000._r8
+              a2x(index_a2x_Faxa_rainl_17O,ig)=cam_out(c)%precrl_17O(i)*1000._r8
+              a2x(index_a2x_Faxa_snowl_17O,ig)=cam_out(c)%precsl_17O(i)*1000._r8
+              a2x(index_a2x_Faxa_rainc_17O,ig)=cam_out(c)%precrc_17O(i)*1000._r8
+              a2x(index_a2x_Faxa_snowc_17O,ig)=cam_out(c)%precsc_17O(i)*1000._r8
+              a2x(index_a2x_Faxa_rainl_HTO,ig)=cam_out(c)%precrl_HTO(i)*1000._r8
+              a2x(index_a2x_Faxa_snowl_HTO,ig)=cam_out(c)%precsl_HTO(i)*1000._r8
+              a2x(index_a2x_Faxa_rainc_HTO,ig)=cam_out(c)%precrc_HTO(i)*1000._r8
+              a2x(index_a2x_Faxa_snowc_HTO,ig)=cam_out(c)%precsc_HTO(i)*1000._r8
+            end if
+            !----------------------
 
           ! aerosol deposition fluxes
           a2x(index_a2x_Faxa_bcphidry,ig) = cam_out(c)%bcphidry(i)
