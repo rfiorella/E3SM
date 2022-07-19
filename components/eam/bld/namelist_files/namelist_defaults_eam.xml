@@ -1289,6 +1289,14 @@
 <fixed_total_solar_irradiance>-1       </fixed_total_solar_irradiance>
 <do_spa_optics> .false.</do_spa_optics>
 
+<!-- Defaults for water isotopes (water_tracer_nl)                      -->
+<wtrc_citer>1</wtrc_citer>
+<wtrc_niter>1</wtrc_niter>
+<wtrc_add_cvprecip>.true.</wtrc_add_cvprecip>
+
+<wtrc_add_stprecip                 >.true. </wtrc_add_stprecip>
+<wtrc_add_stprecip microphys="mg2" >.false.</wtrc_add_stprecip>
+
 <!-- ================================================================== -->
 <!-- Defaults for SE                                                    -->
 <!-- ================================================================== -->

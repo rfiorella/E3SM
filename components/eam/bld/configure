@@ -1950,6 +1950,9 @@ if (!$ccsm_seq){
     $cfg_cppdefs .= " -DNUM_COMP_INST_ATM=1 -DNUM_COMP_INST_LND=1 -DNUM_COMP_INST_OCN=1 -DNUM_COMP_INST_ICE=1 -DNUM_COMP_INST_GLC=1 -DNUM_COMP_INST_ROF=1 -DNUM_COMP_INST_WAV=1";
 }
 
+# Parameter for water isotopes - always set, though will be 0 when water isotopes is not enabled
+$cfg_cppdefs .= " -DSET_WTRC_MAX_CNST=$set_wtrc_max_cnst";
+
 # Resolution parameters for spectral element cubed sphere grids.
 # F2003 definition turns on standard-conforming method of causing edge
 # buffers to overlap. This method works in all EAM compilers, but fails
