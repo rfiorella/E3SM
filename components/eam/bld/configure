@@ -161,7 +161,11 @@ OPTIONS
      -waccm_phys        Switch enables the use of WACCM physics in any chemistry configuration.
                         The user does not need to set this if one of the waccm chemistry options
                         is chosen.
-     -waccmx            Build EAM/WACCM with WACCM upper Thermosphere/Ionosphere extended package
+     -waccmx            Build EAM/WACCM with WACCM upper Thermosphere/Ionosphere extended package     
+     -water_tracer <name> Build CAM with specified water tracer (isotope or tag) package
+                        [ none | h2o | h2o_h216o_hdo_h218o | h2o_h216o_h218o_h217o | h2o_h216o_hdo_hto | all_stable_wiso | all_wiso].
+                        Default: none
+     -water_tag_num <n> Number of water tags that will be simulated in this CAM build.
 
 
   Options relevent to SCAM mode:
@@ -423,6 +427,8 @@ GetOptions(
     "usr_src=s"                 => \$opts{'usr_src'},
     "v|verbose"                 => \$opts{'verbose'},
     "version"                   => \$opts{'version'},
+    "water_tracer=s"            => \$opts{'water_tracer'},
+    "water_tag_num=s"           => \$opts{'water_tag_num'},
 )  or usage();
 
 # Give usage message.
@@ -819,6 +825,41 @@ my $offline_dyn = $cfg_ref->get('offline_dyn');
 if ( ($offline_dyn) and ($dyn_pkg ne 'fv') ) {
     die <<"EOF";
 ** ERROR: Offline driver only applicable to the FV dycore.
+EOF
+}
+
+#-----------------------------------------------------------------------------------------------
+# Water Tracer Package
+# Next set the default water tracer package.
+my $water_tracer_pkg = 'none';
+
+# Allow the user to override the default water_tracer via the commandline.
+if (defined $opts{'water_tracer'}) {
+    $water_tracer_pkg = lc($opts{'water_tracer'});
+
+    if ($print>=2 and ($water_tracer_pkg ne 'none')) { print "Using $water_tracer_pkg water tracer (isotope or tag) model.$eol"; }
+}
+
+$cfg_ref->set('water_tracer', $water_tracer_pkg);
+
+#----------------------------------------------------------------------------------------------
+# Water tags
+
+# Allow the user to override the default number of water tags via the commandline:
+if (defined $opts{'water_tag_num'}) {
+    $cfg_ref->set('water_tag_num', $opts{'water_tag_num'});
+}
+
+#Pull out water_tag_num variable from configure object:
+my  $tags_water = $cfg_ref->get('water_tag_num');
+
+#Print number of water tags to file/screen:
+if ($print>=2) { print "Number of user requested water tags: $tags_water$eol"; }
+
+#Kill configuration if water tracers are off but water tags are on:
+if (($water_tracer_pkg eq 'none') and (defined $opts{'water_tag_num'})) {
+    die <<"EOF";
+** ERROR:  Water tags have been specified, but without a water tracer model (-water_tracer).
 EOF
 }
 
@@ -1430,6 +1471,66 @@ if ($chem_pkg =~ '_mam3') {
 } elsif ($chem_pkg =~ '_mam9') {
     $chem_cppdefs = ' -DMODAL_AERO -DMODAL_AERO_9MODE ';
 }
+
+#Water Tracers
+my $water_tracer_nadv = 0;
+my $set_wtrc_max_cnst = 0;
+
+if ($water_tracer_pkg ne 'none') {
+    if ($water_tracer_pkg eq 'h2o') {
+        $water_tracer_nadv += 7;
+        $set_wtrc_max_cnst = 7;
+    }
+    if ($water_tracer_pkg eq 'h2o_hdo') {
+        $water_tracer_nadv += 14;
+        $set_wtrc_max_cnst = 14;
+    }
+    if ($water_tracer_pkg eq 'h2o_h218o') {
+        $water_tracer_nadv += 14;
+        $set_wtrc_max_cnst = 14;
+    }
+    if ($water_tracer_pkg eq 'h2o_hdo_h218o') {
+        $water_tracer_nadv += 21;
+        $set_wtrc_max_cnst = 21;
+    }
+    if ($water_tracer_pkg eq 'h2o_h216o_hdo_h218o') {
+        $water_tracer_nadv += 28;
+        $set_wtrc_max_cnst = 28;
+    }
+    if ($water_tracer_pkg eq 'h2o_h216o_h218o_h217o') {
+        $water_tracer_nadv += 28;
+        $set_wtrc_max_cnst = 28;
+    }
+    if ($water_tracer_pkg eq 'h2o_h216o_hdo_hto') {
+        $water_tracer_nadv += 28;
+        $set_wtrc_max_cnst = 28;
+    }
+    if ($water_tracer_pkg eq 'all_stable_wiso') {
+        $water_tracer_nadv += 35;
+        $set_wtrc_max_cnst = 35;
+    }
+    if ($water_tracer_pkg eq 'all_wiso') {
+        $water_tracer_nadv += 42;
+        $set_wtrc_max_cnst = 42;
+    }
+
+    # Account for the need to add prognostic rain and snow to
+    # the non-isotopic water.  This will allow looping over all
+    # 7 (pwtype) types whether they are isotopic or non-isotopic water
+    # NOTE: If microphysics = MG2, then only add convective precipitation. -JN
+    if ($microphys_pkg eq 'mg2') {
+        $water_tracer_nadv +=2;
+    } else {
+        $water_tracer_nadv +=4;
+    }
+
+    # Add water tags to tracer number:
+    if(defined $opts{'water_tag_num'}) {
+        $water_tracer_nadv += $tags_water*7;
+        $set_wtrc_max_cnst += $tags_water*7;
+    }
+}
+
 
 if ($bc_dep_to_snow_updates == 1) {
     $chem_cppdefs = "$chem_cppdefs  -DMODAL_AER"
