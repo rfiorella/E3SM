@@ -229,6 +229,10 @@ contains
     use phys_control, only: phys_getopts
     use physconst,    only: physconst_update ! Routine which updates physconst variables (WACCM-X)
     use ppgrid,       only: begchunk, endchunk
+    !use qneg_module,  only: qneg3 ! RPF - code below had the qneq3 call that somehow apparently already worked?? 
+    !RPF - possibly because qneg3 is its own file, and not moved to qneg_module as in CAM
+    use water_tracer_vars, only: trace_water, wtrc_nwset, wtrc_iatype
+    use water_types,  only: iwtliq, iwtice
 
 !------------------------------Arguments--------------------------------
     type(physics_ptend), intent(inout)  :: ptend   ! Parameterization tendencies
@@ -337,6 +341,8 @@ contains
              name = trim(ptend%name) // '/' // trim(cnst_name(m))
 !!== KZ_WATCON 
              if(use_mass_borrower) then 
+               ! RPF - not sure what the mass borrower is! also no idea why this qneg3 call works since it
+               ! hadn't previously been imported to the submodule
                 call qneg3(trim(name), state%lchnk, ncol, state%psetcols, pver, m, m, qmin(m), state%q(1,1,m),.False.)
                 call massborrow(trim(name), state%lchnk, ncol, state%psetcols, m, m, qmin(m), state%q(1,1,m), state%pdel)
              else
@@ -380,6 +386,41 @@ contains
     end if
 
     zvirv(:,:) = zvir    
+   
+   !**************************************************************
+   !special tests for water tracers (to match cloud water and ice)
+   !**************************************************************
+   if(trace_water) then !are water tracers on?
+
+      !NOTE:  This code might not work for water isotopes, as the values
+      !will be significantly smaller.  If a problem occurs when doing
+      !ratio or similar tests, this could likely be the culprit. - JN
+ 
+      !NOTE:  Make sure to zero out the water tracer only where the actual
+      !bulk water satisfies the logical condition, not where the water tracer 
+      !itself passes. -JN 
+ 
+      !NOTE: Need to check to see if these tests are in the proper order with
+      ! respect to tests above, not sure this is consistent w/ CAM or not anymore. - RF
+      do m=1,wtrc_nwset !loop over water tracers
+        !-------------
+        !Cloud liquid:
+        !-------------
+        if(ptend%lq(wtrc_iatype(m,iwtliq))) then
+          if ( any(ptend%name == cldlim_names) ) &
+            call state_cnst_min_nz(1.e-36_r8, icldliq, wtrc_iatype(m,iwtliq))
+        end if
+        !---------
+        !Cloud Ice:
+        !---------
+        if(ptend%lq(wtrc_iatype(m,iwtice))) then
+          if ( any(ptend%name == cldlim_names) ) &
+            call state_cnst_min_nz(1.e-36_r8, icldice, wtrc_iatype(m,iwtice))
+        end if
+        !---------
+      end do !water tracers
+    end if
+    !**************************************************************
     rairv_loc(:,:) = rair
 
     !-------------------------------------------------------------------------------------------
@@ -1530,7 +1571,7 @@ subroutine set_dry_to_wet (state, cnst_type_in)
   
   ncol = state%ncol
 
-  if ( present(cnst_type_in) ) then
+  if ( present(cnst_type_in) ) then !RPF - why is this if statement needed???
      do m = 1,pcnst
         if (cnst_type_in(m).eq.'dry') then
            state%q(:ncol,:,m) = state%q(:ncol,:,m)*state%pdeldry(:ncol,:)/state%pdel(:ncol,:)

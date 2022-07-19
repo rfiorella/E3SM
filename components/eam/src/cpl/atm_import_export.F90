@@ -41,6 +41,8 @@ contains
     integer, pointer   :: dst_a5_ndx, dst_a7_ndx
     integer, pointer   :: dst_a1_ndx, dst_a3_ndx
     logical :: overwrite_flds
+    !water tracers:
+    integer            :: j ! water tracer sets
     !-----------------------------------------------------------------------
     overwrite_flds = .true.
     ! don't overwrite fields if invoked during the initialization phase 
@@ -292,6 +294,7 @@ contains
     logical :: linearize_pbl_winds, export_gustiness
     !water tracers:
     logical :: pass16, passD, pass18, pass17, passT !logicals that prevent the passing of water tag info to surface comps.
+    integer :: j ! index for looping over water tracer sets
     !-----------------------------------------------------------------------
 
     call phys_getopts(linearize_pbl_winds_out=linearize_pbl_winds, &
@@ -320,7 +323,8 @@ contains
           a2x(index_a2x_Sa_ptem   ,ig) = cam_out(c)%thbot(i)  
           a2x(index_a2x_Sa_pbot   ,ig) = cam_out(c)%pbot(i)   
           a2x(index_a2x_Sa_shum   ,ig) = cam_out(c)%qbot(i,1) 
-                    !water tracers/isotopes:
+        
+          !water tracers/isotopes:
           !----------------------
           !
           ! Iterate over the isotopes that need to go to the surface, and try
