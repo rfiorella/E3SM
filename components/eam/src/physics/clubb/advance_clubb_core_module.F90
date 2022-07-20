@@ -123,11 +123,15 @@ module advance_clubb_core_module
   !#######################################################################
   subroutine advance_clubb_core &
              ( l_implemented, dt, fcor, sfc_elevation, hydromet_dim, & ! intent(in)
-               thlm_forcing, rtm_forcing, um_forcing, vm_forcing, & ! intent(in)
-               sclrm_forcing, edsclrm_forcing, wprtp_forcing, &     ! intent(in)
-               wpthlp_forcing, rtp2_forcing, thlp2_forcing, &       ! intent(in)
-               rtpthlp_forcing, wm_zm, wm_zt, &                     ! intent(in)
-               wpthlp_sfc, wprtp_sfc, upwp_sfc, vpwp_sfc, &         ! intent(in)
+               thlm_forcing, rtm_forcing, wtrc_rtm_forcing, &          ! intent(in) 
+               um_forcing, vm_forcing, &                               ! intent(in)
+               sclrm_forcing, edsclrm_forcing, wprtp_forcing, &        ! intent(in)
+               wtrc_wprtp_forcing, wpthlp_forcing, &                   ! intent(in)
+               rtp2_forcing, wtrc_rtp2_forcing, thlp2_forcing, &       ! intent(in)
+               rtpthlp_forcing, wtrc_rtpthlp_forcing, &                ! intent(in)
+               wm_zm, wm_zt, &                                         ! intent(in)
+               wpthlp_sfc, wprtp_sfc, wtrc_wprtp_sfc, &                ! intent(in) 
+               upwp_sfc, vpwp_sfc, &                                   ! intent(in)
                wpsclrp_sfc, wpedsclrp_sfc, &                        ! intent(in)
                p_in_Pa, rho_zm, rho, exner, &                       ! intent(in)
                rho_ds_zm, rho_ds_zt, invrs_rho_ds_zm, &             ! intent(in)
@@ -139,15 +143,16 @@ module advance_clubb_core_module
                wphydrometp, wp2hmp, rtphmp_zt, thlphmp_zt, &        ! intent(in)
                host_dx, host_dy, &                                  ! intent(in)
                um, vm, upwp, vpwp, up2, vp2, &                      ! intent(inout)
-               thlm, rtm, wprtp, wpthlp, &                          ! intent(inout)
-               wp2, wp3, rtp2, rtp3, thlp2, thlp3, rtpthlp, &       ! intent(inout)
+               thlm, rtm, wtrc_rtm, wprtp, wtrc_wprtp, wpthlp, &    ! intent(inout)
+               wp2, wp3, rtp2, wtrc_rtp2, rtp3, wtrc_rtp3, &        ! intent(inout) 
+               thlp2, thlp3, rtpthlp, wtrc_rtpthlp, &               ! intent(inout)
                sclrm,   &                                           ! intent(inout)
 #ifdef GFDL
                sclrm_trsport_only,  &  ! h1g, 2010-06-16            ! intent(inout)
 #endif
                sclrp2, sclrprtp, sclrpthlp, &                       ! intent(inout)
                wpsclrp, edsclrm, &                                  ! intent(inout)
-               rcm, cloud_frac, &                                   ! intent(inout)
+               rcm, wtrc_rcm, cloud_frac, &                                   ! intent(inout)
                wpthvp, wp2thvp, rtpthvp, thlpthvp, &                ! intent(inout)
                sclrpthvp, &                                         ! intent(inout)
                pdf_params, pdf_params_zm, &                         ! intent(inout)
@@ -443,6 +448,22 @@ module advance_clubb_core_module
     use interpolation, only: &
       pvertinterp
 
+    !water tracers:
+    use water_tracer_vars, only: &
+        wtrc_nwset,  &
+        wtrc_iatype, &
+        iwspec,      &
+        wisotope
+    use water_tracers, only: &
+        wtrc_ratio, &
+        wtrc_get_alpha, &
+        wtrc_liqvap_equil
+    use water_types, only: &
+        iwtvap, &
+        iwtliq
+    use wtrc_pdf_closure_module, only: &
+        wtrc_pdf_closure
+
     implicit none
 
     !!! External
@@ -565,6 +586,10 @@ module advance_clubb_core_module
       wp2,     & ! w'^2 (momentum levels)                         [m^2/s^2]
       wp3        ! w'^3 (thermodynamic levels)                    [m^3/s^3]
 
+    !water tracers:
+    real( kind = core_rknd ), intent(inout), dimension(gr%nz, wtrc_nwset) :: &
+    wtrc_rtpthlp ! wtrc_rt'th_l' (momentum levels)              [(kg/kg) K]
+
     ! Passive scalar variables
     real( kind = core_rknd ), intent(inout), dimension(gr%nz,sclr_dim) :: &
       sclrm,     & ! Passive scalar mean (thermo. levels) [units vary]
@@ -604,6 +629,57 @@ module advance_clubb_core_module
       rcm_in_layer, & ! rcm within cloud layer                          [kg/kg]
       cloud_cover     ! cloud cover                                     [-]
 
+    !water tracers:
+    !-------------
+    real( kind = core_rknd ), intent(in), dimension(gr%nz, wtrc_nwset) ::  &
+      wtrc_rtm_forcing,  &   ! water tracer mixing ratio forcing (momentum levels) [K/s]
+      wtrc_rtp2_forcing, &   ! water tracer mixing ratio variance [(K/s)^2]
+      wtrc_wprtp_forcing,&   ! <w'wtrc_rt'> forcing (momentum levels) [m*K/s^2]
+      wtrc_rtpthlp_forcing   ! <wtrc_rt'thl'> forcing (momentum levels) [?]
+
+    real( kind = core_rknd ), intent(in), dimension(wtrc_nwset) ::  &
+      wtrc_wprtp_sfc    ! water tracer/isotope surface fluxes [(kg m)/(kg s)]
+
+   !integer, intent(in), dimension(wtrc_nwset) :: &
+    !  wtrc_clubb_indx
+
+    real( kind = core_rknd ), intent(inout), dimension(gr%nz,wtrc_nwset) :: &
+      wtrc_rtm,   &     ! water tracer/isotope total water mixing ratio (thermo levels).
+      wtrc_wprtp, &     ! w'wtrc_rt' [(kg/kg)(m/s)]
+      wtrc_rtp2,  &     ! wtrc_rt'^2 [(kg/kg)^2]
+      wtrc_rtp3         ! wtrc_rt'^3 [(kg/kg)^3]
+
+    real( kind = core_rknd ), intent(out), dimension(gr%nz,wtrc_nwset) :: &
+      wtrc_rcm        ! water tracer/isotope cloud water mixing ratio (thermo levels).
+
+    real( kind = core_rknd ), dimension(gr%nz,wtrc_nwset) :: &
+      Skwtrc_zt,     &   ! water tracer PDF skewness on thermo levels    [unitless]
+      Skwtrc_zm,     &   ! water tracer PDF skewness on momentum levels  [unitless]
+      wtrc_rtm_zm,   &   ! water tracer total water mixing ratio on momentum grid [kg/kg]
+      wtrc_rcm_zm,   &   ! water tracer liquid water mixing ratio on momentum grid [kg/kg]
+      wtrc_rcm_in_layer,&! water tracer liquid water mixing ratio in cloud layer [kg/kg]
+      wtrc_wprtp_zt, &   ! wtrc_wprtp on thermodynamic levels
+      wtrc_rtp2_zt,  &   ! wtrc_rtp2 on thermodynamic levels
+      wtrc_rtprcp,   &   ! wtrc_rt'wtrc_rc'
+      wtrc_rtpthvp,  &   ! wtrc_rt'thv'
+      wtrc_rtpthvp_orig, & !DEBUGGING -JN
+      wtrc_rtpthvp_zt,&  ! wtrc_rt'thv' on thermo levels
+      wtrc_rtpthlp_zt,&  ! wtrc_rt'thl' on thermo levels
+      wtrc_rtp3_zm     ! Not currently used (always zero) ...
+
+    real( kind = core_rknd ) :: &
+      vtmp,                &  !H2O tracer vapor (temporary)   [kg/kg]
+      ivtmp,               &  !water tracer vapor (temporary) [kg/kg]
+      ltmp,                &  !H2O tracer liquid (temporary)  [kg/kg]
+      iltmp,               &  !H2O tracer vapor  (temporary)  [kg/kg]
+      alpha,               &  !liquid/vapor fractionation factor [unitless]
+      dliqiso,             &  !change in liquid due to equilibration [kg/kg]
+      ovapor,              &  !original vapor before condensation [kg/kg]
+      wtrc_cond,           &  !amount of water vapor taht condenses [kg/kg]
+      R,                   &  !water ttacer ratio [unitless]
+      wtrc_diff
+    integer :: m              !loop control variable  
+    !-------------
     ! Variables that need to be output for use in host models
     real( kind = core_rknd ), intent(out), dimension(gr%nz) ::  &
       wprcp,            & ! w'r_c' (momentum levels)                  [(kg/kg) m/s]
@@ -908,6 +984,11 @@ module advance_clubb_core_module
          vpwp_pert(1) = vpwp_sfc_pert
       end if
 
+      !water tracers
+      do m=1,wtrc_nwset
+        wtrc_wprtp(1,m) = wtrc_wprtp_sfc(m)
+      end do
+
       ! Set fluxes for passive scalars (if enabled)
       if ( sclr_dim > 0 ) then
         wpsclrp(1,1:sclr_dim)   = wpsclrp_sfc(1:sclr_dim)
@@ -924,6 +1005,10 @@ module advance_clubb_core_module
       upwp(1)   = 0.0_core_rknd
       vpwp(1)   = 0.0_core_rknd
 
+      !water tracers
+      do m=1,wtrc_nwset
+        wtrc_wprtp(1,m) = 0.0_core_rknd
+      end do
       ! Set fluxes for passive scalars (if enabled)
       if ( sclr_dim > 0 ) then
         wpsclrp(1,1:sclr_dim) = 0.0_core_rknd
@@ -1005,9 +1090,39 @@ module advance_clubb_core_module
     ! and then compute Skw for m & t grid.
     wp2_zt = max( zm2zt( wp2 ), w_tol_sqd ) ! Positive definite quantity
     wp3_zm = zt2zm( wp3 )
+    !water tracers
+    ! RPF - this may have changed in clubb version.
+    ! now seems a lot of this code has been subsumed into
+    ! pdf closure scheme above. 
+    do m=1,wtrc_nwset
+      wtrc_wprtp_zt(:,m) = zm2zt( wtrc_wprtp(:,m) )
+      wtrc_rtp2_zt(:,m)  = zm2zt( wtrc_rtp2(:,m) )
+      wtrc_rtp3_zm(:,m)  = zt2zm( wtrc_rtp3(:,m) )
+    end do  
+
 
     Skw_zt(1:gr%nz) = Skx_func( wp2_zt(1:gr%nz), wp3(1:gr%nz), w_tol )
     Skw_zm(1:gr%nz) = Skx_func( wp2(1:gr%nz), wp3_zm(1:gr%nz), w_tol )
+    
+    !water tracers    
+    ! RPF - this may have changed in clubb version.
+    ! now seems a lot of this code has been subsumed into
+    ! pdf closure scheme above. 
+    do m=1,wtrc_nwset
+      Skwtrc_zt(1:gr%nz,m) = Skx_func( wtrc_rtp2_zt(1:gr%nz,m), wtrc_rtp3(1:gr%nz, m), rt_tol)
+      Skwtrc_zm(1:gr%nz,m) = Skx_func( wtrc_rtp2(1:gr%nz,m), wtrc_rtp3_zm(1:gr%nz, m), rt_tol)
+    end do
+    !water tracers    
+    ! RPF - this may have changed in clubb version.
+    ! now seems a lot of this code has been subsumed into
+    ! pdf closure scheme above. Indeed, the LG_2005_ansatz doesn't have beta in it anymore? or maybe doesn't exist?
+    do m=1,wtrc_nwset
+      !Skwtrc_zt(1:gr%nz,m) = LG_2005_ansatz( Skw_zt(1:gr%nz), wtrc_wprtp_zt(1:gr%nz,m), wp2_zt(1:gr%nz), &
+      !                                wtrc_rtp2_zt(1:gr%nz,m), beta, sigma_sqd_w_zt(1:gr%nz), rt_tol )
+      !Skwtrc_zm(1:gr%nz,m) = LG_2005_ansatz( Skw_zm(1:gr%nz), wtrc_wprtp(1:gr%nz,m), wp2(1:gr%nz), &
+      !                                wtrc_rtp2(1:gr%nz,m), beta, sigma_sqd_w_zt(1:gr%nz), rt_tol )
+    end do
+
 
     if ( ipdf_call_placement == ipdf_post_advance_fields ) then
 
@@ -1057,6 +1172,14 @@ module advance_clubb_core_module
     rtp2_zt    = max( zm2zt( rtp2 ), rt_tol**2 )   ! Positive def. quantity
     rtpthlp_zt = zm2zt( rtpthlp )
 
+    !water tracers
+    ! this, however, seems consistent w/ new CLUBB Structure -RPF
+    do m=1,wtrc_nwset
+      wtrc_rtp2_zt(:,m) = max( zm2zt( wtrc_rtp2(:,m) ), rt_tol**2)
+      wtrc_rtpthlp_zt(:,m) = zm2zt( wtrc_rtpthlp(:,m) )
+     !Initalize rtpthvp to zero  -JN:
+      wtrc_rtpthvp(:,m) = 0.0_core_rknd
+    end do
     ! Compute wp3 / wp2 on zt levels.  Always use the interpolated value in the
     ! denominator since it's less likely to create spikes
     wp3_on_wp2_zt = ( wp3(1:gr%nz) / max( wp2_zt(1:gr%nz), w_tol_sqd ) )
@@ -1515,6 +1638,9 @@ module advance_clubb_core_module
           Cx_fnc_Richardson = 0.0
       end if
 
+      ! RPF - possibly something wrong here with the notation, as it seems
+      ! several of the next few function calls throw TYPE mismatch errors
+
       ! Advance the prognostic equations for
       !   the scalar grid means (rtm, thlm, sclrm) and
       !   scalar turbulent fluxes (wprtp, wpthlp, and wpsclrp)
@@ -1574,12 +1700,15 @@ module advance_clubb_core_module
       ! Advance the prognostic equations
       !   for scalar variances and covariances,
       !   plus the horizontal wind variances by one time step, by one time step.
-      call advance_xp2_xpyp( tau_zm, wm_zm, rtm, wprtp, thlm,        & ! intent(in)
+      call advance_xp2_xpyp( tau_zm, wm_zm, rtm, wtrc_rtm, wprtp,    & ! intent(in)
+                             wtrc_wprtp, thlm,                       & ! intent(in)
                              wpthlp, wpthvp, um, vm, wp2, wp2_zt,    & ! intent(in)
                              wp3, upwp, vpwp, sigma_sqd_w, Skw_zm,   & ! intent(in)
                              wprtp2, wpthlp2, wprtpthlp,             & ! intent(in)
-                             Kh_zt, rtp2_forcing, thlp2_forcing,     & ! intent(in)
-                             rtpthlp_forcing, rho_ds_zm, rho_ds_zt,  & ! intent(in)
+                             Kh_zt, rtp2_forcing, wtrc_rtp2_forcing, & ! intent(in)
+                             thlp2_forcing,                          & ! intent(in)
+                             rtpthlp_forcing, wtrc_rtpthlp_forcing,  & ! intent(in) 
+                             rho_ds_zm, rho_ds_zt,                   & ! intent(in)
                              invrs_rho_ds_zm, thv_ds_zm, cloud_frac, & ! intent(in)
                              Lscale, wp3_on_wp2, wp3_on_wp2_zt,      & ! intent(in)
                              pdf_implicit_coefs_terms,               & ! intent(in)
@@ -1587,7 +1716,8 @@ module advance_clubb_core_module
                              sclrm, wpsclrp,                         & ! intent(in)
                              wpsclrp2, wpsclrprtp, wpsclrpthlp,      & ! intent(in)
                              wp2_splat,                              & ! intent(in)
-                             rtp2, thlp2, rtpthlp, up2, vp2,         & ! intent(inout)
+                             rtp2, wtrc_rtp2, thlp2, rtpthlp,        & ! intent(in) 
+                             wtrc_rtpthlp, up2, vp2,                 & ! intent(inout)
                              sclrp2, sclrprtp, sclrpthlp)              ! intent(inout)
 
       if ( clubb_at_least_debug_level( 0 ) ) then
@@ -1613,10 +1743,10 @@ module advance_clubb_core_module
          vpwp_cl_num = 1 ! First instance of v'w' clipping.
       endif ! l_predict_upwp_vpwp
 
-      call clip_covars_denom( dt, rtp2, thlp2, up2, vp2, wp2,           & ! intent(in)
+      call clip_covars_denom( dt, rtp2, wtrc_rtp2, thlp2, up2, vp2, wp2,           & ! intent(in)
                               sclrp2, wprtp_cl_num, wpthlp_cl_num,      & ! intent(in)
                               wpsclrp_cl_num, upwp_cl_num, vpwp_cl_num, & ! intent(in)
-                              wprtp, wpthlp, upwp, vpwp, wpsclrp,       & ! intent(inout)
+                              wprtp, wtrc_wprtp, wpthlp, upwp, vpwp, wpsclrp,       & ! intent(inout)
                               upwp_pert, vpwp_pert )                      ! intent(inout)
 
 
@@ -1663,10 +1793,10 @@ module advance_clubb_core_module
          vpwp_cl_num = 2 ! Second instance of v'w' clipping.
       endif ! l_predict_upwp_vpwp
 
-      call clip_covars_denom( dt, rtp2, thlp2, up2, vp2, wp2,           & ! intent(in)
+      call clip_covars_denom( dt, rtp2, wtrc_rtp2, thlp2, up2, vp2, wp2,           & ! intent(in)
                               sclrp2, wprtp_cl_num, wpthlp_cl_num,      & ! intent(in)
                               wpsclrp_cl_num, upwp_cl_num, vpwp_cl_num, & ! intent(in)
-                              wprtp, wpthlp, upwp, vpwp, wpsclrp,       & ! intent(inout)
+                              wprtp, wtrc_wprtp, wpthlp, upwp, vpwp, wpsclrp,       & ! intent(inout)
                               upwp_pert, vpwp_pert )                      ! intent(inout)
 
       !----------------------------------------------------------------
