@@ -1649,10 +1649,11 @@ module advance_clubb_core_module
       call advance_xm_wpxp( dt, sigma_sqd_w, wm_zm, wm_zt, wp2,              & ! intent(in)
                             Lscale, wp3_on_wp2, wp3_on_wp2_zt, Kh_zt, Kh_zm, & ! intent(in)
                             tau_C6_zm, Skw_zm, wp2rtp, rtpthvp, rtm_forcing, & ! intent(in)
-                            wprtp_forcing, rtm_ref, wp2thlp, thlpthvp,       & ! intent(in)
+                            wprtp_forcing, wtrc_rtpthvp, wtrc_rtm_forcing,   & ! intent(in) - water tracers
+                            wtrc_wprtp_forcing, rtm_ref, wp2thlp, thlpthvp,  & ! intent(in) - water tracers
                             thlm_forcing, wpthlp_forcing, thlm_ref,          & ! intent(in)
                             rho_ds_zm, rho_ds_zt, invrs_rho_ds_zm,           & ! intent(in)
-                            invrs_rho_ds_zt, thv_ds_zm, rtp2, thlp2,         & ! intent(in)
+                            invrs_rho_ds_zt, thv_ds_zm, rtp2, wtrc_rtp2, thlp2, & ! intent(in) -water tracers
                             w_1_zm, w_2_zm, varnce_w_1_zm, varnce_w_2_zm,    & ! intent(in)
                             mixt_frac_zm, l_implemented, em, wp2sclrp,       & ! intent(in)
                             sclrpthvp, sclrm_forcing, sclrp2, exner, rcm,    & ! intent(in)
@@ -1661,7 +1662,7 @@ module advance_clubb_core_module
                             um_forcing, vm_forcing, ug, vg, wpthvp,          & ! intent(in)
                             fcor, um_ref, vm_ref, up2, vp2,                  & ! intent(in)
                             uprcp, vprcp, rc_coef,                           & ! intent(in)
-                            rtm, wprtp, thlm, wpthlp,                        & ! intent(inout)
+                            rtm, wprtp, wtrc_rtm, wtrc_wprtp, thlm, wpthlp,  & ! intent(inout) - water tracers
                             sclrm, wpsclrp, um, upwp, vm, vpwp,              & ! intent(inout)
                             um_pert, vm_pert, upwp_pert, vpwp_pert)            ! intent(inout)
 

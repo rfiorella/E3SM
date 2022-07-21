@@ -43,7 +43,8 @@ module advance_xm_wpxp_module
     xm_wpxp_rtm = 2,    & ! Named constant for rtm and wprtp solving
     xm_wpxp_scalar = 3, & ! Named constant for sclrm and wpsclrp solving
     xm_wpxp_um = 4,     & ! Named constant for optional um and upwp solving
-    xm_wpxp_vm = 5        ! Named constant for optional vm and vpwp solving
+    xm_wpxp_vm = 5,     & ! Named constant for optional vm and vpwp solving
+    xm_wpxp_wiso = 6      ! Named constant for optional water tracers/isotopes
 
   contains
 
@@ -51,10 +52,11 @@ module advance_xm_wpxp_module
   subroutine advance_xm_wpxp( dt, sigma_sqd_w, wm_zm, wm_zt, wp2, &
                               Lscale, wp3_on_wp2, wp3_on_wp2_zt, Kh_zt, Kh_zm, &
                               tau_C6_zm, Skw_zm, wp2rtp, rtpthvp, rtm_forcing, &
-                              wprtp_forcing, rtm_ref, wp2thlp, thlpthvp, &
+                              wprtp_forcing, wtrc_rtpthvp, wtrc_rtm_forcing, & ! water tracers
+                              wtrc_wprtp_forcing, rtm_ref, wp2thlp, thlpthvp, & ! water tracers
                               thlm_forcing, wpthlp_forcing, thlm_ref, &
                               rho_ds_zm, rho_ds_zt, invrs_rho_ds_zm, &
-                              invrs_rho_ds_zt, thv_ds_zm, rtp2, thlp2, &
+                              invrs_rho_ds_zt, thv_ds_zm, rtp2, wtrc_rtp2, thlp2, & ! water tracers
                               w_1_zm, w_2_zm, varnce_w_1_zm, varnce_w_2_zm, &
                               mixt_frac_zm, l_implemented, em, wp2sclrp, &
                               sclrpthvp, sclrm_forcing, sclrp2, exner, rcm, &
@@ -63,7 +65,7 @@ module advance_xm_wpxp_module
                               um_forcing, vm_forcing, ug, vg, wpthvp, &
                               fcor, um_ref, vm_ref, up2, vp2, &
                               uprcp, vprcp, rc_coef, & 
-                              rtm, wprtp, thlm, wpthlp, &
+                              rtm, wprtp, wtrc_rtm, wtrc_wprtp, thlm, wpthlp, & ! water tracers
                               sclrm, wpsclrp, um, upwp, vm, vpwp, &
                               um_pert, vm_pert, upwp_pert, vpwp_pert)
 
@@ -212,6 +214,15 @@ module advance_xm_wpxp_module
 
     use advance_helper_module, only: &
         compute_Cx_fnc_Richardson ! Procedure
+            !water tracers
+    use water_tracer_vars, only: &
+        wtrc_nwset, &
+        wtrc_iatype, &
+        iwspec
+    use water_tracers, only: &
+        wtrc_ratio
+    use water_types, only: &
+        iwtvap
 
     implicit none
 
@@ -263,6 +274,12 @@ module advance_xm_wpxp_module
       varnce_w_1_zm,   & ! Variance of w (1st PDF component)       [m^2/s^2]
       varnce_w_2_zm,   & ! Variance of w (2nd PDF component)       [m^2/s^2]
       mixt_frac_zm      ! Weight of 1st PDF component (Sk_w dependent) [-]
+    !water tracers
+      real( kind = core_rknd ), intent(in), dimension(gr%nz,wtrc_nwset) :: &
+      wtrc_rtpthvp,       &
+      wtrc_rtm_forcing,   &
+      wtrc_wprtp_forcing, &
+      wtrc_rtp2
 
     logical, intent(in) ::  & 
       l_implemented      ! Flag for CLUBB being implemented in a larger model.
@@ -313,6 +330,11 @@ module advance_xm_wpxp_module
       thlm,      & ! th_l (liquid water potential temperature) [K]
       wpthlp       ! w'th_l'                                   [K m/s]
 
+    !water tracers
+    real( kind = core_rknd ), intent(inout), dimension(gr%nz, wtrc_nwset) :: &
+    wtrc_rtm,   & !water tracer total water mixing ratio     [kg/kg]
+    wtrc_wprtp    !w'wtrc_rt'                                [(kg/kg)(m/s)]
+
     ! Input/Output Variables
     real( kind = core_rknd ), intent(inout), dimension(gr%nz,sclr_dim) ::  & 
       sclrm, wpsclrp !                                     [Units vary]
@@ -335,6 +357,9 @@ module advance_xm_wpxp_module
     real( kind = core_rknd ), dimension(nsup+nsub+1,2*gr%nz) :: & 
       lhs  ! Implicit contributions to wpxp/xm (band diag. matrix) (LAPACK)
 
+    !water tracers
+    real( kind= core_rknd ), dimension(nsup+nsub+1,2*gr%nz,wtrc_nwset) :: &
+    wtrc_lhs   ! Implicit contributions to wpxp/xm (band diag. matrix) (LAPACK)
     real( kind = core_rknd ), dimension(gr%nz) ::  & 
       C6rt_Skw_fnc, C6thl_Skw_fnc, C7_Skw_fnc
 
@@ -450,10 +475,22 @@ module advance_xm_wpxp_module
     real( kind = core_rknd ), dimension(gr%nz) :: &
       zeros_vector  ! Array of zeros, of the size of a vertical profile [-]
 
+    !water tracers
+    real( kind = core_rknd ), dimension(gr%nz,wtrc_nwset) :: &
+    wtrc_upper_lim, & ! Keeps correlations from becoming greater than 1.
+    wtrc_lower_lim, & ! Keeps correlations from becoming less than -1.
+    wtrc_Rfix         ! Needed for post-clipping error correction.
+
+
     real( kind = core_rknd ), allocatable, dimension(:,:) :: & 
       rhs,      & ! Right-hand sides of band diag. matrix. (LAPACK)
       rhs_save, & ! Saved Right-hand sides of band diag. matrix. (LAPACK)
       solution    ! solution vectors of band diag. matrix. (LAPACK)
+    
+    !water tracers
+    real( kind = core_rknd ), allocatable, dimension(:,:,:) :: &
+      wtrc_rhs,& ! Right-hand sides of band diag. matrix. (LAPACK) - tracers
+      wtrc_solution ! solution vectors of band diag. matrix. (LAPACK) - tracers
 
     ! Constant parameters as a function of Skw.
 
@@ -461,6 +498,9 @@ module advance_xm_wpxp_module
       nrhs         ! Number of RHS vectors
 
     real( kind = core_rknd ) :: rcond
+
+    !water tracers
+    real( kind = core_rknd ), dimension(wtrc_nwset) :: wtrc_rcond
 
     ! Saved values of predictive fields, prior to being advanced, for use in
     ! print statements in case of fatal error.
@@ -484,8 +524,16 @@ module advance_xm_wpxp_module
     ! Indices
     integer :: i, k
 
+    !water tracer indices
+    integer :: m ! water sets
+    real( kind = core_rknd ) :: R !DEBUGGING - tracer ratio
+    real( kind = core_rknd ), dimension(2*gr%nz,wtrc_nwset) :: &
+      wtrc_rhs_orig
+
     ! Whether perturbed winds are being solved.
     logical :: l_perturbed_wind
+
+
 
     !---------------------------------------------------------------------------
 
@@ -514,6 +562,13 @@ module advance_xm_wpxp_module
     allocate( rhs_save(2*gr%nz,nrhs) )
     allocate( solution(2*gr%nz,nrhs) )
 
+    ! water tracers:
+    allocate( wtrc_rhs(2*gr%nz,nrhs,wtrc_nwset) )
+    allocate( wtrc_solution(2*gr%nz,nrhs,wtrc_nwset) ) 
+    !debugging:
+    wtrc_rhs(:,:,:) = 0._core_rknd
+    !wtrc_rhs_orig(:,:) = 0._core_rknd
+   
     ! This is initialized solely for the purpose of avoiding a compiler
     ! warning about uninitialized variables.
     zeros_vector = zero
@@ -892,7 +947,12 @@ module advance_xm_wpxp_module
       ! -1 <= corr_(w,r_t) <= 1.
       if ( l_clip_semi_implicit ) then
         wpxp_upper_lim =  max_mag_correlation * sqrt( wp2 * rtp2 )
-        wpxp_lower_lim = -wpxp_upper_lim
+        wpxp_lower_lim = -wpxp_upper_lim       
+        !water tracers
+        do m=1,wtrc_nwset
+          wtrc_upper_lim(:,m) = max_mag_correlation * sqrt( wp2 * wtrc_rtp2(:,m) )
+          wtrc_lower_lim(:,m) = -wtrc_upper_lim(:,m)
+        end do
       endif
 
       ! Compute the implicit portion of the r_t and w'r_t' equations.
@@ -923,15 +983,68 @@ module advance_xm_wpxp_module
       ! part of the solving routine.
       rhs_save = rhs
 
+      !-------------
+      !water tracers:
+      !-------------
+      do m=1,wtrc_nwset
+        ! Compute the implicit portion of the r_t and w'r_t' equations.
+        ! Build the left-hand side matrix.
+        !call xm_wpxp_lhs( l_iter, dt, Kh_zm, wtrc_wprtp(:,m),   & ! Intent(in)
+        !                a1, a1_zt, wm_zm, wm_zt,                & ! Intent(in)
+        !                wp2, wp3_on_wp2, wp3_on_wp2_zt,         & ! Intent(in)
+        !                Kw6, tau_C6_zm, C7_Skw_fnc,             & ! Intent(in)
+        !                C6rt_Skw_fnc, rho_ds_zm, rho_ds_zt,     & ! Intent(in)
+        !                invrs_rho_ds_zm, invrs_rho_ds_zt,       & ! Intent(in)
+        !                wtrc_upper_lim(:,m),                    & ! Intent(in)
+        !                wtrc_lower_lim(:,m), l_implemented,     & ! Intent(in)
+        !                em, Lscale, thlm, exner, wtrc_rtm(:,m), & ! Intent(in)
+        !                rcm, p_in_Pa, cloud_frac,               & ! Intent(in)
+        !                wtrc_lhs(:,:,m) )                         ! Intent(out)
+  
+        !set wtrc_lhs to be equal to lhs (to avoid having it
+        !be overwritten -JN:
+        wtrc_lhs(:,:,m) = lhs
+
+        ! Compute the explicit portion of the r_t and w'r_t' equations.
+        ! Build the right-hand side vector.
+        call xm_wpxp_rhs( xm_wpxp_scalar, l_iter, dt, wtrc_rtm(:,m), &  ! Intent(in)
+                        wtrc_wprtp(:,m), wtrc_rtm_forcing(:,m),      &  ! Intent(in)
+                        wtrc_wprtp_forcing(:,m), C7_Skw_fnc,         &  ! Intent(in)
+                        wtrc_rtpthvp(:,m), C6rt_Skw_fnc, tau_C6_zm,  &  ! Intent(in)& ! In
+                        coef_wp2rtp_implicit, coef_wp2rtp_implicit_zm, & ! In
+                        term_wp2rtp_explicit, term_wp2rtp_explicit_zm, & ! In
+                        sgn_t_vel_wprtp, rho_ds_zt, & ! In
+                        rho_ds_zm, invrs_rho_ds_zm, thv_ds_zm, & ! In
+                        wpxp_upper_lim, wpxp_lower_lim, & ! In
+                        wtrc_rhs(:,1,m) )                              ! Intent(out)
+      end do
+      !-------------
+
       ! Solve r_t / w'r_t'
       if ( l_stats_samp .and. irtm_matrix_condt_num > 0 ) then
         call xm_wpxp_solve( nrhs, &                     ! Intent(in)
                             lhs, rhs, &                 ! Intent(inout)
                             solution, rcond )           ! Intent(out)
+                                    !water tracers
+        do m=1,wtrc_nwset
+          call xm_wpxp_solve( nrhs,                             & ! Intent(in)
+                              wtrc_lhs(:,:,m), wtrc_rhs(:,:,m), & ! Intent(inout)
+                              !lhs, wtrc_rhs(:,:,m), &             ! Intent(inout)
+                              wtrc_solution(:,:,m),             & ! Intent(out)
+                              wtrc_rcond(m) )   ! Intent(out) ! remove err_code_xm_wpxp RPF 220721
+        end do
       else
         call xm_wpxp_solve( nrhs, &              ! Intent(in)
                             lhs, rhs, &          ! Intent(inout)
                             solution )           ! Intent(out)
+        !water tracers
+        do m=1,wtrc_nwset
+          call xm_wpxp_solve( nrhs,                             &  ! Intent(in)
+                              wtrc_lhs(:,:,m), wtrc_rhs(:,:,m), &  ! Intent(inout)
+                              !lhs(:,:,m), wtrc_rhs(:,:,m), &      ! Intent(inout)
+                              wtrc_solution(:,:,m) )                ! Intent(out)
+        end do
+
       endif
 
       if ( clubb_at_least_debug_level( 0 ) ) then
@@ -985,6 +1098,21 @@ module advance_xm_wpxp_module
              low_lev_effect, high_lev_effect, &     ! Intent(in)
              l_implemented, solution(:,1), &        ! Intent(in)
              rtm, rt_tol_mfl, wprtp )               ! Intent(inout)
+      !water tracers
+      do m=1,wtrc_nwset
+        call xm_wpxp_clipping_and_stats &
+          ! ( xm_wpxp_scalar, dt, wp2, wtrc_rtp2(:,m), & ! Intent(in)
+           ( xm_wpxp_wiso, dt, wp2, wtrc_rtp2(:,m), & ! Intent(in)
+                   wm_zt, wtrc_rtm_forcing(:,m),       &   ! Intent(in)
+                   rho_ds_zm, rho_ds_zt, &                 ! Intent(in)
+                   invrs_rho_ds_zm, invrs_rho_ds_zt, &     ! Intent(in)
+                   rt_tol**2, rt_tol, wtrc_rcond(m), &     ! Intent(in)
+                   low_lev_effect, high_lev_effect, &      ! Intent(in)
+                   l_implemented, wtrc_solution(:,1,m), &  ! Intent(in)
+                   wtrc_rtm(:,m), rt_tol_mfl,    &         ! Intent(inout)
+                   wtrc_wprtp(:,m) )  ! Intent(out)
+      end do
+
 
       if ( clubb_at_least_debug_level( 0 ) ) then
          if ( err_code == clubb_fatal_error ) then
@@ -1320,6 +1448,62 @@ module advance_xm_wpxp_module
                         rho_ds_zm, invrs_rho_ds_zm, thv_ds_zm, & ! In
                         wpxp_upper_lim, wpxp_lower_lim, & ! In
                         rhs(:,1) ) ! Out
+      !-------------
+      !water tracers:
+      !-------------
+                        do m=1,wtrc_nwset
+                          !DO NOTE CALCULATE LHS!!!!!!!!!!!! -JN
+                          !if this doesn't make a difference, then
+                          !use the ratios of RHS to calculate the solution,
+                          !as that might avoid whatever mysterious
+                          !error is occuring during the matrix solution
+                          !of AX=B, where A = lhs, B = RHS, and X = solution.
+                          !However, should probably due the math once to
+                          !ensure that no cross terms involving different
+                          !moisture values are involved. -JN
+                          
+                          !call xm_wpxp_lhs( l_iter, dt, Kh_zm, dummy_1d,          & ! Intent(in)
+                          !                a1, a1_zt, wm_zm, wm_zt,                &  ! Intent(in)
+                          !                wp2, wp3_on_wp2, wp3_on_wp2_zt,         & ! Intent(in)
+                          !                Kw6, tau_C6_zm, C7_Skw_fnc,             & ! Intent(in)
+                          !                C6rt_Skw_fnc, rho_ds_zm, rho_ds_zt,     & ! Intent(in)
+                          !                invrs_rho_ds_zm, invrs_rho_ds_zt,       & ! Intent(in)
+                          !                dummy_1d,                               & ! Intent(in)
+                          !                dummy_1d, l_implemented,                & ! Intent(in)
+                          !                em, Lscale, thlm, exner, wtrc_rtm(:,m), & ! Intent(in)
+                          !                rcm, p_in_Pa, cloud_frac,               & ! Intent(in)
+                          !                wtrc_lhs(:,:,m) )                         ! Intent(out)
+                  
+                          !set wtrc_lhs to be equal to lhs (to avoid having it
+                          !be overwritten -JN:
+                           wtrc_lhs(:,:,m) = lhs
+                  
+                          !if((m .ne. 1) .and. (m .ne. 4)) then !DEBUGGING -JN
+                            call xm_wpxp_rhs( xm_wpxp_scalar, l_iter, dt, wtrc_rtm(:,m), &  ! Intent(in)
+                                            wtrc_wprtp(:,m), wtrc_rtm_forcing(:,m),      &  ! Intent(in)
+                                            wtrc_wprtp_forcing(:,m), C7_Skw_fnc,         &  ! Intent(in)
+                                            wtrc_rtpthvp(:,m), C6rt_Skw_fnc, tau_C6_zm,  & ! In
+                                            coef_wp2rtp_implicit, coef_wp2rtp_implicit_zm, & ! In
+                                            term_wp2rtp_explicit, term_wp2rtp_explicit_zm, & ! In
+                                            sgn_t_vel_wprtp, rho_ds_zt, & ! In
+                                            rho_ds_zm, invrs_rho_ds_zm, thv_ds_zm, & ! In
+                                            wpxp_upper_lim, wpxp_lower_lim, & ! In
+                                            wtrc_rhs(:,1,m) )                               ! Intent(out)
+                          !DEBUGGING -JN:
+                          wtrc_rhs_orig(:,m) = wtrc_rhs(:,1,m) !save copy of RHS for ratio calculation
+                          !else  
+                          !if((m == 1) .or. (m == 4)) then
+                          !  call xm_wpxp_rhs( xm_wpxp_scalar, l_iter, dt, wtrc_rtm(:,m), &  ! Intent(in)
+                          !                wtrc_wprtp(:,m), wtrc_rtm_forcing(:,m),      &  ! Intent(in)
+                          !                wtrc_wprtp_forcing(:,m), C7_Skw_fnc,         &  ! Intent(in)
+                          !                wtrc_rtpthvp(:,m), C6rt_Skw_fnc, tau_C6_zm, a1, a1_zt, &  ! Intent(in)
+                          !                wp3_on_wp2, wp3_on_wp2_zt, rho_ds_zt,        &  ! Intent(in)
+                          !                rho_ds_zm, invrs_rho_ds_zm, thv_ds_zm,       &  ! Intent(in)
+                          !                wpxp_upper_lim, wpxp_lower_lim,              &  ! Intent(in)
+                          !                wtrc_rhs(:,1,m),debug_flx=wtrc_wprtp(:,1))      ! Intent(out)
+                          !end if
+                        end do
+
 
       ! Compute the explicit portion of the th_l and w'th_l' equations.
       ! Build the right-hand side vector.
