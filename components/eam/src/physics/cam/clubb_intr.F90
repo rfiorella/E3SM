@@ -19,7 +19,7 @@ module clubb_intr
   !-----------------------------------------------------------------------------------------------------
   use shr_kind_mod,  only: r8=>shr_kind_r8
   use shr_log_mod ,  only: errMsg => shr_log_errMsg
-  use ppgrid,        only: pver, pverp
+  use ppgrid,        only: pver, pverp, pcols
   use phys_control,  only: phys_getopts
   use physconst,     only: rair, cpair, gravit, latvap, latice, zvir, rh2o, karman, &
                            tms_orocnst, tms_z0fac, pi
@@ -36,6 +36,13 @@ module clubb_intr
 #else
   use shr_kind_mod,     only: core_rknd=>shr_kind_r8
 #endif
+
+! water tracers
+   use water_tracer_vars, only: trace_water, wtrc_detrain_in_macrop, wtrc_nwset, &
+                                wtrc_iatype, iwspec, wtrc_indices, wtrc_ncnst
+   use water_tracers,    only: wtrc_init_rates, wtrc_add_rates, wtrc_apply_rates, &
+                               wtrc_ratio
+   use water_types,      only: pwtype, iwtvap, iwtliq, iwtice
 
   implicit none
 
@@ -187,7 +194,12 @@ module clubb_intr
     naai_idx, &         ! ice number concentration
     prer_evap_idx, &    ! rain evaporation rate
     qrl_idx, &          ! longwave cooling rate
-    radf_idx
+    radf_idx, &
+    ! water tracers
+    wtdlf_idx, &        ! detrained water tracer liquid from deep scheme
+    wtrc_wprtp_idx, &
+    wtrc_rtp2_idx, &
+    wtrc_rtpthlp_idx
 
  integer :: &          ! newly added pbuf fields for CLUBB
     wpthvp_idx, &       ! < w'th_v' >
@@ -239,6 +251,20 @@ module clubb_intr
   type(pdf_parameter), target, allocatable :: pdf_params_chnk(:,:)    ! PDF parameters (thermo. levs.) [units vary]
   type(pdf_parameter), target, allocatable :: pdf_params_zm_chnk(:,:) ! PDF parameters on momentum levs. [units vary]
 #endif
+
+! water tracers
+!++ag
+ ! Local variables for water tracers/isotopes
+! RPF changed from explicit arrays to allocatable.
+  real(r8), allocatable :: process_rates(:,:,:,:,:) ! Process rates (kg/kg/sec)
+  integer               :: m                                              ! water set index
+  logical               :: isOk
+  integer               :: iwtype
+
+  real(r8), allocatable :: pqctn(:,:)
+  real(r8), allocatable :: nqctn(:,:)
+  real(r8), allocatable :: pqitn(:,:)
+  real(r8), allocatable :: nqitn(:,:)
 
   logical :: liqcf_fix = .FALSE.  ! HW for liquid cloud fraction fix
   logical :: relvar_fix = .FALSE. !PMA for relvar fix
@@ -755,6 +781,12 @@ end subroutine clubb_init_cnst
     prec_dp_idx = pbuf_get_index('PREC_DP') !PMA ZM precip for gustiness
     snow_dp_idx = pbuf_get_index('SNOW_DP') !PMA ZM snow for gustiness
     vmag_gust_idx = pbuf_get_index('vmag_gust') !PMA ZM snow for gustiness
+    
+    !water tracers:
+    wtdlf_idx   = pbuf_get_index('WTDLF')              ! RPF - removed errcode=ierr 
+    wtrc_wprtp_idx = pbuf_get_index('wtrc_WPRTP_nadv') ! from this and next 2 entries
+    wtrc_rtp2_idx  = pbuf_get_index('wtrc_RTP2_nadv')  ! as it's not used in EAM
+    wtrc_rtpthlp_idx = pbuf_get_index('wtrc_RTTH_nadv')
 
     iisclr_rt  = -1
     iisclr_thl = -1
@@ -770,6 +802,9 @@ end subroutine clubb_init_cnst
 
     if (do_expldiff) then
        offset = 2 ! diffuse temperature and moisture explicitly
+       edsclr_dim = edsclr_dim + offset       
+       !water tracers:
+       offset = wtrc_nwset
        edsclr_dim = edsclr_dim + offset
     endif
 
@@ -1024,6 +1059,11 @@ end subroutine clubb_init_cnst
        call pbuf_set_field(pbuf2d, fice_idx,    0.0_r8)
        call pbuf_set_field(pbuf2d, radf_idx,    0.0_r8)
        call pbuf_set_field(pbuf2d, qrl_idx,     0.0_r8)
+
+       !water tracers
+       call pbuf_set_field(pbuf2d, wtrc_wprtp_idx,   0.0_r8)
+       call pbuf_set_field(pbuf2d, wtrc_rtp2_idx,    rt_tol**2)
+       call pbuf_set_field(pbuf2d, wtrc_rtpthlp_idx, 0.0_r8)
 
        call pbuf_set_field(pbuf2d, wpthvp_idx,     0.0_r8)
        call pbuf_set_field(pbuf2d, wp2thvp_idx,    0.0_r8)
@@ -1331,6 +1371,21 @@ end subroutine clubb_init_cnst
    real(r8) :: pdf_zm_varnce_w_2_inout(pverp)   ! work array for pdf_params_zm%varnce_w_2
    real(r8) :: pdf_zm_mixt_frac_inout(pverp)    ! work array for pdf_params_zm%mixt_frac
 
+  !water tracers:
+   real(r8) :: wtrc_rtm_forcing(pverp+1-top_lev,wtrc_nwset)   !wtrc_rt forcing (may not actually be used)
+   real(r8) :: wtrc_wprtp_forcing(pverp+1-top_lev,wtrc_nwset) !wtrc_wprtp forcing (may not actually be used)
+   real(r8) :: wtrc_rtp2_forcing(pverp+1-top_lev,wtrc_nwset)  !wtrc_rt^2 forcing
+   real(r8) :: wtrc_rtpthlp_forcing(pverp+1-top_lev,wtrc_nwset) !wtrc_rt'thl' forcing
+   real(r8) :: wtrc_rtp3_in(pverp+1-top_lev, wtrc_nwset)      ! wtrc_r_t'^3 (unused)       [(kg/kg)^3]
+   real(r8) :: wtrc_wprtp_in(pverp+1-top_lev,wtrc_nwset)      ! w'wtrc_rt' [(kg/kg)(m/s)]
+   real(r8) :: wtrc_rtp2_in(pverp+1-top_lev,wtrc_nwset)       ! wtrc_rt'wtrc_rt' [(kg/kg)^2]
+   real(r8) :: wtrc_rtm_in(pverp+1-top_lev,wtrc_nwset)        ! CLUBB input of water tracer total water/vapor [kg/kg]
+   real(r8) :: wtrc_rtpthlp_in(pverp+1-top_lev,wtrc_nwset)      ! wtrc_rt'thl' [(kg/kg) K]
+   real(r8) :: wtrc_rcm_inout(pverp+1-top_lev,wtrc_nwset)       ! CLUBB output of water tracer cloud liquid    [kg/kg]
+   real(r8) :: wtrc_tw_upper_a(wtrc_nwset)                    ! vertically-integrated water tracer mass
+   real(r8) :: wtrc_tw_upper_b(wtrc_nwset)                    ! vertically-integrated water tracer mass
+   real(r8) :: wtrc_tw_upper_diss(wtrc_nwset)
+
    ! Variables below are needed to compute energy integrals for conservation
    real(r8) :: ke_a(pcols), ke_b(pcols), te_a(pcols), te_b(pcols)
    real(r8) :: wv_a(pcols), wv_b(pcols), wl_b(pcols), wl_a(pcols)
@@ -1496,6 +1551,19 @@ end subroutine clubb_init_cnst
 
    ugust(gprec,gfac) = gfac*log(1._R8+57801.6_R8*gprec-3.55332096e7_R8*(gprec**2.0_R8))
 
+   ! water tracers:
+   real(r8), pointer, dimension(:,:,:) :: wtdlf !detrained water tracers from convection [kg/kg/s]
+   real(r8), pointer, dimension(:,:,:) :: wtrc_wprtp !turbulent water tracer moisture flux [(kg/kg)(m/s)]
+   real(r8), pointer, dimension(:,:,:) :: wtrc_rtp2  !water tracer moisture variance [(kg/kg)^2]
+   real(r8), pointer, dimension(:,:,:) :: wtrc_rtpthlp !water tracer moisture/theta_l covariance [ (kg/kg) K]
+   real(r8) :: wtrc_rtm(pcols,pverp,wtrc_nwset)      !water tracer "toal water" (assumes all vapor) [kg/kg]
+   real(r8) :: wtrc_rcm(pcols,pverp,wtrc_nwset)      !CLUBB water tracer cloud water mixing ratio [kg/kg]
+   real(r8) :: wtrc_wprtp_sfc(wtrc_nwset)            !water tracer surface fluxes [kg/kg m/s]
+   real(r8) :: R                                     !water tracer/isotope ratio [unitless]
+   real(r8) :: wtrc_vtmp                             !temporary water tracer variable (for ratio calculations)
+   real(r8) :: wtrc_vdiff                            !temporary water tracer variable (for mass flux  adjusting)
+   integer  :: m                                     !water tracer loop control variable
+
 #endif
    det_s(:)   = 0.0_r8
    det_ice(:) = 0.0_r8
@@ -1619,6 +1687,10 @@ end subroutine clubb_init_cnst
    call pbuf_get_field(pbuf, up2_idx,     up2,     start=(/1,1,itim_old/), kount=(/pcols,pverp,1/))
    call pbuf_get_field(pbuf, vp2_idx,     vp2,     start=(/1,1,itim_old/), kount=(/pcols,pverp,1/))
 
+   !water tracers:
+   call pbuf_get_field(pbuf, wtrc_wprtp_idx, wtrc_wprtp, start=(/1,1,1,itim_old/), kount=(/pcols,pverp,wtrc_nwset,1/))
+   call pbuf_get_field(pbuf, wtrc_rtp2_idx, wtrc_rtp2, start=(/1,1,1,itim_old/), kount=(/pcols,pverp,wtrc_nwset,1/))
+   call pbuf_get_field(pbuf, wtrc_rtpthlp_idx, wtrc_rtpthlp, start=(/1,1,1,itim_old/), kount=(/pcols,pverp,wtrc_nwset,1/))
    call pbuf_get_field(pbuf, upwp_idx,    upwp,    start=(/1,1,itim_old/), kount=(/pcols,pverp,1/))
    call pbuf_get_field(pbuf, vpwp_idx,    vpwp,    start=(/1,1,itim_old/), kount=(/pcols,pverp,1/))
    if (linearize_pbl_winds) then
@@ -1813,6 +1885,14 @@ end subroutine clubb_init_cnst
        vm(i,k)      = state1%v(i,k)
        thlm(i,k)    = state1%t(i,k)*exner_clubb(i,k)-(latvap/cpair)*state1%q(i,k,ixcldliq)
 
+       !water tracers:
+       if(trace_water) then
+         do m=1,wtrc_nwset
+            wtrc_rtm(i,k,m) = state1%q(i,k,wtrc_iatype(m,iwtvap))+&
+                              state1%q(i,k,wtrc_iatype(m,iwtliq))
+         end do
+       end if
+
        if (clubb_do_adv) then
           if (macmic_it .eq. 1) then
 
@@ -1849,6 +1929,13 @@ end subroutine clubb_init_cnst
    vm(1:ncol,pverp)   = state1%v(1:ncol,pver)
    thlm(1:ncol,pverp) = thlm(1:ncol,pver)
 
+   !water tracers:
+   if(trace_water) then
+      do m=1,wtrc_nwset
+        wtrc_rtm(1:ncol,pverp,m) = wtrc_rtm(1:ncol,pver,m)
+      end do
+    end if
+  
    if (clubb_do_adv) then
       thlp2(1:ncol,pverp)=thlp2(1:ncol,pver)
       rtp2(1:ncol,pverp)=rtp2(1:ncol,pver)
@@ -2024,6 +2111,13 @@ end subroutine clubb_init_cnst
 
       endif
 
+      !water tracers initizlize to zero:
+      do m=1,wtrc_nwset
+         wtrc_rtm_forcing(:,m)   = 0._r8
+         wtrc_wprtp_forcing(:,m) = 0._r8
+         wtrc_rtp2_forcing(:,m)  = 0._r8
+         wtrc_rtpthlp_forcing(:,m) = 0._r8
+       end do
       !  Set stats output and increment equal to CLUBB and host dt
       stats_tsamp = dtime
       stats_tout  = hdtime_core_rknd
@@ -2055,6 +2149,43 @@ end subroutine clubb_init_cnst
       wprtp_sfc  = real(cam_in%cflx(i,1), kind = core_rknd)/rho_ds_zm(1)                              ! Latent heat flux
       upwp_sfc   = real(cam_in%wsx(i), kind = core_rknd)/rho_ds_zm(1)                                 ! Surface meridional momentum flux
       vpwp_sfc   = real(cam_in%wsy(i), kind = core_rknd)/rho_ds_zm(1)                                 ! Surface zonal momentum flux
+
+     !water tracers:
+      !*************
+      !NOTE:  For some reason this section of code
+      !(specifically the flux adjustment section)
+      !only seems to work properly when multi-threading
+      !is turned off, i.e. if nthreads = 1.  Not sure
+      !why this is the case, but it should be examined
+      !more closely at some point in the future. -JN.
+      if(trace_water) then
+         do m=1,wtrc_nwset
+           wtrc_wprtp_sfc(m) = cam_in%cflx(i,wtrc_iatype(m,iwtvap))/rho_ds_zm(1)
+         end do
+        !Adjust surface fluxes for any errors:
+         wtrc_vtmp  = wtrc_wprtp_sfc(1)    !copy original quantity
+         wtrc_vdiff = wtrc_vtmp-wprtp_sfc  !calculate difference
+         do m=1,wtrc_nwset
+          !calculate ratio
+           R = wtrc_ratio(iwspec(wtrc_iatype(m,iwtvap)),&
+                          wtrc_wprtp_sfc(m),wtrc_vtmp)
+          !apply fix to remove difference
+           wtrc_wprtp_sfc(m) = wtrc_wprtp_sfc(m)-R*wtrc_vdiff
+         end do
+         !Remove/adjust any quantities that are clearly outliers:
+         do m=2,wtrc_nwset
+           if(abs(wtrc_wprtp_sfc(m)) .gt. 10.0*abs(wtrc_wprtp_sfc(1))) then
+             !Print out warning:
+             !write(*,*) 'Large Surface WTRC/WISO Evap Flux Error in CAM/CLUBB:',&
+             !           wtrc_wprtp_sfc(m), wtrc_wprtp_sfc(1),&
+             !           wtrc_rtm(i,pver,m), wtrc_rtm(i,pver,1),&
+             !           lchnk,i,m
+             !Reset surface fluxes:
+             wtrc_wprtp_sfc(m) = wtrc_wprtp_sfc(1)
+           end if
+         end do
+       end if
+       !*************
 
       ! ------------------------------------------------- !
       ! Apply TMS                                         !
@@ -2115,6 +2246,16 @@ end subroutine clubb_init_cnst
          endif
 
       enddo
+      !water tracers:
+      if(trace_water) then
+         do m=1,wtrc_nwset
+           wtrc_rtm_in(k,m)   = wtrc_rtm(i,pverp-k+1,m)
+           wtrc_wprtp_in(k,m) = wtrc_wprtp(i,pverp-k+1,m)
+           wtrc_rtp2_in(k,m)  = wtrc_rtp2(i,pverp-k+1,m)
+           wtrc_rtpthlp_in(k,m) = wtrc_rtpthlp(i,pverp-k+1,m)
+         end do
+         wtrc_rcm_inout(k,:) = 0._r8
+       end if
 
       if (linearize_pbl_winds) then
          ! Each host model time step, reset the perturbed variables to be equal to
@@ -2201,10 +2342,18 @@ end subroutine clubb_init_cnst
         do k=1,pver
           edsclr_in(k+1,icnt+1) = real(thlm(i,pver-k+1), kind = core_rknd)
           edsclr_in(k+1,icnt+2) = real(rtm(i,pver-k+1), kind = core_rknd)
+          !water tracers:
+          do m=1,wtrc_nwset
+            edsclr_in(k+1,icnt+2+m) = real(wtrc_rtm(i,pver-k+1,m), kind = core_rknd)
+          end do
         enddo
 
         edsclr_in(1,icnt+1) = edsclr_in(2,icnt+1)
         edsclr_in(1,icnt+2) = edsclr_in(2,icnt+2)
+        !water tracers:
+        do m=1,wtrc_nwset
+         edsclr_in(1,icnt+2+m) = edsclr_in(2,icnt+2+m)
+       end do
       endif
 
       rho_in(:) = real(rho(i,:), kind = core_rknd)
@@ -2268,11 +2417,11 @@ end subroutine clubb_init_cnst
 
          call advance_clubb_core_api &
               ( l_implemented, dtime, fcor, sfc_elevation, hydromet_dim, & ! intent(in)
-              thlm_forcing, rtm_forcing, um_forcing, vm_forcing, &         ! intent(in)
-              sclrm_forcing, edsclrm_forcing, wprtp_forcing, &             ! intent(in)
-              wpthlp_forcing, rtp2_forcing, thlp2_forcing, &               ! intent(in)
-              rtpthlp_forcing, wm_zm, wm_zt, &                             ! intent(in)
-              wpthlp_sfc, wprtp_sfc, upwp_sfc, vpwp_sfc, &                 ! intent(in)
+              thlm_forcing, rtm_forcing, wtrc_rtm_forcing, um_forcing, vm_forcing, &         ! intent(in)
+              sclrm_forcing, edsclrm_forcing, wprtp_forcing, wtrc_wprtp_forcing, &             ! intent(in)
+              wpthlp_forcing, rtp2_forcing, wtrc_rtp2_forcing, thlp2_forcing, &               ! intent(in)
+              rtpthlp_forcing, wtrc_rtpthlp_forcing, wm_zm, wm_zt, &                             ! intent(in)
+              wpthlp_sfc, wprtp_sfc, wtrc_wprtp_sfc, upwp_sfc, vpwp_sfc, &                 ! intent(in)
               wpsclrp_sfc, wpedsclrp_sfc, &                                ! intent(in)
               p_in_Pa, rho_zm, rho_in, exner, &                            ! intent(in)
               rho_ds_zm, rho_ds_zt, invrs_rho_ds_zm, &                     ! intent(in)
@@ -2285,13 +2434,13 @@ end subroutine clubb_init_cnst
               host_dx, host_dy, &                                          ! intent(in)
               um_in, vm_in, upwp_in, &                                     ! intent(inout)
               vpwp_in, up2_in, vp2_in, &                                   ! intent(inout)
-              thlm_in, rtm_in, wprtp_in, wpthlp_in, &                      ! intent(inout)
-              wp2_in, wp3_in, rtp2_in, &                                   ! intent(inout)
-              rtp3_in, thlp2_in, thlp3_in, rtpthlp_in, &                   ! intent(inout)
+              thlm_in, rtm_in, wtrc_rtm_in, wprtp_in, wtrc_wprtp_in, wpthlp_in, &                      ! intent(inout)
+              wp2_in, wp3_in, rtp2_in, wtrc_rtp2_in, &                                   ! intent(inout)
+              rtp3_in, wtrc_rtp3_in, thlp2_in, thlp3_in, rtpthlp_in, wtrc_rtpthlp_in, &                   ! intent(inout)
               sclrm,   &                                                   ! intent(inout)
               sclrp2, sclrprtp, sclrpthlp, &                               ! intent(inout)
               wpsclrp, edsclr_in, err_code, &                              ! intent(inout)
-              rcm_inout, cloud_frac_inout, &                               ! intent(inout)
+              rcm_inout, wtrc_rcm_inout, cloud_frac_inout, &               ! intent(inout)
               wpthvp_inout, wp2thvp_inout, rtpthvp_inout, thlpthvp_inout, & ! intent(inout)
               sclrpthvp_inout, &                                            ! intent(inout)
               pdf_params, pdf_params_zm, &                                 ! intent(inout)
@@ -2442,6 +2591,15 @@ end subroutine clubb_init_cnst
           pdf_zm_varnce_w_2(i,k) = pdf_zm_varnce_w_2_inout(pverp-k+1)
           pdf_zm_mixt_frac(i,k) =  pdf_zm_mixt_frac_inout(pverp-k+1)
 
+          !water tracers:
+          do m=1,wtrc_nwset
+            wtrc_rtm(i,pverp-k+1,m)  = wtrc_rtm_in(k,m)
+            wtrc_wprtp(i,pverp-k+1,m)= wtrc_wprtp_in(k,m)
+            wtrc_rtp2(i,pverp-k+1,m) = wtrc_rtp2_in(k,m)
+            wtrc_rcm(i,pverp-k+1,m)  = wtrc_rcm_inout(k,m)
+            wtrc_rtpthlp(i,pverp-k+1,m) = wtrc_rtpthlp_in(k,m)
+          end do
+
           do ixind=1,edsclr_dim
               edsclr_out(k,ixind) = real(edsclr_in(pverp-k+1,ixind), kind = r8)
           enddo
@@ -2453,6 +2611,8 @@ end subroutine clubb_init_cnst
 
       zi_out(i,1) = 0._r8
 
+      ! wtrc_todo RPF - there are some mass/energy fixer equations that are used
+      ! in CAM here, not sure why they aren't used in EAM. 220720.
       ! Compute integrals for static energy, kinetic energy, water vapor, and liquid water
       ! after CLUBB is called.  This is for energy conservation purposes.
       se_a = 0._r8
@@ -2507,6 +2667,18 @@ end subroutine clubb_init_cnst
          ptend_loc%q(i,k,ixcldliq) = (rcm(i,k)-state1%q(i,k,ixcldliq))*invrs_hdtime ! Tendency of liquid water
          ptend_loc%s(i,k)   = (clubb_s(k)-state1%s(i,k))*invrs_hdtime               ! Tendency of static energy
 
+         !water tracers
+         !-------------
+         do m=1,wtrc_nwset
+            !water vapor:
+            ptend_loc%q(i,k,wtrc_iatype(m,iwtvap)) = (wtrc_rtm(i,k,m) - &
+              wtrc_rcm(i,k,m) - state1%q(i,k,wtrc_iatype(m,iwtvap)))*invrs_hdtime
+            !cloud liquid:
+            ptend_loc%q(i,k,wtrc_iatype(m,iwtliq)) = (wtrc_rcm(i,k,m)- &
+              state1%q(i,k,wtrc_iatype(m,iwtliq)))*invrs_hdtime
+          end do
+          !-------------
+
          if (clubb_do_adv) then
             if (macmic_it .eq. cld_macmic_num_steps) then
 
@@ -2541,6 +2713,73 @@ end subroutine clubb_init_cnst
 
          endif
 
+!-------------------------------------------------
+!water tracers
+!-------------------------------------------------
+! RPF - not sure why this is still in the CAM code, perhaps an old interface
+         ! to a differnet version of MG microphysics?
+
+
+
+   ! If doing water isotopes, then apply these processes to the isotopic water
+   ! species.
+   !
+   ! NOTE: The detrained ice and water vapor should be handled in the convection
+   ! routines, but for now a generic tendency may be applied here based upon the.
+   !
+   ! Assume that the liquid and ice tendencies are from vapor<->liquid and
+   ! vapor<->ice processes, not ice<->liquid. If this is wrong, then individual
+   ! rates will need to be determined in mmacro_pcond.
+   
+!   if (trace_water) then
+
+     ! Setup the process rate matrix using the pre-sedimentation state and
+     ! the calculated process rates.
+     !
+     ! NOTE: The reverse of the process is filled in automatically.
+!     call wtrc_init_rates(top_lev, process_rates)
+
+     ! Processes that consume water vapor:
+
+     !initalize variables - JN
+!     pqctn(:,top_lev:) = 0._r8
+!     nqctn(:,top_lev:) = 0._r8
+!     pqitn(:,top_lev:) = 0._r8
+!     nqitn(:,top_lev:) = 0._r8
+
+     !split into positive and negative tendencies - JN
+!     do i=1,ncol
+!       do k=top_lev,pver
+!         if(ptend_loc%q(i,k,ixcldliq) .lt. 0._r8) then
+!           nqctn(i,k) = ptend_loc%q(i,k,ixcldliq) 
+!         else
+!           pqctn(i,k) = ptend_loc%q(i,k,ixcldliq)
+!         end if
+!         if(ptend_loc%q(i,k,ixcldice) .lt. 0._r8) then
+!           nqitn(i,k) = ptend_loc%q(i,k,ixcldice)
+!         else
+!           pqitn(i,k) = ptend_loc%q(i,k,ixcldice)
+!         end if  
+!       end do
+!     end do
+!
+!     call wtrc_add_rates(process_rates, ncol, top_lev, iwtvap, iwtvap, iwtvap, &
+!                         ptend_loc%q(i,k,ixq) + ptend_loc%q(i,k,ixcldliq) + ptend_loc%q(i,k,ixcldice))
+
+!     call wtrc_add_rates(process_rates, ncol, top_lev, iwtvap, iwtliq, iwtvap, pqctn)
+!     call wtrc_add_rates(process_rates, ncol, top_lev, iwtvap, iwtliq, iwtliq, nqctn)
+!     call wtrc_add_rates(process_rates, ncol, top_lev, iwtvap, iwtice, iwtvap, pqitn)
+!     call wtrc_add_rates(process_rates, ncol, top_lev, iwtvap, iwtice, iwtice, nqitn)
+
+!     precr(:,:)=0._r8
+!     preci(:,:)=0._r8
+!
+     ! Apply these rates.
+!     call wtrc_apply_rates(state, ptend_loc, pbuf, top_lev, dtime, .false., precr, preci, pre_rates_in=process_rates, &
+!                           prelat=ptend_loc%s)
+
+!   end if !water tracers
+!--ag
          !  Apply tendencies to ice mixing ratio, liquid and ice number, and aerosol constituents.
          !  Loading up this array doesn't mean the tendencies are applied.
          ! edsclr_out is compressed with just the constituents being used, ptend and state are not compressed
@@ -2553,8 +2792,10 @@ end subroutine clubb_init_cnst
                    (ixind /= ixthlp2)   .and. (ixind /= ixrtp2)   .and.&
                    (ixind /= ixrtpthlp) .and. (ixind /= ixwpthlp) .and.&
                    (ixind /= ixwprtp)   .and. (ixind /= ixwp2)    .and.&
-                   (ixind /= ixwp3)     .and. (ixind /= ixup2)    .and. (ixind /= ixvp2) ) then
+                   (ixind /= ixwp3)     .and. (ixind /= ixup2)    .and. (ixind /= ixvp2) .and.&
+                   all(ixind /= wtrc_iatype(:,iwtvap) .and. all(ixind /= wtrc_iatype(:,iwtliq)))) then ! water tracers!
                        ptend_loc%q(i,k,ixind) = (edsclr_out(k,icnt)-state1%q(i,k,ixind))*invrs_hdtime ! transported constituents
+                       
                end if
             end if
          enddo
@@ -2625,6 +2866,13 @@ end subroutine clubb_init_cnst
    lqice(ixcldice) = .true.
    lqice(ixnumliq) = .true.
    lqice(ixnumice) = .true.
+   !water tracers:
+   if(trace_water) then
+      do m=1,wtrc_nwset
+        lqice(wtrc_iatype(m,iwtliq)) = .true.
+        lqice(wtrc_iatype(m,iwtice)) = .true.
+      end do
+    end if
 
    call physics_ptend_init(ptend_loc,state%psetcols, 'clubb_det', ls=.true., lq=lqice)
 
@@ -2658,6 +2906,15 @@ end subroutine clubb_init_cnst
          !   so that the energy checker doesn't complain.
          det_s(i)                  = det_s(i) + ptend_loc%s(i,k)*state1%pdel(i,k)*invrs_gravit
          det_ice(i)                = det_ice(i) - ptend_loc%q(i,k,ixcldice)*state1%pdel(i,k)*invrs_gravit
+         !water tracers:
+         !NOTE:  This assumes no fractionation during freezing/melting. - JN
+         if ((trace_water) .and. (wtrc_detrain_in_macrop)) then
+            call pbuf_get_field(pbuf, wtdlf_idx, wtdlf)
+            do m=1,wtrc_nwset
+            ptend_loc%q(i,k,wtrc_iatype(m,iwtliq)) = wtdlf(i,k,m) * (1._r8 - dum1)
+            ptend_loc%q(i,k,wtrc_iatype(m,iwtice)) = wtdlf(i,k,m) * dum1
+            end do
+         end if
 
       enddo
    enddo
