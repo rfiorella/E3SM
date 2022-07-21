@@ -37,10 +37,10 @@ module clip_explicit
   contains
 
   !=============================================================================
-  subroutine clip_covars_denom( dt, rtp2, thlp2, up2, vp2, wp2, &
+  subroutine clip_covars_denom( dt, rtp2, wtrc_rtp2, thlp2, up2, vp2, wp2, &
                                 sclrp2, wprtp_cl_num, wpthlp_cl_num, &
                                 wpsclrp_cl_num, upwp_cl_num, vpwp_cl_num, &
-                                wprtp, wpthlp, upwp, vpwp, wpsclrp, &
+                                wprtp, wtrc_wprtp, wpthlp, upwp, vpwp, wpsclrp, &
                                 upwp_pert, vpwp_pert)
 
     ! Description:
@@ -74,6 +74,10 @@ module clip_explicit
     use clubb_precision, only: & 
         core_rknd ! Variable(s)
 
+    ! water tracers
+    use water_tracer_vars, only: &
+        wtrc_nwset ! Variable(s)
+
     implicit none
 
     ! Input Variables
@@ -86,6 +90,10 @@ module clip_explicit
       up2,   & ! u'^2           [m^2/s^2]
       vp2,   & ! v'^2           [m^2/s^2]
       wp2      ! w'^2           [m^2/s^2]
+
+    !water tracers
+    real( kind = core_rknd ), dimension(gr%nz,wtrc_nwset), intent(in) :: &
+    wtrc_rtp2 !wtrc_r_t'^2    [(kg/kg)^2]
 
     real( kind = core_rknd ), dimension(gr%nz,sclr_dim), intent(in) :: &
       sclrp2 ! sclr'^2  [{units vary}^2]
@@ -103,6 +111,10 @@ module clip_explicit
       wpthlp, & ! w'theta_l'    [K m/s]
       upwp,   & ! u'w'          [m^2/s^2]
       vpwp      ! v'w'          [m^2/s^2]
+
+    !water tracers
+    real( kind = core_rknd ), dimension(gr%nz,wtrc_nwset), intent(inout) :: &
+    wtrc_wprtp ! w'wtrc_r_t'  [(kg/kg)(m/s)]
 
     real( kind = core_rknd ), dimension(gr%nz,sclr_dim), intent(inout) :: &
       wpsclrp ! w'sclr'         [units m/s]
@@ -122,10 +134,16 @@ module clip_explicit
       upwp_chnge,   & ! Net change in u'w' due to clipping    [m^2/s^2]
       vpwp_chnge      ! Net change in v'w' due to clipping    [m^2/s^2]
 
+    !water tracers
+    real( kind = core_rknd ), dimension(gr%nz,wtrc_nwset) :: &
+      wtrc_wprtp_chnge ! Net change in w'wtrc_r_t' due to clipping [(kg/kg)(m/s)]
+
     real( kind = core_rknd ), dimension(gr%nz,sclr_dim) :: &
       wpsclrp_chnge   ! Net change in w'sclr' due to clipping [{units vary}]
 
     integer :: i  ! scalar array index.
+
+    integer :: m  ! water tracer index.
 
     ! ---- Begin Code ----
 
@@ -165,6 +183,14 @@ module clip_explicit
                      l_last_clip_ts, dt, wp2, rtp2, & ! intent(in)
                      wprtp, wprtp_chnge )             ! intent(inout)
 
+                         !water tracers:
+    do m=1,wtrc_nwset
+      !NOTE:  Using "clip sclrprtp" so that it doesn't overwrite
+      !the wprtp statistics. -JN   
+      call clip_covar( clip_sclrprtp, l_first_clip_ts, &
+                       l_last_clip_ts, dt, wp2, wtrc_rtp2(:,m), &
+                       wtrc_wprtp(:,m), wtrc_wprtp_chnge(:,m) )
+    end do  
 
     !!! Clipping for w'th_l'
     !
