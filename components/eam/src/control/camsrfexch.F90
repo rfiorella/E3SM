@@ -382,10 +382,10 @@ CONTAINS
 ! !INTERFACE
 !
   subroutine atm2hub_alloc( cam_out )
-   ! water tracers - RPF
-   use water_tracer_vars, only: trace_water
 !
 !!USES:
+   ! water tracers - RPF
+   use water_tracer_vars, only: trace_water
 !
 !!ARGUMENTS:
 !
@@ -670,26 +670,26 @@ CONTAINS
        cam_out(c)%uovern(:)   = 0._r8
 
        !water tracers/isotopes:
-       cam_out(c)%precrl_16O  = 0._r8
-       cam_out(c)%precrl_HDO  = 0._r8
-       cam_out(c)%precrl_18O  = 0._r8
-       cam_out(c)%precrl_17O  = 0._r8
-       cam_out(c)%precrl_HTO  = 0._r8
-       cam_out(c)%precsl_16O  = 0._r8
-       cam_out(c)%precsl_HDO  = 0._r8
-       cam_out(c)%precsl_18O  = 0._r8
-       cam_out(c)%precsl_17O  = 0._r8
-       cam_out(c)%precsl_HTO  = 0._r8
-       cam_out(c)%precrc_16O  = 0._r8
-       cam_out(c)%precrc_HDO  = 0._r8
-       cam_out(c)%precrc_18O  = 0._r8
-       cam_out(c)%precrc_17O  = 0._r8
-       cam_out(c)%precrc_HTO  = 0._r8
-       cam_out(c)%precsc_16O  = 0._r8
-       cam_out(c)%precsc_HDO  = 0._r8
-       cam_out(c)%precsc_18O  = 0._r8
-       cam_out(c)%precrc_17O  = 0._r8
-       cam_out(c)%precrc_HTO  = 0._r8
+       cam_out(c)%precrl_16O(:)  = 0._r8
+       cam_out(c)%precrl_HDO(:)  = 0._r8
+       cam_out(c)%precrl_18O(:)  = 0._r8
+       cam_out(c)%precrl_17O(:)  = 0._r8
+       cam_out(c)%precrl_HTO(:)  = 0._r8
+       cam_out(c)%precsl_16O(:)  = 0._r8
+       cam_out(c)%precsl_HDO(:)  = 0._r8
+       cam_out(c)%precsl_18O(:)  = 0._r8
+       cam_out(c)%precsl_17O(:)  = 0._r8
+       cam_out(c)%precsl_HTO(:)  = 0._r8
+       cam_out(c)%precrc_16O(:)  = 0._r8
+       cam_out(c)%precrc_HDO(:)  = 0._r8
+       cam_out(c)%precrc_18O(:)  = 0._r8
+       cam_out(c)%precrc_17O(:)  = 0._r8
+       cam_out(c)%precrc_HTO(:)  = 0._r8
+       cam_out(c)%precsc_16O(:)  = 0._r8
+       cam_out(c)%precsc_HDO(:)  = 0._r8
+       cam_out(c)%precsc_18O(:)  = 0._r8
+       cam_out(c)%precsc_17O(:)  = 0._r8
+       cam_out(c)%precsc_HTO(:)  = 0._r8
     end do
 
   end subroutine atm2hub_alloc
