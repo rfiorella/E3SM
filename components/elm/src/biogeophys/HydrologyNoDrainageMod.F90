@@ -199,7 +199,7 @@ contains
 
       !------------------------------------------------------------------------------------
       if ( (use_pflotran .and. pf_hmode) .or. &
-           (use_ats .and. ats_gmode)) then        ! if ATS surface module coupled
+           (use_ats .and. ats_hmode)) then        ! if ATS surface module coupled
         call Infiltration(bounds, num_hydrononsoic, filter_hydrononsoic, &
              num_urbanc, filter_urbanc, atm2lnd_vars, lnd2atm_vars,      &
              energyflux_vars, soilhydrology_vars, soilstate_vars, dtime)
@@ -346,7 +346,7 @@ contains
 
       !------------------------------------------------------------------------------------
       if ( (use_pflotran .and. pf_hmode) .or. &
-           (use_ats .and. ats_gmode)) then        ! if ATS surface module coupled
+           (use_ats .and. ats_hmode)) then        ! if ATS surface module coupled
 
         call WaterTable(bounds, num_hydrononsoic, filter_hydrononsoic, &
            num_urbanc, filter_urbanc, &
