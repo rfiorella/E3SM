@@ -648,6 +648,9 @@ end subroutine clubb_init_cnst
 
     use parameters_tunable, only: params_list
 
+    ! water tarcers/isotopes - RPF
+    use water_tracer_vars,         only: trace_water
+
 #endif
 
     use physics_buffer,         only: pbuf_get_index, pbuf_set_field, physics_buffer_desc
@@ -783,10 +786,12 @@ end subroutine clubb_init_cnst
     vmag_gust_idx = pbuf_get_index('vmag_gust') !PMA ZM snow for gustiness
     
     !water tracers:
-    wtdlf_idx   = pbuf_get_index('WTDLF')              ! RPF - removed errcode=ierr 
-    wtrc_wprtp_idx = pbuf_get_index('wtrc_WPRTP_nadv') ! from this and next 2 entries
-    wtrc_rtp2_idx  = pbuf_get_index('wtrc_RTP2_nadv')  ! as it's not used in EAM
-    wtrc_rtpthlp_idx = pbuf_get_index('wtrc_RTTH_nadv')
+    if (trace_water) then 
+      wtdlf_idx   = pbuf_get_index('WTDLF')              ! RPF - removed errcode=ierr 
+      wtrc_wprtp_idx = pbuf_get_index('wtrc_WPRTP_nadv') ! from this and next 2 entries
+      wtrc_rtp2_idx  = pbuf_get_index('wtrc_RTP2_nadv')  ! as it's not used in EAM
+      wtrc_rtpthlp_idx = pbuf_get_index('wtrc_RTTH_nadv')
+    end if
 
     iisclr_rt  = -1
     iisclr_thl = -1
@@ -1061,9 +1066,11 @@ end subroutine clubb_init_cnst
        call pbuf_set_field(pbuf2d, qrl_idx,     0.0_r8)
 
        !water tracers
-       call pbuf_set_field(pbuf2d, wtrc_wprtp_idx,   0.0_r8)
-       call pbuf_set_field(pbuf2d, wtrc_rtp2_idx,    rt_tol**2)
-       call pbuf_set_field(pbuf2d, wtrc_rtpthlp_idx, 0.0_r8)
+       if (trace_water) then
+         call pbuf_set_field(pbuf2d, wtrc_wprtp_idx,   0.0_r8)
+         call pbuf_set_field(pbuf2d, wtrc_rtp2_idx,    rt_tol**2)
+         call pbuf_set_field(pbuf2d, wtrc_rtpthlp_idx, 0.0_r8)
+       end if
 
        call pbuf_set_field(pbuf2d, wpthvp_idx,     0.0_r8)
        call pbuf_set_field(pbuf2d, wp2thvp_idx,    0.0_r8)
@@ -1686,11 +1693,16 @@ end subroutine clubb_init_cnst
    call pbuf_get_field(pbuf, thlp2_idx,   thlp2,   start=(/1,1,itim_old/), kount=(/pcols,pverp,1/))
    call pbuf_get_field(pbuf, up2_idx,     up2,     start=(/1,1,itim_old/), kount=(/pcols,pverp,1/))
    call pbuf_get_field(pbuf, vp2_idx,     vp2,     start=(/1,1,itim_old/), kount=(/pcols,pverp,1/))
-
-   !water tracers:
-   call pbuf_get_field(pbuf, wtrc_wprtp_idx, wtrc_wprtp, start=(/1,1,1,itim_old/), kount=(/pcols,pverp,wtrc_nwset,1/))
-   call pbuf_get_field(pbuf, wtrc_rtp2_idx, wtrc_rtp2, start=(/1,1,1,itim_old/), kount=(/pcols,pverp,wtrc_nwset,1/))
-   call pbuf_get_field(pbuf, wtrc_rtpthlp_idx, wtrc_rtpthlp, start=(/1,1,1,itim_old/), kount=(/pcols,pverp,wtrc_nwset,1/))
+   if (trace_water) then
+     !water tracers:
+     call pbuf_get_field(pbuf, wtrc_wprtp_idx, wtrc_wprtp, start=(/1,1,1,itim_old/), kount=(/pcols,pverp,wtrc_nwset,1/))
+     call pbuf_get_field(pbuf, wtrc_rtp2_idx, wtrc_rtp2, start=(/1,1,1,itim_old/), kount=(/pcols,pverp,wtrc_nwset,1/))
+     call pbuf_get_field(pbuf, wtrc_rtpthlp_idx, wtrc_rtpthlp, start=(/1,1,1,itim_old/), kount=(/pcols,pverp,wtrc_nwset,1/))
+   else
+     nullify(wtrc_wprtp)
+     nullify(wtrc_rtp2)
+     nullify(wtrc_rtpthlp)
+   end if
    call pbuf_get_field(pbuf, upwp_idx,    upwp,    start=(/1,1,itim_old/), kount=(/pcols,pverp,1/))
    call pbuf_get_field(pbuf, vpwp_idx,    vpwp,    start=(/1,1,itim_old/), kount=(/pcols,pverp,1/))
    if (linearize_pbl_winds) then

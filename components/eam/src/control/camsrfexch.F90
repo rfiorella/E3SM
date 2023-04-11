@@ -15,6 +15,8 @@ module camsrfexch
   use infnan,        only: posinf, assignment(=)
   use cam_abortutils,    only: endrun
   use cam_logfile,   only: iulog
+  ! water tracers - RPF
+  use water_tracer_vars, only: trace_water
 
   implicit none
 
@@ -384,8 +386,6 @@ CONTAINS
   subroutine atm2hub_alloc( cam_out )
 !
 !!USES:
-   ! water tracers - RPF
-   use water_tracer_vars, only: trace_water
 !
 !!ARGUMENTS:
 !
@@ -522,18 +522,17 @@ CONTAINS
        allocate (cam_out(c)%uovern(pcols), stat=ierror)
        if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error uovern')
 
-
-         allocate(cam_out(c)%precrl_16O(pcols), stat=ierror)   !Large-scale rain
-         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrl_16O')
+       allocate(cam_out(c)%precrl_16O(pcols), stat=ierror)   !Large-scale rain
+       if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrl_16O')
       
-         allocate(cam_out(c)%precrl_HDO(pcols), stat=ierror)
-         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrl_HDO')
+       allocate(cam_out(c)%precrl_HDO(pcols), stat=ierror)
+       if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrl_HDO')
 
-         allocate(cam_out(c)%precrl_18O(pcols), stat=ierror)
-         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrl_18O')
+       allocate(cam_out(c)%precrl_18O(pcols), stat=ierror)
+       if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrl_18O')
 
-         allocate(cam_out(c)%precrl_17O(pcols), stat=ierror)
-         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrl_17O')
+       allocate(cam_out(c)%precrl_17O(pcols), stat=ierror)
+       if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrl_17O')
 
          allocate(cam_out(c)%precrl_HTO(pcols), stat=ierror)
          if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrl_HTO')
@@ -695,27 +694,29 @@ CONTAINS
           deallocate(cam_out(c)%tau_est)
           deallocate(cam_out(c)%ugust)
           deallocate(cam_out(c)%uovern)
-          ! water isotopes/tracers
-          deallocate(cam_out(c)%precrl_16O)
-          deallocate(cam_out(c)%precrl_HDO)
-          deallocate(cam_out(c)%precrl_18O)
-          deallocate(cam_out(c)%precrl_17O)
-          deallocate(cam_out(c)%precrl_HTO)
-          deallocate(cam_out(c)%precsl_16O)
-          deallocate(cam_out(c)%precsl_HDO)
-          deallocate(cam_out(c)%precsl_18O)
-          deallocate(cam_out(c)%precsl_17O)
-          deallocate(cam_out(c)%precsl_HTO)
-          deallocate(cam_out(c)%precrc_16O)
-          deallocate(cam_out(c)%precrc_HDO)
-          deallocate(cam_out(c)%precrc_18O)
-          deallocate(cam_out(c)%precrc_17O)
-          deallocate(cam_out(c)%precrc_HTO)
-          deallocate(cam_out(c)%precsc_16O)
-          deallocate(cam_out(c)%precsc_HDO)
-          deallocate(cam_out(c)%precsc_18O)
-          deallocate(cam_out(c)%precrc_17O)
-          deallocate(cam_out(c)%precrc_HTO)
+          if (trace_water) then
+            ! water isotopes/tracers
+            deallocate(cam_out(c)%precrl_16O)
+            deallocate(cam_out(c)%precrl_HDO)
+            deallocate(cam_out(c)%precrl_18O)
+            deallocate(cam_out(c)%precrl_17O)
+            deallocate(cam_out(c)%precrl_HTO)
+            deallocate(cam_out(c)%precsl_16O)
+            deallocate(cam_out(c)%precsl_HDO)
+            deallocate(cam_out(c)%precsl_18O)
+            deallocate(cam_out(c)%precsl_17O)
+            deallocate(cam_out(c)%precsl_HTO)
+            deallocate(cam_out(c)%precrc_16O)
+            deallocate(cam_out(c)%precrc_HDO)
+            deallocate(cam_out(c)%precrc_18O)
+            deallocate(cam_out(c)%precrc_17O)
+            deallocate(cam_out(c)%precrc_HTO)
+            deallocate(cam_out(c)%precsc_16O)
+            deallocate(cam_out(c)%precsc_HDO)
+            deallocate(cam_out(c)%precsc_18O)
+            deallocate(cam_out(c)%precrc_17O)
+            deallocate(cam_out(c)%precrc_HTO)
+          end if
        enddo  
 
        deallocate(cam_out)
