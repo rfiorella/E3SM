@@ -522,108 +522,66 @@ CONTAINS
        allocate (cam_out(c)%uovern(pcols), stat=ierror)
        if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error uovern')
 
-       if (trace_water) then
+
          allocate(cam_out(c)%precrl_16O(pcols), stat=ierror)   !Large-scale rain
-         if ( ierror /= 0 )then
-            write(iulog,*) 'Allocation error: ', ierror
-            call endrun('ATM2HUB_ALLOC error: allocation error')
-         end if
+         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrl_16O')
+      
          allocate(cam_out(c)%precrl_HDO(pcols), stat=ierror)
-         if ( ierror /= 0 )then
-            write(iulog,*) 'Allocation error: ', ierror
-            call endrun('ATM2HUB_ALLOC error: allocation error')
-         end if
+         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrl_HDO')
+
          allocate(cam_out(c)%precrl_18O(pcols), stat=ierror)
-         if ( ierror /= 0 )then
-            write(iulog,*) 'Allocation error: ', ierror
-            call endrun('ATM2HUB_ALLOC error: allocation error')
-         end if
+         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrl_18O')
+
          allocate(cam_out(c)%precrl_17O(pcols), stat=ierror)
-         if ( ierror /= 0 )then
-            write(iulog,*) 'Allocation error: ', ierror
-            call endrun('ATM2HUB_ALLOC error: allocation error')
-         end if
+         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrl_17O')
+
          allocate(cam_out(c)%precrl_HTO(pcols), stat=ierror)
-         if ( ierror /= 0 )then
-            write(iulog,*) 'Allocation error: ', ierror
-            call endrun('ATM2HUB_ALLOC error: allocation error')
-         end if
+         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrl_HTO')
+
          allocate(cam_out(c)%precsl_16O(pcols), stat=ierror)   !Large-scale snow
-         if ( ierror /= 0 )then
-            write(iulog,*) 'Allocation error: ', ierror
-            call endrun('ATM2HUB_ALLOC error: allocation error')
-         end if
+         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsl_16O')
+
          allocate(cam_out(c)%precsl_HDO(pcols), stat=ierror)
-         if ( ierror /= 0 )then
-            write(iulog,*) 'Allocation error: ', ierror
-            call endrun('ATM2HUB_ALLOC error: allocation error')
-         end if
+         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsl_HDO')
+
          allocate(cam_out(c)%precsl_18O(pcols), stat=ierror)
-         if ( ierror /= 0 )then
-            write(iulog,*) 'Allocation error: ', ierror
-            call endrun('ATM2HUB_ALLOC error: allocation error')
-         end if
+         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsl_18O')
+
          allocate(cam_out(c)%precsl_17O(pcols), stat=ierror)
-         if ( ierror /= 0 )then
-            write(iulog,*) 'Allocation error: ', ierror
-            call endrun('ATM2HUB_ALLOC error: allocation error')
-         end if
+         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsl_17O')
+
          allocate(cam_out(c)%precsl_HTO(pcols), stat=ierror)
-         if ( ierror /= 0 )then
-            write(iulog,*) 'Allocation error: ', ierror
-            call endrun('ATM2HUB_ALLOC error: allocation error')
-         end if
+         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsl_HTO')
+
          allocate(cam_out(c)%precrc_16O(pcols), stat=ierror)   !Convective rain
-         if ( ierror /= 0 )then
-            write(iulog,*) 'Allocation error: ', ierror
-            call endrun('ATM2HUB_ALLOC error: allocation error')
-         end if
+         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrc_16O')
+
          allocate(cam_out(c)%precrc_HDO(pcols), stat=ierror)
-         if ( ierror /= 0 )then
-            write(iulog,*) 'Allocation error: ', ierror
-            call endrun('ATM2HUB_ALLOC error: allocation error')
-         end if
+         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrc_HDO')
+
          allocate(cam_out(c)%precrc_18O(pcols), stat=ierror)
-         if ( ierror /= 0 )then
-            write(iulog,*) 'Allocation error: ', ierror
-            call endrun('ATM2HUB_ALLOC error: allocation error')
-         end if
+         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrc_18O')
+
          allocate(cam_out(c)%precrc_17O(pcols), stat=ierror)
-         if ( ierror /= 0 )then
-            write(iulog,*) 'Allocation error: ', ierror
-            call endrun('ATM2HUB_ALLOC error: allocation error')
-         end if
+         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrc_17O')
+
          allocate(cam_out(c)%precrc_HTO(pcols), stat=ierror)
-         if ( ierror /= 0 )then
-            write(iulog,*) 'Allocation error: ', ierror
-            call endrun('ATM2HUB_ALLOC error: allocation error')
-         end if
+         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrc_HTO')
+  
          allocate(cam_out(c)%precsc_16O(pcols), stat=ierror)   !Convective snow
-         if ( ierror /= 0 )then
-            write(iulog,*) 'Allocation error: ', ierror
-            call endrun('ATM2HUB_ALLOC error: allocation error')
-         end if
+         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsc_16O')
+
          allocate(cam_out(c)%precsc_HDO(pcols), stat=ierror)
-         if ( ierror /= 0 )then
-            write(iulog,*) 'Allocation error: ', ierror
-            call endrun('ATM2HUB_ALLOC error: allocation error')
-         end if
+         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsc_HDO')
+
          allocate(cam_out(c)%precsc_18O(pcols), stat=ierror)
-         if ( ierror /= 0 )then
-            write(iulog,*) 'Allocation error: ', ierror
-            call endrun('ATM2HUB_ALLOC error: allocation error')
-         end if
+         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsc_18O')
+
          allocate(cam_out(c)%precsc_17O(pcols), stat=ierror)
-         if ( ierror /= 0 )then
-            write(iulog,*) 'Allocation error: ', ierror
-            call endrun('ATM2HUB_ALLOC error: allocation error')
-         end if
+         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsc_17O')
+
          allocate(cam_out(c)%precsc_HTO(pcols), stat=ierror)
-         if ( ierror /= 0 )then
-            write(iulog,*) 'Allocation error: ', ierror
-            call endrun('ATM2HUB_ALLOC error: allocation error')
-         end if
-      end if
+         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsc_HTO')
     enddo  
 
     do c = begchunk,endchunk
@@ -668,7 +626,6 @@ CONTAINS
        cam_out(c)%tau_est(:)  = 0._r8
        cam_out(c)%ugust(:)    = 0._r8
        cam_out(c)%uovern(:)   = 0._r8
-
        !water tracers/isotopes:
        cam_out(c)%precrl_16O(:)  = 0._r8
        cam_out(c)%precrl_HDO(:)  = 0._r8
@@ -864,6 +821,7 @@ subroutine cam_export(state,cam_out,pbuf)
                                iwspec
    use water_types,      only: iwtstrain, iwtstsnow, iwtcvrain, iwtcvsnow
    use water_isotopes,   only: isph2o, isph216o, isphdo, isph218o, isph217o, isphto
+
    implicit none
 
    !------------------------------Arguments--------------------------------
