@@ -373,8 +373,9 @@ contains
                      passT = .false.
                    end if
                end select
-             end do
-            end if 
+            end do
+          end if 
+          
 	  a2x(index_a2x_Sa_dens   ,ig) = cam_out(c)%rho(i)
 
           if (trim(adjustl(precip_downscaling_method)) == "FNM") then
@@ -391,7 +392,7 @@ contains
           a2x(index_a2x_Faxa_swvdr,ig) = cam_out(c)%sols(i)   
           a2x(index_a2x_Faxa_swndf,ig) = cam_out(c)%solld(i)  
           a2x(index_a2x_Faxa_swvdf,ig) = cam_out(c)%solsd(i)  
-                    !water tracers/isotopes:
+          !water tracers/isotopes:
           !----------------------
           if(trace_water) then
             !NOTE:  converting m/s to kg/m2/s here too(may need to convert snow to equiv. water???):

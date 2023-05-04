@@ -85,26 +85,26 @@ module camsrfexch
      real(r8), allocatable :: ugust(:)    ! gustiness value
      real(r8), allocatable :: uovern(:)       ! ratio of wind speed/brunt vaisalla frequency  
      !water tracers/isotopes:
-     real(r8),allocatable :: precrl_16O(:)   !Large-scale rain
-     real(r8),allocatable :: precrl_HDO(:)
-     real(r8),allocatable :: precrl_18O(:)
-     real(r8),allocatable :: precrl_17O(:)
-     real(r8),allocatable :: precrl_HTO(:)
-     real(r8),allocatable :: precsl_16O(:)   !Large-scale snow
-     real(r8),allocatable :: precsl_HDO(:)
-     real(r8),allocatable :: precsl_18O(:)
-     real(r8),allocatable :: precsl_17O(:)
-     real(r8),allocatable :: precsl_HTO(:)
-     real(r8),allocatable :: precrc_16O(:)   !Convective rain
-     real(r8),allocatable :: precrc_HDO(:)
-     real(r8),allocatable :: precrc_18O(:)
-     real(r8),allocatable :: precrc_17O(:)
-     real(r8),allocatable :: precrc_HTO(:)
-     real(r8),allocatable :: precsc_16O(:)   !Convective snow
-     real(r8),allocatable :: precsc_HDO(:)
-     real(r8),allocatable :: precsc_18O(:)
-     real(r8),allocatable :: precsc_17O(:)
-     real(r8),allocatable :: precsc_HTO(:)
+     real(r8), allocatable :: precrl_16O(:)   !Large-scale rain
+     real(r8), allocatable :: precrl_HDO(:)
+     real(r8), allocatable :: precrl_18O(:)
+     real(r8), allocatable :: precrl_17O(:)
+     real(r8), allocatable :: precrl_HTO(:)
+     real(r8), allocatable :: precsl_16O(:)   !Large-scale snow
+     real(r8), allocatable :: precsl_HDO(:)
+     real(r8), allocatable :: precsl_18O(:)
+     real(r8), allocatable :: precsl_17O(:)
+     real(r8), allocatable :: precsl_HTO(:)
+     real(r8), allocatable :: precrc_16O(:)   !Convective rain
+     real(r8), allocatable :: precrc_HDO(:)
+     real(r8), allocatable :: precrc_18O(:)
+     real(r8), allocatable :: precrc_17O(:)
+     real(r8), allocatable :: precrc_HTO(:)
+     real(r8), allocatable :: precsc_16O(:)   !Convective snow
+     real(r8), allocatable :: precsc_HDO(:)
+     real(r8), allocatable :: precsc_18O(:)
+     real(r8), allocatable :: precsc_17O(:)
+     real(r8), allocatable :: precsc_HTO(:)
   end type cam_out_t 
 
 !---------------------------------------------------------------------------
@@ -534,53 +534,53 @@ CONTAINS
        allocate(cam_out(c)%precrl_17O(pcols), stat=ierror)
        if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrl_17O')
 
-         allocate(cam_out(c)%precrl_HTO(pcols), stat=ierror)
-         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrl_HTO')
+       allocate(cam_out(c)%precrl_HTO(pcols), stat=ierror)
+       if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrl_HTO')
 
-         allocate(cam_out(c)%precsl_16O(pcols), stat=ierror)   !Large-scale snow
-         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsl_16O')
+       allocate(cam_out(c)%precsl_16O(pcols), stat=ierror)   !Large-scale snow
+       if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsl_16O')
 
-         allocate(cam_out(c)%precsl_HDO(pcols), stat=ierror)
-         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsl_HDO')
+       allocate(cam_out(c)%precsl_HDO(pcols), stat=ierror)
+       if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsl_HDO')
 
-         allocate(cam_out(c)%precsl_18O(pcols), stat=ierror)
-         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsl_18O')
+       allocate(cam_out(c)%precsl_18O(pcols), stat=ierror)
+       if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsl_18O')
 
-         allocate(cam_out(c)%precsl_17O(pcols), stat=ierror)
-         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsl_17O')
+       allocate(cam_out(c)%precsl_17O(pcols), stat=ierror)
+       if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsl_17O')
 
-         allocate(cam_out(c)%precsl_HTO(pcols), stat=ierror)
-         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsl_HTO')
+       allocate(cam_out(c)%precsl_HTO(pcols), stat=ierror)
+       if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsl_HTO')
 
-         allocate(cam_out(c)%precrc_16O(pcols), stat=ierror)   !Convective rain
-         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrc_16O')
+       allocate(cam_out(c)%precrc_16O(pcols), stat=ierror)   !Convective rain
+       if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrc_16O')
 
-         allocate(cam_out(c)%precrc_HDO(pcols), stat=ierror)
-         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrc_HDO')
+       allocate(cam_out(c)%precrc_HDO(pcols), stat=ierror)
+       if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrc_HDO')
 
-         allocate(cam_out(c)%precrc_18O(pcols), stat=ierror)
-         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrc_18O')
+       allocate(cam_out(c)%precrc_18O(pcols), stat=ierror)
+       if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrc_18O')
 
-         allocate(cam_out(c)%precrc_17O(pcols), stat=ierror)
-         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrc_17O')
+       allocate(cam_out(c)%precrc_17O(pcols), stat=ierror)
+       if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrc_17O')
 
-         allocate(cam_out(c)%precrc_HTO(pcols), stat=ierror)
-         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrc_HTO')
+       allocate(cam_out(c)%precrc_HTO(pcols), stat=ierror)
+       if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precrc_HTO')
   
-         allocate(cam_out(c)%precsc_16O(pcols), stat=ierror)   !Convective snow
-         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsc_16O')
+       allocate(cam_out(c)%precsc_16O(pcols), stat=ierror)   !Convective snow
+       if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsc_16O')
 
-         allocate(cam_out(c)%precsc_HDO(pcols), stat=ierror)
-         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsc_HDO')
+       allocate(cam_out(c)%precsc_HDO(pcols), stat=ierror)
+       if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsc_HDO')
 
-         allocate(cam_out(c)%precsc_18O(pcols), stat=ierror)
-         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsc_18O')
+       allocate(cam_out(c)%precsc_18O(pcols), stat=ierror)
+       if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsc_18O')
 
-         allocate(cam_out(c)%precsc_17O(pcols), stat=ierror)
-         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsc_17O')
+       allocate(cam_out(c)%precsc_17O(pcols), stat=ierror)
+       if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsc_17O')
 
-         allocate(cam_out(c)%precsc_HTO(pcols), stat=ierror)
-         if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsc_HTO')
+       allocate(cam_out(c)%precsc_HTO(pcols), stat=ierror)
+       if ( ierror /= 0 ) call endrun('ATM2HUB_ALLOC error: allocation error precsc_HTO')
     enddo  
 
     do c = begchunk,endchunk
@@ -694,29 +694,27 @@ CONTAINS
           deallocate(cam_out(c)%tau_est)
           deallocate(cam_out(c)%ugust)
           deallocate(cam_out(c)%uovern)
-          if (trace_water) then
-            ! water isotopes/tracers
-            deallocate(cam_out(c)%precrl_16O)
-            deallocate(cam_out(c)%precrl_HDO)
-            deallocate(cam_out(c)%precrl_18O)
-            deallocate(cam_out(c)%precrl_17O)
-            deallocate(cam_out(c)%precrl_HTO)
-            deallocate(cam_out(c)%precsl_16O)
-            deallocate(cam_out(c)%precsl_HDO)
-            deallocate(cam_out(c)%precsl_18O)
-            deallocate(cam_out(c)%precsl_17O)
-            deallocate(cam_out(c)%precsl_HTO)
-            deallocate(cam_out(c)%precrc_16O)
-            deallocate(cam_out(c)%precrc_HDO)
-            deallocate(cam_out(c)%precrc_18O)
-            deallocate(cam_out(c)%precrc_17O)
-            deallocate(cam_out(c)%precrc_HTO)
-            deallocate(cam_out(c)%precsc_16O)
-            deallocate(cam_out(c)%precsc_HDO)
-            deallocate(cam_out(c)%precsc_18O)
-            deallocate(cam_out(c)%precrc_17O)
-            deallocate(cam_out(c)%precrc_HTO)
-          end if
+          ! water isotopes/tracers
+          deallocate(cam_out(c)%precrl_16O)
+          deallocate(cam_out(c)%precrl_HDO)
+          deallocate(cam_out(c)%precrl_18O)
+          deallocate(cam_out(c)%precrl_17O)
+          deallocate(cam_out(c)%precrl_HTO)
+          deallocate(cam_out(c)%precsl_16O)
+          deallocate(cam_out(c)%precsl_HDO)
+          deallocate(cam_out(c)%precsl_18O)
+          deallocate(cam_out(c)%precsl_17O)
+          deallocate(cam_out(c)%precsl_HTO)
+          deallocate(cam_out(c)%precrc_16O)
+          deallocate(cam_out(c)%precrc_HDO)
+          deallocate(cam_out(c)%precrc_18O)
+          deallocate(cam_out(c)%precrc_17O)
+          deallocate(cam_out(c)%precrc_HTO)
+          deallocate(cam_out(c)%precsc_16O)
+          deallocate(cam_out(c)%precsc_HDO)
+          deallocate(cam_out(c)%precsc_18O)
+          deallocate(cam_out(c)%precrc_17O)
+          deallocate(cam_out(c)%precrc_HTO)
        enddo  
 
        deallocate(cam_out)
