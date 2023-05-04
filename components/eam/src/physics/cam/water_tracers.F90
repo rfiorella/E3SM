@@ -834,67 +834,67 @@ end subroutine wtrc_register
 
 
 !=======================================================================
-!  subroutine wtrc_init_cnst(name, q, gcid, qq, ql, qi)
-!!-----------------------------------------------------------------------
-!!
-!! Initializes water tracers if not read from initial conditions file.
-!! Assign as some standard mass fraction of the prognostic waters
-!! (which  can assumed are set correctly). If using water isotope
-!! Set the standard ration, else set zero
-!!
-!!
-!! Author: David Noone <dcn@caltech.edu> - Sun Jun 29 18:24:57 MDT 2003
-!! 2/3/2012 - bardeenc : Changed to a way compatible with CAM5's initialization
-!! interface; however, it requires some special coding in initdat.F90.
-!!
-!!-----------------------------------------------------------------------
-!!    use constituents, only: pcnst, cnst_get_ind
-!!---------------------------- Arguments --------------------------------
-!    character(len=*),intent(in)  :: name               ! tracer name
-!    real(r8), intent(out)        :: q(:,:)             ! mass mixing ratio (gcol, lev)
-!    integer, intent(in)          :: gcid(:)            ! global column id
-!    real(r8), intent(in)         :: qq(:,:)            ! Q mass mixing ratio (gcol, lev)
-!    real(r8), intent(in)         :: ql(:,:)            ! CLDLIQ mass mixing ratio (gcol, lev)
-!    real(r8), intent(in)         :: qi(:,:)            ! CLDICE mass mixing ratio (gcol, lev)
-! !------------------------- Local Variables -----------------------------
-!    integer ixwtrc              ! index of water tracer
-!    integer ixwprg              ! intext of water prognostic
-!    real(r8) rat                ! an isotope ratio
-!!-----------------------------------------------------------------------
-!!
+  subroutine wtrc_init_cnst(name, q, gcid, qq, ql, qi)
+!-----------------------------------------------------------------------
 !
-!    ! Retrieve the tracer index, and work out index of equivilent prognostic
-!    call cnst_get_ind(name, ixwtrc)      ! this SHOULD be m in calling routine
-!    if (.not. wtrc_is_wtrc(ixwtrc)) then
-!      call endrun( 'WTRC_INIT_CNST: non water tracer detected.')
-!    else
-!   
-!      ! Assign tracer to be total, scaled by some standard ratio 
-!      if (trace_water) then
-!      
-!        !standard ratio or isotope run:     
-!        rat = wtrc_get_rstd(iwspec(ixwtrc))
-!!        !----------------------
-!        if(wtrc_is_tagged(ixwtrc)) then !not standard (H2O) water
-!          rat = 0._r8
-!        end if
-!        !----------------------       
-!        if (iwater(ixwtrc) == iwtvap) then
-!          q(:,:) = rat * qq(:,:)
-!        else if (iwater(ixwtrc) == iwtliq) then
-!          q(:,:) = rat * ql(:,:)
-!        else if (iwater(ixwtrc) == iwtice) then
-!          q(:,:) = rat * qi(:,:)
-!        else
-!          q(:,:) = 0._r8
-!        end if
-!      else
-!        q(:,:) = 0._r8
-!      end if
-!    end if
-!    
-!    return
-!  end subroutine wtrc_init_cnst
+! Initializes water tracers if not read from initial conditions file.
+! Assign as some standard mass fraction of the prognostic waters
+! (which  can assumed are set correctly). If using water isotope
+! Set the standard ratio, else set zero
+!
+!
+! Author: David Noone <dcn@caltech.edu> - Sun Jun 29 18:24:57 MDT 2003
+! 2/3/2012 - bardeenc : Changed to a way compatible with CAM5's initialization
+! interface; however, it requires some special coding in initdat.F90.
+!
+!-----------------------------------------------------------------------
+    use constituents, only: pcnst, cnst_get_ind
+!---------------------------- Arguments --------------------------------
+   character(len=*),intent(in)  :: name               ! tracer name
+   real(r8), intent(out)        :: q(:,:)             ! mass mixing ratio (gcol, lev)
+   integer, intent(in)          :: gcid(:)            ! global column id
+   real(r8), intent(in)         :: qq!(:,:)            ! Q mass mixing ratio (gcol, lev)
+   real(r8), intent(in)         :: ql!(:,:)            ! CLDLIQ mass mixing ratio (gcol, lev)
+   real(r8), intent(in)         :: qi!(:,:)            ! CLDICE mass mixing ratio (gcol, lev)
+!------------------------- Local Variables -----------------------------
+   integer ixwtrc              ! index of water tracer
+   integer ixwprg              ! intext of water prognostic
+   real(r8) rat                ! an isotope ratio
+!-----------------------------------------------------------------------
+!
+
+   ! Retrieve the tracer index, and work out index of equivilent prognostic
+   call cnst_get_ind(name, ixwtrc)      ! this SHOULD be m in calling routine
+   if (.not. wtrc_is_wtrc(ixwtrc)) then
+     call endrun( 'WTRC_INIT_CNST: non water tracer detected.')
+   else
+  
+     ! Assign tracer to be total, scaled by some standard ratio 
+     if (trace_water) then
+     
+       !standard ratio or isotope run:     
+       rat = wtrc_get_rstd(iwspec(ixwtrc))
+!        !----------------------
+       if(wtrc_is_tagged(ixwtrc)) then !not standard (H2O) water
+         rat = 0._r8
+       end if
+       !----------------------       
+       if (iwater(ixwtrc) == iwtvap) then
+         q(:,:) = rat * qq!(:,:)
+       else if (iwater(ixwtrc) == iwtliq) then
+         q(:,:) = rat * ql!(:,:)
+       else if (iwater(ixwtrc) == iwtice) then
+         q(:,:) = rat * qi!(:,:)
+       else
+         q(:,:) = 0._r8
+       end if
+     else
+       q(:,:) = 0._r8
+     end if
+   end if
+   
+   return
+ end subroutine wtrc_init_cnst
 
 
 !=======================================================================
@@ -7729,85 +7729,85 @@ end function wtrc_get_rao2
 
  end subroutine wtrc_store_cnst
 
- subroutine wtrc_init_cnst(name, num_blck, latvals, lonvals, mask, q)
-   use cam_abortutils,   only: endrun
-   use constituents,     only: cnst_get_ind
+!  subroutine wtrc_init_cnst(name, num_blck, latvals, lonvals, mask, q)
+!    use cam_abortutils,   only: endrun
+!    use constituents,     only: cnst_get_ind
 
-   ! Initialize the isotope constituents
+!    ! Initialize the isotope constituents
 
-   ! Dummy arguments
-   character(len=*), intent(in)  :: name       ! constituent name
-   integer,          intent(in)  :: num_blck   ! block number
-   real(r8),         intent(in)  :: latvals(:) ! lat in degrees (ncol)
-   real(r8),         intent(in)  :: lonvals(:) ! lon in degrees (ncol)
-   logical,          intent(in)  :: mask(:)    ! Only initialize where .true.
-   real(r8),         intent(out) :: q(:,:)     ! kg tracer/kg dry air (ncol, plev)
-   ! Local variable
-   integer                       :: i, j, k, ib, indx, ixwtrc
-   real(r8)                      :: rat        ! tracer ratio
-   !-----------------------------------------------------------------------
+!    ! Dummy arguments
+!    character(len=*), intent(in)  :: name       ! constituent name
+!    integer,          intent(in)  :: num_blck   ! block number
+!    real(r8),         intent(in)  :: latvals(:) ! lat in degrees (ncol)
+!    real(r8),         intent(in)  :: lonvals(:) ! lon in degrees (ncol)
+!    logical,          intent(in)  :: mask(:)    ! Only initialize where .true.
+!    real(r8),         intent(out) :: q(:,:)     ! kg tracer/kg dry air (ncol, plev)
+!    ! Local variable
+!    integer                       :: i, j, k, ib, indx, ixwtrc
+!    real(r8)                      :: rat        ! tracer ratio
+!    !-----------------------------------------------------------------------
 
-   if (wtrc_implements_cnst(name)) then
+!    if (wtrc_implements_cnst(name)) then
 
-     ! Retrieve the tracer index, and work out index of equivilent prognostic
-     call cnst_get_ind(name, ixwtrc)      ! this SHOULD be m in calling routine
-     if (.not. wtrc_is_wtrc(ixwtrc)) then
-       call endrun( 'WTRC_INIT_CNST: non water tracer detected.')
-     else
+!      ! Retrieve the tracer index, and work out index of equivilent prognostic
+!      call cnst_get_ind(name, ixwtrc)      ! this SHOULD be m in calling routine
+!      if (.not. wtrc_is_wtrc(ixwtrc)) then
+!        call endrun( 'WTRC_INIT_CNST: non water tracer detected.')
+!      else
     
-       ! Assign tracer to be total, scaled by some standard ratio 
-       if (trace_water) then
+!        ! Assign tracer to be total, scaled by some standard ratio 
+!        if (trace_water) then
        
-         !standard ratio or isotope run:     
-         rat = wtrc_get_rstd(iwspec(ixwtrc))
-         !----------------------
-         if(wtrc_is_tagged(ixwtrc)) then !not standard (H2O) water
-           rat = 0._r8
-         end if
-         !----------------------       
-         if (iwater(ixwtrc) <= num_store) then
-           q(:,:) = rat * qstore(:,:,num_blck,iwater(ixwtrc))
-         else
-           q(:,:) = 0._r8
-         end if
-       else
-         q(:,:) = 0._r8
-       end if
-     end if
+!          !standard ratio or isotope run:     
+!          rat = wtrc_get_rstd(iwspec(ixwtrc))
+!          !----------------------
+!          if(wtrc_is_tagged(ixwtrc)) then !not standard (H2O) water
+!            rat = 0._r8
+!          end if
+!          !----------------------       
+!          if (iwater(ixwtrc) <= num_store) then
+!            q(:,:) = rat * qstore(:,:,num_blck,iwater(ixwtrc))
+!          else
+!            q(:,:) = 0._r8
+!          end if
+!        else
+!          q(:,:) = 0._r8
+!        end if
+!      end if
 
 
-     ! After initialization, see if we can reclaim memory
-     if (trim(name) == trim(last_cnst_name)) then
-       blks_init = blks_init + 1
-       if (blks_init > num_blocks) then
-         call endrun('isotope_init_cnst: Too many blocks for '//trim(name))
-       ! No else needed
-       end if
-     else
-       ! We have a new constituent, set up checks
-       if ((blks_init > 0) .and. (blks_init /= num_blocks)) then
-         call endrun('wtrc_init_cnst: Too few blocks for '//trim(last_cnst_name))
-       end if
-       last_cnst_name = trim(name)
-       blks_init = 1
-     end if
-     ! Are we done with the current tracer
-     if (blks_init == num_blocks) then
-       do i = 1, wtrc_ncnst
-         if (trim(name) == trim(wtrc_names(i))) then
-           cnst_initialized(i) = .true.
-           exit
-         end if
-       end do
-     end if
-     ! Are we done initializing everything?
-     if (ALL(cnst_initialized)) then
-       ! Yes, reclaim memory
-       deallocate(Qstore)
-     end if
-   end if
+!      ! After initialization, see if we can reclaim memory
+!      if (trim(name) == trim(last_cnst_name)) then
+!        blks_init = blks_init + 1
+!        if (blks_init > num_blocks) then
+!          call endrun('isotope_init_cnst: Too many blocks for '//trim(name))
+!        ! No else needed
+!        end if
+!      else
+!        ! We have a new constituent, set up checks
+!        if ((blks_init > 0) .and. (blks_init /= num_blocks)) then
+!          call endrun('wtrc_init_cnst: Too few blocks for '//trim(last_cnst_name))
+!        end if
+!        last_cnst_name = trim(name)
+!        blks_init = 1
+!      end if
+!      ! Are we done with the current tracer
+!      if (blks_init == num_blocks) then
+!        do i = 1, wtrc_ncnst
+!          if (trim(name) == trim(wtrc_names(i))) then
+!            cnst_initialized(i) = .true.
+!            exit
+!          end if
+!        end do
+!      end if
+!      ! Are we done initializing everything?
+!      if (ALL(cnst_initialized)) then
+!        ! Yes, reclaim memory
+!        deallocate(Qstore)
+!      end if
+!    end if
 
- end subroutine wtrc_init_cnst
+!  end subroutine wtrc_init_cnst
 
 
 end module water_tracers

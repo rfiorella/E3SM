@@ -61,6 +61,8 @@ contains
     use se_single_column_mod,    only: scm_setinitial, scm_broadcast
     use element_ops,             only: set_thermostate
     use gllfvremap_mod,          only: gfr_fv_phys_to_dyn_topo
+    ! water tracers/isotopes
+    use water_tracers,           only: wtrc_implements_cnst, wtrc_init_cnst
 
     implicit none
     type(file_desc_t),intent(inout) :: ncid_ini, ncid_topo
@@ -367,6 +369,10 @@ contains
              call co2_init_cnst(cnst_name(m_cnst), qtmp, gcid)
               if(par%masterproc) write(iulog,*) '          ', cnst_name(m_cnst), &
                    ' initialized by "co2_init_cnst"'
+          else if (wtrc_implements_cnst(cnst_name(m_cnst))) then
+              call wtrc_init_cnst(cnst_name(m_cnst), qtmp, gcid, 0._r8, 0._r8, 0._r8) ! RPF  - need to import qq, ql, qi for wtrc_init_csnt at some point
+              if(par%masterproc) write(iulog,*) '          ', cnst_name(m_cnst), &
+                   ' initialized by "wtrc_init_cnst"'
           else
               if(par%masterproc) write(iulog,*) '          ', cnst_name(m_cnst), ' set to 0.'
               qtmp = 0.0_r8
