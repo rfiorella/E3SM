@@ -73,10 +73,8 @@ module ColumnDataType
     ! temperature variables
     real(r8), pointer :: t_soisno      (:,:) => null() ! soil temperature (K)  (-nlevsno+1:nlevgrnd)
     real(r8), pointer :: t_ssbef       (:,:) => null() ! soil/snow temperature before update (K) (-nlevsno+1:nlevgrnd)
-    real(r8), pointer :: t_soi2        (:,:) => null() ! soil temperature (K) from external model, e.g. ATS (1:nlevgrnd)
     real(r8), pointer :: t_h2osfc      (:)   => null() ! surface water temperature (K)
     real(r8), pointer :: t_h2osfc_bef  (:)   => null() ! surface water temperature at start of time step (K)
-    real(r8), pointer :: t_h2osfc2     (:)   => null() ! surface water temperature (K) from external model, e.g. ATS
     real(r8), pointer :: t_soi10cm     (:)   => null() ! soil temperature in top 10cm of soil (K)
     real(r8), pointer :: t_soi17cm     (:)   => null() ! soil temperature in top 17cm of soil (K)
     real(r8), pointer :: t_grnd        (:)   => null() ! ground temperature (K)
@@ -112,10 +110,6 @@ module ColumnDataType
     real(r8), pointer :: h2osoi_ice         (:,:) => null() ! ice lens (-nlevsno+1:nlevgrnd) (kg/m2)
     real(r8), pointer :: h2osoi_vol         (:,:) => null() ! volumetric soil water (0<=h2osoi_vol<=watsat) (1:nlevgrnd) (m3/m3)
     real(r8), pointer :: h2osfc             (:)   => null() ! surface water (kg/m2)
-    real(r8), pointer :: h2osoi2_liq        (:,:) => null() ! liquid water (-nlevsno+1:nlevgrnd) (kg/m2) (from external model e.g. ATS)
-    real(r8), pointer :: h2osoi2_ice        (:,:) => null() ! ice lens (-nlevsno+1:nlevgrnd) (kg/m2) (from external model e.g. ATS)
-    real(r8), pointer :: h2osfc2            (:)   => null() ! surface water ponding depth (mm) (from external model e.g. ATS)
-    real(r8), pointer :: soilp2             (:,:) => null() ! soil pressure (1:nlevgrnd) (Pa) (from external model e.g. ATS)
     real(r8), pointer :: h2ocan             (:)   => null() ! canopy water integrated to column (kg/m2)
     real(r8), pointer :: total_plant_stored_h2o(:)=> null() ! total water in plants (kg/m2)
     real(r8), pointer :: wslake_col         (:)   => null() ! col lake water storage (mm H2O)
@@ -1167,22 +1161,6 @@ contains
           avgflag='A', long_name='surface water temperature', &
            ptr_col=this%t_h2osfc)
 
-    if (use_ats .and. (ats_thmode .or. ats_thcmode)) then
-      this%t_h2osfc2(begc:endc) = spval
-      call hist_addfld1d (fname='TH2OSFC2',  units='K',  &
-          avgflag='A', long_name='surface water temperature from external model, e.g. ATS', &
-           ptr_col=this%t_h2osfc2, default='inactive')
-
-      this%t_soi2(begc:endc,:) = spval
-      data2dptr => this%t_soi2(:,1:nlevgrnd)
-      call hist_addfld2d (fname='TSOI2',  units='K', type2d='levgrnd', &
-          avgflag='A', long_name='soil temperature from external model, e.g. ATS', &
-          standard_name='soil_temperature 2',ptr_col=data2dptr, l2g_scale_type='veg', &
-          default='inactive')
-
-    end if
-
-
     this%t_soi10cm(begc:endc) = spval
      call hist_addfld1d (fname='TSOI_10CM',  units='K', &
           avgflag='A', long_name='soil temperature in top 10cm of soil', &
@@ -1388,7 +1366,6 @@ contains
     class(column_energy_state) :: this
     !------------------------------------------------------------------------
     deallocate(this%t_h2osfc)
-    deallocate(this%t_h2osfc2)
   end subroutine col_es_clean
 
   !------------------------------------------------------------------------
@@ -1520,26 +1497,6 @@ contains
            ptr_col=this%soilp, l2g_scale_type='veg', default='inactive')
 
     if (use_ats) then
-      this%h2osoi2_liq(begc:endc,:) = spval
-      call hist_addfld2d (fname='SOILLIQ2',  units='kg/m2', type2d='levgrnd', &
-          avgflag='A', long_name='soil liquid water (vegetated landunits only) from e.g. ATS', &
-           ptr_col=this%h2osoi2_liq, l2g_scale_type='veg', default='inactive')
-
-      this%h2osoi2_ice(begc:endc,:) = spval
-      call hist_addfld2d (fname='SOILICE2',  units='kg/m2', type2d='levgrnd', &
-          avgflag='A', long_name='soil ice water (vegetated landunits only) from e.g. ATS', &
-           ptr_col=this%h2osoi2_ice, l2g_scale_type='veg', default='inactive')
-
-      this%h2osfc2(begc:endc) = spval
-      call hist_addfld1d (fname='H2OSFC2',  units='mm',  &
-          avgflag='A', long_name='surface water depth from external model, e.g. ATS', &
-           ptr_col=this%h2osfc2, default='inactive')
-
-      this%soilp2(begc:endc,:) = spval
-      call hist_addfld2d (fname='SOIL_PRESSURE2',  units='Pa', type2d='levgrnd', &
-          avgflag='A', long_name='soil pressure (vegetated landunits only) from e.g. ATS', &
-           ptr_col=this%soilp2, l2g_scale_type='veg', default='inactive')
-
       this%h2osoi_liqvol(begc:endc, :) = spval
       call hist_addfld2d (fname='H2OSOIL_LIQVOL',  units='m3/m3 bulk',  type2d='levgrnd', &
           avgflag='A', long_name='soil liq water vol fraction from external model, e.g. ATS', &
