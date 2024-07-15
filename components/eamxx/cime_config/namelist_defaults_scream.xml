@@ -444,6 +444,16 @@ be lost if SCREAM_HACK_XML is not enabled.
       <my_param nlev="2" append="base">5,6</my_param>
     </testOnly>
 
+    <!-- Water tracers / isotope ratios - RF -->
+    <water_tracers inherit="atm_proc_base">
+      <trace_water type="logical">false</trace_water>
+      <wisotope type="logical">false</wisotope>
+      <wtrc_alpha_kinetic type="logical">false</wtrc_alpha_kinetic>
+      <wtrc_use_ice_supsat type="logical">false</wtrc_use_ice_supsat>
+      <wtrc_fixed_alpha>1</wtrc_fixed_alpha>
+      <wtrc_fixed_rstd>1</wtrc_fixed_rstd>
+    </water_tracers>
+
     <!-- Simple Prescribed Aerosols (SPA) -->
     <spa inherit="atm_proc_base">
       <spa_remap_file type="file" doc="File containing mapping data from the grid of spa_data_file to the model grid. Unused if the grid is the same."/>
