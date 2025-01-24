@@ -24,3 +24,7 @@ if (SCREAM_ENABLE_MAM)
   add_subdirectory(mam)
 endif()
 add_subdirectory(gw)
+
+if (SCREAM_TRACE_WATER)
+  add_subdirectory(water_tracers)
+endif()
