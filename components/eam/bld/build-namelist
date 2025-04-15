@@ -730,6 +730,7 @@ my $rad_prog_sulf  = (($prog_species =~ "SO4"  or $aero_chem or $chem =~ "super_
 my $rad_prog_dust  = (($prog_species =~ "DST"  or $aero_chem) and !($chem_rad_passive));
 my $rad_prog_sslt  = (($prog_species =~ "SSLT" or $aero_chem) and !($chem_rad_passive));
 my $rad_prog_ozone = (($chem =~ "mozart" or $chem =~ "trop_strat" or $chem =~ "super_fast_llnl" or $chem =~ "superfast" or $chem =~ "linoz") and !($chem_rad_passive));
+my $water_tracer   = $cfg->get('water_tracer');
 
 # Check for eruptive volcano emissions.  These will be radiatively active by default, but
 # only if using MAM and the rrtmg package  (cam5 physics)
@@ -3903,6 +3904,14 @@ if ($water_tracer ne 'none') {
   elsif ($water_tracer eq 'all_wiso') {
     @isotopes = ("h2o", "h216o", "hdo", "h218o", "h217o", "hto");
   }
+  #RPF - adding const fraction option.
+  elsif ($water_tracer eq 'all_stable_wiso_plus_constfrac') {
+    @isotopes = ("h2o", "h216o", "hdo", "h218o", "h217o", "h218ocf");
+  }
+  #RPF - adding const fraction option.
+  elsif ($water_tracer eq 'stable_wiso_no17_plus_constfrac') {
+    @isotopes = ("h2o", "h216o", "hdo", "h218o", "h218ocf");
+  }
   else {
     @isotopes = split /_/, $water_tracer;
   }
@@ -4026,6 +4035,20 @@ if ($water_tracer ne 'none') {
        $wtrc_type              .= "'VAPOR','LIQUID','ICE','RAINS','SNOWS','RAINC','SNOWC'";
        $wtrc_srfpcp            .= "'HTOR','HTOr','HTOS','HTOs'";
        $wtrc_srfvap_names_list .= "'HTOV',";
+       
+     #RPF - adding equal fractionation species.
+     } elsif ($isotope eq 'h218ocf') {
+
+       $cnt_iso += 1;
+       if ($cnt_iso == 2) {
+          die "ERROR: When specifying water isotopes, h216o must be in the second position, but specified $water_tracer \n";
+       }
+       add_default($nl, 'wtrc_alpha_kinetic',   'val'=>'.true.');
+       $wtrc_name              .= "'H218OCFV','H218OCFL','H218OCFI','H218OCFR','H218OCFS','H218OCFr','H218OCFs'";
+       $wtrc_spec              .= "'H218OCF','H218OCF','H218OCF','H218OCF','H218OCF','H218OCF','H218OCF'";
+       $wtrc_type              .= "'VAPOR','LIQUID','ICE','RAINS','SNOWS','RAINC','SNOWC'";
+       $wtrc_srfpcp            .= "'H218OCFR','H218OCFr','H218OCFS','H218OCFs'";
+       $wtrc_srfvap_names_list .= "'H218OCFV',";
 
      } else {
        die "$ProgName - ERROR: water_tracer type ($isotope) in config_cache file is NOT known by build-namelist . \n";
