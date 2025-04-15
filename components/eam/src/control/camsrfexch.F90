@@ -669,27 +669,29 @@ CONTAINS
        cam_out(c)%ugust(:)    = 0._r8
        cam_out(c)%uovern(:)   = 0._r8
 
-       !water tracers/isotopes:
-       cam_out(c)%precrl_16O(:)  = 0._r8
-       cam_out(c)%precrl_HDO(:)  = 0._r8
-       cam_out(c)%precrl_18O(:)  = 0._r8
-       cam_out(c)%precrl_17O(:)  = 0._r8
-       cam_out(c)%precrl_HTO(:)  = 0._r8
-       cam_out(c)%precsl_16O(:)  = 0._r8
-       cam_out(c)%precsl_HDO(:)  = 0._r8
-       cam_out(c)%precsl_18O(:)  = 0._r8
-       cam_out(c)%precsl_17O(:)  = 0._r8
-       cam_out(c)%precsl_HTO(:)  = 0._r8
-       cam_out(c)%precrc_16O(:)  = 0._r8
-       cam_out(c)%precrc_HDO(:)  = 0._r8
-       cam_out(c)%precrc_18O(:)  = 0._r8
-       cam_out(c)%precrc_17O(:)  = 0._r8
-       cam_out(c)%precrc_HTO(:)  = 0._r8
-       cam_out(c)%precsc_16O(:)  = 0._r8
-       cam_out(c)%precsc_HDO(:)  = 0._r8
-       cam_out(c)%precsc_18O(:)  = 0._r8
-       cam_out(c)%precsc_17O(:)  = 0._r8
-       cam_out(c)%precsc_HTO(:)  = 0._r8
+       if (trace_water) then
+         !water tracers/isotopes:
+         cam_out(c)%precrl_16O(:)  = 0._r8
+         cam_out(c)%precrl_HDO(:)  = 0._r8
+         cam_out(c)%precrl_18O(:)  = 0._r8
+         cam_out(c)%precrl_17O(:)  = 0._r8
+         cam_out(c)%precrl_HTO(:)  = 0._r8
+         cam_out(c)%precsl_16O(:)  = 0._r8
+         cam_out(c)%precsl_HDO(:)  = 0._r8
+         cam_out(c)%precsl_18O(:)  = 0._r8
+         cam_out(c)%precsl_17O(:)  = 0._r8
+         cam_out(c)%precsl_HTO(:)  = 0._r8
+         cam_out(c)%precrc_16O(:)  = 0._r8
+         cam_out(c)%precrc_HDO(:)  = 0._r8
+         cam_out(c)%precrc_18O(:)  = 0._r8
+         cam_out(c)%precrc_17O(:)  = 0._r8
+         cam_out(c)%precrc_HTO(:)  = 0._r8
+         cam_out(c)%precsc_16O(:)  = 0._r8
+         cam_out(c)%precsc_HDO(:)  = 0._r8
+         cam_out(c)%precsc_18O(:)  = 0._r8
+         cam_out(c)%precsc_17O(:)  = 0._r8
+         cam_out(c)%precsc_HTO(:)  = 0._r8
+       end if
     end do
 
   end subroutine atm2hub_alloc
@@ -883,10 +885,10 @@ subroutine cam_export(state,cam_out,pbuf)
    integer :: ncol
    integer :: prec_dp_idx, snow_dp_idx, prec_sh_idx, snow_sh_idx
    integer :: prec_sed_idx,snow_sed_idx,prec_pcw_idx,snow_pcw_idx
-   integer :: vmag_gust_idx, wsresp_idx, tau_est_idx
+   integer :: _idx, wsresp_idx, tau_est_idx
    real(r8) :: umb(pcols), vmb(pcols),vmag(pcols)
    logical :: linearize_pbl_winds ! Send wsresp and tau_est to coupler.
-   logical :: export_gustiness ! Send vmag_gust to coupler
+   logical :: export_gustiness ! Send  to coupler
 
    real(r8), pointer :: prec_dp(:)                 ! total precipitation   from ZM convection
    real(r8), pointer :: snow_dp(:)                 ! snow from ZM   convection
@@ -896,7 +898,7 @@ subroutine cam_export(state,cam_out,pbuf)
    real(r8), pointer :: snow_sed(:)                ! snow from ZM   convection
    real(r8), pointer :: prec_pcw(:)                ! total precipitation   from Hack convection
    real(r8), pointer :: snow_pcw(:)                ! snow from Hack   convection
-   real(r8), pointer :: vmag_gust(:)
+   real(r8), pointer :: (:)
    real(r8), pointer :: wsresp(:)                  ! First-order response of wind to surface stress
    real(r8), pointer :: tau_est(:)                 ! Estimated stress in equilibrium with ubot/vbot
    !water tracers/isotopes:
@@ -946,7 +948,7 @@ subroutine cam_export(state,cam_out,pbuf)
    snow_sed_idx = pbuf_get_index('SNOW_SED')
    prec_pcw_idx = pbuf_get_index('PREC_PCW')
    snow_pcw_idx = pbuf_get_index('SNOW_PCW')
-   vmag_gust_idx = pbuf_get_index('vmag_gust')
+   _idx = pbuf_get_index('vmag_gust')
 
    call pbuf_get_field(pbuf, prec_dp_idx, prec_dp)
    call pbuf_get_field(pbuf, snow_dp_idx, snow_dp)
@@ -956,7 +958,7 @@ subroutine cam_export(state,cam_out,pbuf)
    call pbuf_get_field(pbuf, snow_sed_idx, snow_sed)
    call pbuf_get_field(pbuf, prec_pcw_idx, prec_pcw)
    call pbuf_get_field(pbuf, snow_pcw_idx, snow_pcw)
-   call pbuf_get_field(pbuf, vmag_gust_idx, vmag_gust)
+   call pbuf_get_field(pbuf, _idx, vmag_gust)
 
    if (linearize_pbl_winds) then
       wsresp_idx = pbuf_get_index('wsresp')
@@ -1037,14 +1039,14 @@ subroutine cam_export(state,cam_out,pbuf)
       if (export_gustiness) then
          cam_out%ubot(i)  = state%u(i,pver)
          cam_out%vbot(i)  = state%v(i,pver)
-         cam_out%ugust(i) = vmag_gust(i)
+         cam_out%ugust(i) = (i)
       else
          ! If not exporting gustiness as a separate field, we apply it here.
          umb(i)           = state%u(i,pver)
          vmb(i)           = state%v(i,pver)
          vmag(i)          = max(1.e-5_r8,sqrt( umb(i)**2._r8 + vmb(i)**2._r8))
-         cam_out%ubot(i)  = state%u(i,pver) * ((vmag_gust(i)+vmag(i))/vmag(i))
-         cam_out%vbot(i)  = state%v(i,pver) * ((vmag_gust(i)+vmag(i))/vmag(i))
+         cam_out%ubot(i)  = state%u(i,pver) * (((i)+vmag(i))/vmag(i))
+         cam_out%vbot(i)  = state%v(i,pver) * (((i)+vmag(i))/vmag(i))
       end if
       cam_out%tbot(i)  = state%t(i,pver)
       cam_out%thbot(i) = state%t(i,pver) * state%exner(i,pver)
