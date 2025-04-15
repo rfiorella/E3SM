@@ -74,6 +74,14 @@
       <value compset="_EAM%RCE-MMF.*"  >-aquaplanet -rce</value>
       <value compset="_EAM%SCM-MMF.*"  >-scam</value>
 
+  <!--
+    ===================
+    EAM - Water Tracers
+    ===================
+  -->
+
+    <desc option="WISO"         >EAM with water isotopes/tracers.</desc>
+
       <!-- SCREAM configurations -->
       <value compset="_EAM%SCREAM-LR">-phys default -shoc_sgs -microphys p3 -chem spa -nlev 72 -rad rrtmgp -bc_dep_to_snow_updates -cppdefs '-DSCREAM'</value>
       <value compset="_EAM%SCREAM-HR">-phys default -shoc_sgs -microphys p3 -chem spa -nlev 128 -rad rrtmgp -bc_dep_to_snow_updates -cppdefs '-DSCREAM'</value>
@@ -183,6 +191,7 @@
     <desc compset="_EAM.*AR5sf"    >E3SM plus super-fast chemistry with AR5 emissions:</desc>
     <desc compset="_EAM%FCHM">EAM super_fast_llnl chemistry:</desc>
     <desc compset="_EAM%RCO2">EAM CO2 ramp: </desc>
+    <desc compset="_EAM%WISO">EAM with water isotopes/tracers</desc>
     <desc compset="ARM95_EAM%">single column EAM ARM95 IOP test case:</desc>
     <desc compset="ARM97_EAM%">single column EAM ARM97 IOP test case:</desc>
     <desc compset="RICO_EAM%">single column EAM RICO IOP test case:</desc>

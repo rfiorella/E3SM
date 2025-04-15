@@ -61,6 +61,28 @@
     <lname>2010_EAM%CMIP6_ELM%SPBC_MPASSI%PRES_DOCN%DOM_MOSART_SGLC_SWAV</lname>
   </compset>
 
+  <!-- EAM water isotope compsets -->
+
+  <compset>
+    <alias>Fi20TR</alias>
+    <lname>HIST_EAM%WISO_ELM%SP_CICE%PRES_DOCN%DOM_MOSART_SGLC_SWAV</lname>
+  </compset>
+
+  <compset>
+    <alias>Fi2010climo</alias>
+    <lname>2010_EAM%WISO_ELM%SP_CICE%PRES_DOCN%DOM_MOSART_SGLC_SWAV</lname>
+  </compset>
+
+  <compset>
+    <alias>Fi2000climo</alias>
+    <lname>2000_EAM%WISO_ELM%SP_CICE%PRES_DOCN%DOM_MOSART_SGLC_SWAV</lname>
+  </compset>
+
+  <compset>
+    <alias>Fi1850climo</alias>
+    <lname>1850_EAM%WISO_ELM%SP_CICE%PRES_DOCN%DOM_MOSART_SGLC_SWAV</lname>
+  </compset>
+
   <!-- *********************************** -->
   <!-- Single column model -->
   <!-- *********************************** -->
