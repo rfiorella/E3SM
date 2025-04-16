@@ -885,7 +885,7 @@ subroutine cam_export(state,cam_out,pbuf)
    integer :: ncol
    integer :: prec_dp_idx, snow_dp_idx, prec_sh_idx, snow_sh_idx
    integer :: prec_sed_idx,snow_sed_idx,prec_pcw_idx,snow_pcw_idx
-   integer :: _idx, wsresp_idx, tau_est_idx
+   integer :: vmag_gust_idx, wsresp_idx, tau_est_idx
    real(r8) :: umb(pcols), vmb(pcols),vmag(pcols)
    logical :: linearize_pbl_winds ! Send wsresp and tau_est to coupler.
    logical :: export_gustiness ! Send  to coupler
@@ -898,7 +898,7 @@ subroutine cam_export(state,cam_out,pbuf)
    real(r8), pointer :: snow_sed(:)                ! snow from ZM   convection
    real(r8), pointer :: prec_pcw(:)                ! total precipitation   from Hack convection
    real(r8), pointer :: snow_pcw(:)                ! snow from Hack   convection
-   real(r8), pointer :: (:)
+   real(r8), pointer :: vmag_gust(:)
    real(r8), pointer :: wsresp(:)                  ! First-order response of wind to surface stress
    real(r8), pointer :: tau_est(:)                 ! Estimated stress in equilibrium with ubot/vbot
    !water tracers/isotopes:
@@ -948,7 +948,8 @@ subroutine cam_export(state,cam_out,pbuf)
    snow_sed_idx = pbuf_get_index('SNOW_SED')
    prec_pcw_idx = pbuf_get_index('PREC_PCW')
    snow_pcw_idx = pbuf_get_index('SNOW_PCW')
-   _idx = pbuf_get_index('vmag_gust')
+   write(iulog,*) "trying to get vmag_gust index from pbuf in camsrfexch."
+   vmag_gust_idx = pbuf_get_index('vmag_gust')
 
    call pbuf_get_field(pbuf, prec_dp_idx, prec_dp)
    call pbuf_get_field(pbuf, snow_dp_idx, snow_dp)
@@ -958,7 +959,8 @@ subroutine cam_export(state,cam_out,pbuf)
    call pbuf_get_field(pbuf, snow_sed_idx, snow_sed)
    call pbuf_get_field(pbuf, prec_pcw_idx, prec_pcw)
    call pbuf_get_field(pbuf, snow_pcw_idx, snow_pcw)
-   call pbuf_get_field(pbuf, _idx, vmag_gust)
+   write(iulog,*) "trying to get vmag_gust field from pbuf in camsrfexch."
+   call pbuf_get_field(pbuf, vmag_gust_idx, vmag_gust)
 
    if (linearize_pbl_winds) then
       wsresp_idx = pbuf_get_index('wsresp')
