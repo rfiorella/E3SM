@@ -4,7 +4,6 @@
 // Needed for p3_init, the only F90 code still used.
 #include "physics/p3/p3_functions.hpp"
 #include "physics/share/physics_constants.hpp"
-#include "physics/p3/p3_f90.hpp"
 
 #include "ekat/ekat_assert.hpp"
 #include "ekat/util/ekat_units.hpp"
@@ -119,29 +118,28 @@ void AlphaEqIceVapor() {
 
 };
 
-void AlphaEqLiquidVapor(Int isosp, Real tk) {
-  real wiso_alpl = 1.0
+Real AlphaEqLiquidVapor(Int isosp, Real tk) {
+  Real wiso_alpl = 1.0;
   // calculate equilibrium alpha for liquid<->vapor transitions
   if (isosp != WaterIsotopologues::isih2o) {
-    if (isosp == WaterIsotopologues::isihdo || isosp == WaterIsotpologues::isihto) { // these have a different structure
+    if (isosp == WaterIsotopologues::isihdo || isosp == WaterIsotopologues::isihto) { // these have a different structure
       wiso_alpl = exp(WaterIsotopologues::alpal[isosp]*pow(tk,3) + 
                   WaterIsotopologues::alpbl[isosp]*pow(tk,2) +
                   WaterIsotopologues::alpcl[isosp]*tk + 
                   WaterIsotopologues::alpdl[isosp] + 
-                  WaterIsotopologues::alpel[isosp]/pow(tk,3))
+                  WaterIsotopologues::alpel[isosp]/pow(tk,3));
     } else {
       wiso_alpl = exp(WaterIsotopologues::alpal[isosp]/pow(tk,3) + 
-                  WaterIsotpologues::alpbl[isosp]/pow(tk,2) +
-                  WaterIsotoplogues::alpcl[isosp]/tk + 
-                  WaterIsotopologues::alpdl[isosp])
+                  WaterIsotopologues::alpbl[isosp]/pow(tk,2) +
+                  WaterIsotopologues::alpcl[isosp]/tk + 
+                  WaterIsotopologues::alpdl[isosp]);
     }
     // apply H217O fractionation factor adjustment after Schonemann et al. 2014
     if (isosp == WaterIsotopologues::isih217o) {
-      wiso_alpl = pow(wiso_alpl, 2.0)
+      wiso_alpl = pow(wiso_alpl, 2.0);
     }
   }
-
-  return wiso_alpl
+  return wiso_alpl;
 };
 
 void AlphaKineticEvap() {
@@ -165,8 +163,8 @@ void AlphaKMol() {
   // uses Brutsaert equations for the turbulent layer using GCM 
   // quantities.
 
-  const real difair = 2.36e-5;    // molecular diffusivity of air
-  const real muair = 1.7e-5;        // dynamic viscosity of air
+  const Real difair = 2.36e-5;    // molecular diffusivity of air
+  const Real muair = 1.7e-5;        // dynamic viscosity of air
   // need gravitational constant and karman constant - are these present in share?
 
 };
