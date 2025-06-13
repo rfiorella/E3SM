@@ -6,3 +6,6 @@ if (TARGET eamxx_physics)
   # add to eamxx-physics
   target_link_libraries(eamxx_physics INTERFACE water_tracers)
 endif()
+
+# add tests
+add_subdirectory(tests)
