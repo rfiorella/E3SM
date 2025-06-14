@@ -20,7 +20,8 @@ template <typename Scalar>
 struct WaterIsotopologues {
   // this structure defines the various water isotopologues considered
   static constexpr int isospec  = 6;    // maximum number of water species
-  
+
+   
   static constexpr int isiundef = 0;    // is water species undefined? (Needed?)
   static constexpr int isih2o   = 1;    // is isotopologue = h2o
   static constexpr int isih216o = 2;    // is isotopologue = h216o
@@ -28,8 +29,8 @@ struct WaterIsotopologues {
   static constexpr int isih218o = 4;    // is isotopologue = h218o
   static constexpr int isih217o = 5;    // is isotopologue = h217o
   static constexpr int isihto   = 6;    // is isotopologue = hto
-
-  /* enum class WaterIsotopologue : int { // define a class of water isotopologues
+ 
+  enum class WaterIsotopologue : int { // define a class of water isotopologues
     Undefined = 0,
     H2O = 1,
     H216O = 2,
@@ -38,9 +39,8 @@ struct WaterIsotopologues {
     H217O = 5,
     HTO = 6
   }; //future development?
-  */ 
+   
 
-  static const std::vector<std::string> isoname; // names of water isotope species
   static constexpr std::array<Scalar,isospec> fisub = {1.0, 1.0, 2.0, 1.0, 1.0, 2.0}; // not sure what this is?
   static constexpr std::array<Scalar,isospec> mwiso = {18.0, 18.0, 19.0, 20.0, 19.0, 20.0}; // molecular weights of water isotope species
   static constexpr std::array<Scalar,isospec> mwratiso = {1.0, 1.0, 19.0/18.0, 20.0/18.0, 19.0/18.0, 20.0/18.0};   // molecular weight ratios with respect to h216o
@@ -82,12 +82,12 @@ static const std::vector<std::string> isoname = {"H2O","H216O","HD16O","H218O","
 // Functions to calculate equilibrium fractionation factors 
 
 template <typename Scalar>
-Scalar AlphaEqIceVapor(const Int isosp, const Scalar tk) {
+Scalar AlphaEqIceVapor(const std::string& isosp, const Scalar& tk) {
 
-  using Wiso = WaterIsotopologues<Scalar>;
+  using Wiso = typename WaterIsotopologues<Scalar>::WaterIsotopologue;
   // calculate equilibrium alpha for ice<->vapor transitions
   Scalar wiso_alpi = 1.0;
-  if (isosp != Wiso::isih2o) {
+  if (isosp != Wiso::H2O) {
     // Calculate fractionation factors after Merlivat & Nief, 1967 for HDO
     // and Majoube 1971 for H218O and H217O. Need to modify for H217O and HTO.
     wiso_alpi = exp(Wiso::alpai[isosp]*pow(tk,-2) +
@@ -96,18 +96,18 @@ Scalar AlphaEqIceVapor(const Int isosp, const Scalar tk) {
   } 
 
   // update for H217O
-  if (isosp == Wiso::isih217o) {
+  if (isosp == Wiso::H217O) {
     wiso_alpi = pow(wiso_alpi, 0.528);
-  } else if (isosp == Wiso::isihto) { // update for HTO
+  } else if (isosp == Wiso::HTO) { // update for HTO
     wiso_alpi = pow(wiso_alpi, 2.0);
   } 
   return wiso_alpi;
 };
 
 template <typename Scalar>
-Scalar AlphaEqLiquidVapor(const Int isosp, const Scalar tk) {
+Scalar AlphaEqLiquidVapor(const std::string& isosp, const Scalar tk) {
 
-  using Wiso = WaterIsotopologues<Scalar>;
+  using Wiso = typename WaterIsotopologues<Scalar>::WaterIsotopologue; 
   // calculate equilibrium alpha for liquid<->vapor transitions
   Scalar wiso_alpl = 1.0;
   if (isosp != Wiso::isih2o) {
@@ -136,7 +136,7 @@ Scalar AlphaEqLiquidVapor(const Int isosp, const Scalar tk) {
 */
 
 template <typename Scalar>
-Scalar AlphaKMol(const Int isosp, const Scalar rbot, const Scalar zbot, const Scalar ustar) {
+Scalar AlphaKMol(const std::string& isosp, const Scalar rbot, const Scalar zbot, const Scalar ustar) {
 
   using Wiso = WaterIsotopes::WaterIsotopologues<Scalar>;
   using Constants = physics::Constants<Scalar>;
