@@ -82,23 +82,23 @@ static const std::vector<std::string> isoname = {"H2O","H216O","HD16O","H218O","
 // Functions to calculate equilibrium fractionation factors 
 
 template <typename Scalar>
-Scalar AlphaEqIceVapor(const std::string& isosp, const Scalar& tk) {
+Scalar AlphaEqIceVapor(const typename WaterIsotopologues<Scalar>::WaterIsotopologue iso, const Scalar& tk) {
 
   using Wiso = typename WaterIsotopologues<Scalar>::WaterIsotopologue;
   // calculate equilibrium alpha for ice<->vapor transitions
   Scalar wiso_alpi = 1.0;
-  if (isosp != Wiso::H2O) {
+  if (iso != Wiso::H2O) {
     // Calculate fractionation factors after Merlivat & Nief, 1967 for HDO
     // and Majoube 1971 for H218O and H217O. Need to modify for H217O and HTO.
-    wiso_alpi = exp(Wiso::alpai[isosp]*pow(tk,-2) +
-                Wiso::alpbi[isosp]/tk +
-                Wiso::alpci[isosp]) ;
+    wiso_alpi = exp(Wiso::alpai[iso]*pow(tk,-2) +
+                Wiso::alpbi[iso]/tk +
+                Wiso::alpci[iso]) ;
   } 
 
   // update for H217O
-  if (isosp == Wiso::H217O) {
+  if (iso == Wiso::H217O) {
     wiso_alpi = pow(wiso_alpi, 0.528);
-  } else if (isosp == Wiso::HTO) { // update for HTO
+  } else if (iso == Wiso::HTO) { // update for HTO
     wiso_alpi = pow(wiso_alpi, 2.0);
   } 
   return wiso_alpi;
