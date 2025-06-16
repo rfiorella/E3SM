@@ -8,4 +8,4 @@ if (TARGET eamxx_physics)
 endif()
 
 # add tests
-#add_subdirectory(tests)
+add_subdirectory(tests)

@@ -18,29 +18,10 @@ namespace WaterIsotopes {
 // Define water isotopologue species and parameters
 template <typename Scalar>
 struct WaterIsotopologues {
+
   // this structure defines the various water isotopologues considered
   static constexpr int isospec  = 6;    // maximum number of water species
-
-   
-  static constexpr int isiundef = 0;    // is water species undefined? (Needed?)
-  static constexpr int isih2o   = 1;    // is isotopologue = h2o
-  static constexpr int isih216o = 2;    // is isotopologue = h216o
-  static constexpr int isihdo   = 3;    // is isotopologue = hdo
-  static constexpr int isih218o = 4;    // is isotopologue = h218o
-  static constexpr int isih217o = 5;    // is isotopologue = h217o
-  static constexpr int isihto   = 6;    // is isotopologue = hto
  
-  enum class WaterIsotopologue : int { // define a class of water isotopologues
-    Undefined = 0,
-    H2O = 1,
-    H216O = 2,
-    HDO = 3,
-    H218O = 4,
-    H217O = 5,
-    HTO = 6
-  }; //future development?
-   
-
   static constexpr std::array<Scalar,isospec> fisub = {1.0, 1.0, 2.0, 1.0, 1.0, 2.0}; // not sure what this is?
   static constexpr std::array<Scalar,isospec> mwiso = {18.0, 18.0, 19.0, 20.0, 19.0, 20.0}; // molecular weights of water isotope species
   static constexpr std::array<Scalar,isospec> mwratiso = {1.0, 1.0, 19.0/18.0, 20.0/18.0, 19.0/18.0, 20.0/18.0};   // molecular weight ratios with respect to h216o
@@ -76,29 +57,37 @@ struct WaterIsotopologues {
 
 };
 
-static const std::vector<std::string> isoname = {"H2O","H216O","HD16O","H218O","H217O","HTO"};
-
+static const std::array<std::string, 6> WaterIsotopologueNames = {"H2O","H216O","HDO","H218O","H217O","HTO"};
+const std::map<std::string, int> IsotopologueToIndex = {
+  {"H2O", 0},
+  {"H216O", 1},
+  {"HDO", 2},
+  {"H218O", 3},
+  {"H217O", 4},
+  {"HTO", 5}
+};
 
 // Functions to calculate equilibrium fractionation factors 
 
 template <typename Scalar>
-Scalar AlphaEqIceVapor(const typename WaterIsotopologues<Scalar>::WaterIsotopologue iso, const Scalar& tk) {
+Scalar AlphaEqIceVapor(const std::string& iso, const Scalar& tk) {
 
-  using Wiso = typename WaterIsotopologues<Scalar>::WaterIsotopologue;
+  using Wiso = WaterIsotopologues<Scalar>;
+//  using IsotopologueToIndex = WaterIsotopes::IsotopologueToIndex;
   // calculate equilibrium alpha for ice<->vapor transitions
   Scalar wiso_alpi = 1.0;
-  if (iso != Wiso::H2O) {
+  if (iso != "H2O") {
     // Calculate fractionation factors after Merlivat & Nief, 1967 for HDO
     // and Majoube 1971 for H218O and H217O. Need to modify for H217O and HTO.
-    wiso_alpi = exp(Wiso::alpai[iso]*pow(tk,-2) +
-                Wiso::alpbi[iso]/tk +
-                Wiso::alpci[iso]) ;
+    wiso_alpi = exp(Wiso::alpai[IsotopologueToIndex.at(iso)]*pow(tk,-2) +
+                Wiso::alpbi[IsotopologueToIndex.at(iso)]/tk +
+                Wiso::alpci[IsotopologueToIndex.at(iso)]) ;
   } 
 
   // update for H217O
-  if (iso == Wiso::H217O) {
+  if (iso == "H217O") {
     wiso_alpi = pow(wiso_alpi, 0.528);
-  } else if (iso == Wiso::HTO) { // update for HTO
+  } else if (iso == "HTO") { // update for HTO
     wiso_alpi = pow(wiso_alpi, 2.0);
   } 
   return wiso_alpi;
@@ -107,24 +96,24 @@ Scalar AlphaEqIceVapor(const typename WaterIsotopologues<Scalar>::WaterIsotopolo
 template <typename Scalar>
 Scalar AlphaEqLiquidVapor(const std::string& isosp, const Scalar tk) {
 
-  using Wiso = typename WaterIsotopologues<Scalar>::WaterIsotopologue; 
+  using Wiso = WaterIsotopologues<Scalar>;
   // calculate equilibrium alpha for liquid<->vapor transitions
   Scalar wiso_alpl = 1.0;
-  if (isosp != Wiso::isih2o) {
-    if (isosp == Wiso::isihdo || isosp == Wiso::isihto) { // these have a different structure
-      wiso_alpl = exp(Wiso::alpal[isosp]*pow(tk,3) + 
-                  Wiso::alpbl[isosp]*pow(tk,2) +
-                  Wiso::alpcl[isosp]*tk + 
-                  Wiso::alpdl[isosp] + 
-                  Wiso::alpel[isosp]*pow(tk,-3));
+  if (isosp != "H2O") {
+    if (isosp == "HDO" || isosp == "HTO") { // these have a different structure
+      wiso_alpl = exp(Wiso::alpal[IsotopologueToIndex.at(isosp)]*pow(tk,3) + 
+                  Wiso::alpbl[IsotopologueToIndex.at(isosp)]*pow(tk,2) +
+                  Wiso::alpcl[IsotopologueToIndex.at(isosp)]*tk + 
+                  Wiso::alpdl[IsotopologueToIndex.at(isosp)] + 
+                  Wiso::alpel[IsotopologueToIndex.at(isosp)]*pow(tk,-3));
     } else {
-      wiso_alpl = exp(Wiso::alpal[isosp]*pow(tk,-3) + 
-                  Wiso::alpbl[isosp]*pow(tk,-2) +
-                  Wiso::alpcl[isosp]/tk + 
-                  Wiso::alpdl[isosp]);
+      wiso_alpl = exp(Wiso::alpal[IsotopologueToIndex.at(isosp)]*pow(tk,-3) + 
+                  Wiso::alpbl[IsotopologueToIndex.at(isosp)]*pow(tk,-2) +
+                  Wiso::alpcl[IsotopologueToIndex.at(isosp)]/tk + 
+                  Wiso::alpdl[IsotopologueToIndex.at(isosp)]);
     }
     // apply H217O fractionation factor adjustment after Schonemann et al. 2014
-    if (isosp == Wiso::isih217o) {
+    if (isosp == "H217O") {
       wiso_alpl = pow(wiso_alpl, 2.0);
     }
   }
