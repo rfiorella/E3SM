@@ -45,6 +45,8 @@ void SurfaceCouplingImporter::set_grids(const std::shared_ptr<const GridsManager
   add_field<Computed>("surf_lw_flux_up",  scalar2d, W/m2,    grid_name);
   add_field<Computed>("surf_sens_flux",   scalar2d, W/m2,    grid_name);
   add_field<Computed>("surf_evap",        scalar2d, kg/m2/s, grid_name);
+  // wtrc:: Todo - presumably we need new fields for evap across isotopologues
+  // and for the 12m variables
   add_field<Computed>("surf_mom_flux",    vector2d, N/m2,    grid_name);
   add_field<Computed>("surf_radiative_T", scalar2d, K,       grid_name);
   add_field<Computed>("T_2m",             scalar2d, K,       grid_name);

@@ -74,6 +74,31 @@ void SurfaceCouplingExporter::set_grids(const std::shared_ptr<const GridsManager
   create_helper_field("Faxa_swnet", scalar2d_layout, grid_name);
   create_helper_field("Faxa_lwdn",  scalar2d_layout, grid_name);
 
+  // RPF - water tracers
+  #ifdef EAMXX_TRACE_WATER // potential optimization: loop over scream::WaterIsotopes::WaterIsotopologueNames to append
+    add_tracer<Required>("qv_H2O",   mgrid, kg/kg, ps);
+    add_tracer<Required>("qv_H216O", mgrid, kg/kg, ps);
+    add_tracer<Required>("qv_HDO",   mgrid, kg/kg, ps);
+    add_tracer<Required>("qv_H218O", mgrid, kg/kg, ps);
+    add_tracer<Required>("qv_H217O", mgrid, kg/kg, ps);
+    add_tracer<Required>("qv_HTO",   mgrid, kg/kg, ps);
+
+    // now add precipitation fields:
+    create_helper_field("Faxa_rainl_H2O",   scalar2d_layout, grid_name);
+    create_helper_field("Faxa_snowl_H2O",   scalar2d_layout, grid_name);
+    create_helper_field("Faxa_rainl_H216O", scalar2d_layout, grid_name);
+    create_helper_field("Faxa_snowl_H216O", scalar2d_layout, grid_name);
+    create_helper_field("Faxa_rainl_HDO",   scalar2d_layout, grid_name);
+    create_helper_field("Faxa_snowl_HDO",   scalar2d_layout, grid_name);
+    create_helper_field("Faxa_rainl_H218O", scalar2d_layout, grid_name);
+    create_helper_field("Faxa_snowl_H218O", scalar2d_layout, grid_name);
+    create_helper_field("Faxa_rainl_H217O", scalar2d_layout, grid_name);
+    create_helper_field("Faxa_snowl_H217O", scalar2d_layout, grid_name);
+    create_helper_field("Faxa_rainl_HTO",   scalar2d_layout, grid_name);
+    create_helper_field("Faxa_snowl_HTO",   scalar2d_layout, grid_name);
+
+  #endif
+
 }
 // =========================================================================================
 void SurfaceCouplingExporter::create_helper_field (const std::string& name,
@@ -369,6 +394,14 @@ void SurfaceCouplingExporter::compute_eamxx_exports(const double dt, const bool 
   const auto& p_int                = get_field_in("p_int").get_view<const Real**>();
   const auto& pseudo_density       = get_field_in("pseudo_density").get_view<const Spack**>();
   const auto& qv                   = get_field_in("qv").get_view<const Spack**>();
+  #ifdef EAMXX_TRACE_WATER
+  const auto& qv_H2O               = get_field_in("qv_H2O").get_view<const Spack**>();
+  const auto& qv_H216O             = get_field_in("qv_H216O").get_view<const Spack**>();
+  const auto& qv_HDO               = get_field_in("qv_HDO").get_view<const Spack**>();
+  const auto& qv_H218O             = get_field_in("qv_H218O").get_view<const Spack**>();
+  const auto& qv_H217O             = get_field_in("qv_H217O").get_view<const Spack**>();
+  const auto& qv_HTO               = get_field_in("qv_HTO").get_view<const Spack**>();
+  #endif
   const auto& T_mid                = get_field_in("T_mid").get_view<const Spack**>();
   // TODO: This will need to change if we ever switch from horiz_winds to U and V
   const auto& horiz_winds          = get_field_in("horiz_winds").get_view<const Real***>();
@@ -425,6 +458,21 @@ void SurfaceCouplingExporter::compute_eamxx_exports(const double dt, const bool 
   int idx_Faxa_swnet = 15;
   int idx_Faxa_lwdn  = 16;
 
+  #ifdef EAMXX_TRACE_WATER
+  int idx_Faxa_rainl_H2O   = 17;
+  int idx_Faxa_snowl_H2O   = 18;
+  int idx_Faxa_rainl_H216O = 19;
+  int idx_Faxa_snowl_H216O = 20;
+  int idx_Faxa_rainl_HDO   = 21;
+  int idx_Faxa_snowl_HDO   = 22;
+  int idx_Faxa_rainl_H218O = 23;
+  int idx_Faxa_snowl_H218O = 24;
+  int idx_Faxa_rainl_H217O = 25;
+  int idx_Faxa_snowl_H217O = 26;
+  int idx_Faxa_rainl_HTO   = 27;
+  int idx_Faxa_snowl_HTO   = 28;
+  #endif
+
 
   // Local copies, to deal with CUDA's handling of *this.
   const int  num_levs           = m_num_levs;
@@ -442,6 +490,15 @@ void SurfaceCouplingExporter::compute_eamxx_exports(const double dt, const bool 
     const auto p_mid_i          = ekat::subview(p_mid, i);
     const auto pseudo_density_i = ekat::subview(pseudo_density, i);
     const auto dz_i             = ekat::subview(dz, i);
+
+    #ifdef EAMXX_TRACE_WATER
+    const auto qv_H2O_i         = ekat::subview(qv_H2O, i);
+    const auto qv_H216O_i       = ekat::subview(qv_H216O, i);
+    const auto qv_HDO_i         = ekat::subview(qv_H2O, i);
+    const auto qv_H218O_i       = ekat::subview(qv_H218O, i);
+    const auto qv_H217O_i       = ekat::subview(qv_H217O, i);
+    const auto qv_HTO_i         = ekat::subview(qv_HTO, i);
+    #endif
 
     const auto s_p_mid_i = ekat::scalarize(p_mid_i);
     const auto s_T_mid_i = ekat::scalarize(T_mid_i);
@@ -497,6 +554,7 @@ void SurfaceCouplingExporter::compute_eamxx_exports(const double dt, const bool 
     if (export_source(idx_Sa_shum)==FROM_MODEL) {
       const auto s_qv_i = ekat::scalarize(qv_i);
       Sa_shum(i) = s_qv_i(num_levs-1);
+      // wtrc:: TODO
     }
 
     if (export_source(idx_Sa_dens)==FROM_MODEL) {
@@ -520,6 +578,11 @@ void SurfaceCouplingExporter::compute_eamxx_exports(const double dt, const bool 
       // rho_h2o has units kg/m3.
       if (export_source(idx_Faxa_rainl)==FROM_MODEL) { Faxa_rainl(i) = precip_liq_surf_mass(i)/dt*(1000.0/PC::RHO_H2O); }
       if (export_source(idx_Faxa_snowl)==FROM_MODEL) { Faxa_snowl(i) = precip_ice_surf_mass(i)/dt*(1000.0/PC::RHO_H2O); }
+
+      #ifdef EAMXX_TRACE_WATER  // need to update such that precip_liq_surf_mass also has isotopologues... // wtrc::todo
+        if (export_source(idx_Faxa_rainl)==FROM_MODEL) { Faxa_rainl_H2O(i) = precip_liq_surf_mass(i)/dt*(1000.0/PC::RHO_H2O); }
+        if (export_source(idx_Faxa_snowl)==FROM_MODEL) { Faxa_snowl_H2O(i) = precip_ice_surf_mass(i)/dt*(1000.0/PC::RHO_H2O); }
+      #endif
     }
   });
   // Variables that are already surface vars in the ATM can just be copied directly.
