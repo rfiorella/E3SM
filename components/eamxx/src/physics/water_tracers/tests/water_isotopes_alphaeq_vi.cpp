@@ -1,5 +1,6 @@
 #include "catch2/catch.hpp"
 #include "../water_isotopes.hpp"
+#include "../water_isotope_fractionation.cpp"
 
 #include "share/eamxx_types.hpp"
 #include "ekat/ekat_scalar_traits.hpp"
