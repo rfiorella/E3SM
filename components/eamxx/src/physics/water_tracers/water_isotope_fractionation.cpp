@@ -21,7 +21,7 @@ namespace WaterIsotopes {
 template <typename Scalar>
 Scalar AlphaEqIceVapor(const std::string& iso, const Scalar& tk) {
 
-  using Wiso = WaterIsotopologues<Scalar>;\
+  using Wiso = WaterIsotopologues<Scalar>;
   // calculate equilibrium alpha for ice<->vapor transitions
   Scalar wiso_alpi = 1.0;
   if (iso != "H2O") {
@@ -30,19 +30,19 @@ Scalar AlphaEqIceVapor(const std::string& iso, const Scalar& tk) {
     wiso_alpi = exp(Wiso::alpai[IsotopologueToIndex.at(iso)]*pow(tk,-2) +
                 Wiso::alpbi[IsotopologueToIndex.at(iso)]/tk +
                 Wiso::alpci[IsotopologueToIndex.at(iso)]) ;
-  } 
+  };
 
   // update for H217O
   if (iso == "H217O") {
     wiso_alpi = pow(wiso_alpi, 0.528);
   } else if (iso == "HTO") { // update for HTO
     wiso_alpi = pow(wiso_alpi, 2.0);
-  } 
+  };
   return wiso_alpi;
 };
 
 template <typename Scalar>
-Scalar AlphaEqLiquidVapor(const std::string& isosp, const Scalar tk) {
+Scalar AlphaEqLiquidVapor(const std::string& isosp, const Scalar& tk) {
 
   using Wiso = WaterIsotopologues<Scalar>;
   // calculate equilibrium alpha for liquid<->vapor transitions
@@ -59,26 +59,63 @@ Scalar AlphaEqLiquidVapor(const std::string& isosp, const Scalar tk) {
                   Wiso::alpbl[IsotopologueToIndex.at(isosp)]*pow(tk,-2) +
                   Wiso::alpcl[IsotopologueToIndex.at(isosp)]/tk + 
                   Wiso::alpdl[IsotopologueToIndex.at(isosp)]);
-    }
-    // apply H217O fractionation factor adjustment after Schonemann et al. 2014
-    if (isosp == "H217O") {
-      wiso_alpl = pow(wiso_alpl, 2.0);
-    }
-  }
+    };
+  };
+  // update for H217O
+  if (isosp == "H217O") {
+    wiso_alpl = pow(wiso_alpl, 0.528);
+  } else if (isosp == "HTO") { // update for HTO
+    wiso_alpl = pow(wiso_alpl, 2.0);
+  };
   return wiso_alpl;
 };
 
 template <typename Scalar>
-void AlphaKineticEvap() {
+Scalar AlphaKineticEvap(const std::string& isosp, const Scalar& tk, const Scalar& hum0, const Scalar& alpeq) {
+  
+  using Wiso = WaterIsotopologues<Scalar>;
   // return fractionation factor modified for kinetic effects during
   // liquid evaporation into unsaturated air
 
+  //declare local variables
+  Scalar h0;
+  Scalar difrmj;
+  Scalar heff;
+  Scalar dondi;
+  Scalar wiso_akel;
+
+  h0 = min(1.0, hum0);
+  difrmj = Wiso::difrm[IsotopologueToIndex.at(isosp)];
+  heff = h0; // tempoerary, needs to be updated
+  dondi = pow((1.0/difrmj),Wiso::dkfac);
+  wiso_akel = alpeq*heff / (alpeq*dondi*(heff-1.0) + 1.0);
+  return wiso_akel;
+  //RPF NOTE: I have no idea what this fuction does. after CG model?
 };
 
 template <typename Scalar>
-void AlphaKineticDepo() {
+Scalar AlphaKineticDepo(const std::string& isosp, const Scalar& tk, const Scalar& rh, const Scalar& alpeq) {
+  
+  using Wiso = WaterIsotopologues<Scalar>;
   // return fractionation factor modified for kinetic effects during
   // deposition to ice. Optional use of vapor supersaturation.
+
+  //declare local variables
+  Scalar sat1;
+  Scalar difrmj;
+  Scalar dondi;
+  Scalar wiso_akci;
+
+
+  if (tk < Wiso::tkini) {
+    sat1 = min(max(1.0, rh), 0); //this needs updating
+    difrmj = Wiso::difrm[IsotopologueToIndex.at(isosp)];
+    dondi = (1.0/difrmj);
+    wiso_akci = alpeq*sat1 / (alpeq*dondi*(sat1-1.0) + 1.0);
+  } else {
+    wiso_akci = alpeq;
+  };
+  return wiso_akci;
 };
 
 
@@ -87,7 +124,7 @@ void AlphaKineticDepo() {
 */
 
 template <typename Scalar>
-Scalar AlphaKMol(const std::string& isosp, const Scalar rbot, const Scalar zbot, const Scalar ustar) {
+Scalar AlphaKMol(const std::string& isosp, const Scalar& rbot, const Scalar& zbot, const Scalar& ustar) {
 
   using Wiso = WaterIsotopes::WaterIsotopologues<Scalar>;
   using Constants = physics::Constants<Scalar>;
