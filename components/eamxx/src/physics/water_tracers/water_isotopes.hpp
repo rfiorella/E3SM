@@ -37,7 +37,7 @@ struct WaterIsotopologues {
 // using polynomial regression. Coefficients are from
 // Horita and Wesolowski, 1994. https://doi.org/10.1016/0016-7037(94)90096-5
   static constexpr std::array<Scalar,isospec> alpal = {0.0, 0.0, 1158.8e-12, 0.35041e6, 0.35041e6, 1158.8e-12}; // Liquid/vapor fractionation factor polynomial coefficient
-  static constexpr std::array<Scalar,isospec> alpbl = {0.0, 0.0, -1620.1e-9, -1.6664e-3, -1.6664e-3, -1620.1e-9};        // Liquid/vapor fractionation factor polynomial coefficient
+  static constexpr std::array<Scalar,isospec> alpbl = {0.0, 0.0, -1620.1e-9, -1.6664e3, -1.6664e3, -1620.1e-9};        // Liquid/vapor fractionation factor polynomial coefficient
   static constexpr std::array<Scalar,isospec> alpcl = {0.0, 0.0, 794.84e-6, 6.7123, 6.7123, 794.84e-6};        // Liquid/vapor fractionation factor polynomial coefficient
   static constexpr std::array<Scalar,isospec> alpdl = {0.0, 0.0, -161.04e-3, -7.683e-3, -7.685e-3, -161.04e-3};        // Liquid/vapor fractionation factor polynomial coefficient
   static constexpr std::array<Scalar,isospec> alpel = {0.0, 0.0, 2.9992e6, 0.0, 0.0, 2.9992e6};     // Liquid/vapor fractionation factor polynomial coefficient
@@ -50,7 +50,7 @@ struct WaterIsotopologues {
   static constexpr Scalar hlhto = 3.888e8;
 
   // tunable parameters for fractionation scheme
-  static constexpr Scalar dkfac = 0.58; // diffusive ivaporartion kinetic power law (Stewart 1975?)
+  static constexpr Scalar dkfac = 0.58; // diffusive evaporartion kinetic power law (Stewart 1975?)
   static constexpr Scalar fkhum = 0.25; // effective humidity factor
   static constexpr Scalar recrit = 1.0; // critical Reynolds number for kmol calculation
 
