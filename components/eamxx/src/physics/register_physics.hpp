@@ -88,7 +88,9 @@ inline void register_physics () {
 #ifdef EAMXX_HAS_IOP_FORCING
   proc_factory.register_product("iop_forcing",&create_atmosphere_process<IOPForcing>);
 #endif
-
+#ifdef EAMXX_TRACE_WATER
+  proc_factor.register_product("water_tracers",&create_atmosphere_process<WaterTracers>);
+#endif 
   // If no physics was enabled, silence compile warning about unused var
   (void) proc_factory;
 }
