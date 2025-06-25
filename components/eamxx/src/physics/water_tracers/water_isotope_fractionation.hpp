@@ -16,7 +16,11 @@
 namespace scream { 
 namespace WaterIsotopes {
 
-// Functions to calculate equilibrium fractionation factors 
+/*
+
+Functions to calculate equilibrium fractionation factors 
+
+*/ 
 
 template <typename Scalar>
 Scalar AlphaEqIceVapor(const std::string& iso, const Scalar& tk) {
@@ -70,27 +74,31 @@ Scalar AlphaEqLiquidVapor(const std::string& isosp, const Scalar& tk) {
   return wiso_alpl;
 };
 
+/* 
+Functions to calculate fractionations including kinetic effects (e.g., partial evaporation of
+hydrometeors, formation of ice crystals under supersaturation, evaporation from ocean surface)
+*/
+
 template <typename Scalar>
 Scalar AlphaKineticEvap(const std::string& isosp, const Scalar& tk, const Scalar& hum0, const Scalar& alpeq) {
   
   using Wiso = WaterIsotopologues<Scalar>;
   // return fractionation factor modified for kinetic effects during
-  // liquid evaporation into unsaturated air
+  // cloud/hydrometeor liquid evaporation into unsaturated air
+  // note that this is configured such that R_dest = wiso_akel*R_source
 
   //declare local variables
-  Scalar h0;
-  Scalar difrmj;
+  const Scalar h0 = min(1.0, hum0);
+  const Scalar difrmj = Wiso::difrm[IsotopologueToIndex.at(isosp)];
   Scalar heff;
   Scalar dondi;
   Scalar wiso_akel;
 
-  h0 = min(1.0, hum0);
-  difrmj = Wiso::difrm[IsotopologueToIndex.at(isosp)];
   heff = h0; // tempoerary, needs to be updated
   dondi = pow((1.0/difrmj),Wiso::dkfac);
+  //TODO: Rederive this equation
   wiso_akel = alpeq*heff / (alpeq*dondi*(heff-1.0) + 1.0);
   return wiso_akel;
-  //RPF NOTE: I have no idea what this fuction does. after CG model?
 };
 
 template <typename Scalar>
@@ -126,6 +134,12 @@ Scalar AlphaKineticDepo(const std::string& isosp, const Scalar& tk, const Scalar
 template <typename Scalar>
 Scalar AlphaKMol(const std::string& isosp, const Scalar& rbot, const Scalar& zbot, const Scalar& ustar) {
 
+  /* INPUTS:
+  isosp: isotopologue species
+  rbot: density of lowest layer [kg/m3]
+  zbot: height of lowest model layer [m]
+  ustar: friction velocity [m/s]
+  */
   using Wiso = WaterIsotopes::WaterIsotopologues<Scalar>;
   using Constants = physics::Constants<Scalar>;
 
@@ -135,42 +149,35 @@ Scalar AlphaKMol(const std::string& isosp, const Scalar& rbot, const Scalar& zbo
   Merlivat and Jouzel 1979 closure assumption */
 
   const Scalar difair = 2.36e-5;    // molecular diffusivity of air
-  const Scalar muair = 1.7e-5;        // dynamic viscosity of air
-  
-  // need gravitational constant and karman constant - are these present in share?
+  const Scalar muair = 1.789e-5;        // dynamic viscosity of air [Pa*s]
 
   // local variables
-  Scalar z0;
-  Scalar reno;
+  const Scalar z0 = pow(ustar, 2.0)/(81.1*Constants::gravit); // roughness length via Charnock's equation
+  const Scalar vmu = muair / rbot; // kinematic viscocity of air [m2/s]
+  const Scalar reno = ustar*z0 / vmu; // Reynolds number
+  const Scalar sc = vmu/difair; // Schmidt number (momentum to mass diffusivity)
   Scalar tmr;
-  Scalar sc;
-  Scalar vmu; 
+
+ 
   Scalar difn;
   Scalar difrmj;
-  Scalar diffpow;
   Scalar kmol = 0.5;
-  Scalar alphakn = 1.0;
   
   difrmj = Wiso::difrm[isosp];
-  z0 = pow(ustar, 2.0)/(81.1*Constants::gravit); // charnock's equation
-  vmu = muair / rbot;
-  sc = vmu/difair;
-  reno = ustar*z0 / vmu;
 
-  Scalar renocrit = 1.0; // critical reynolds number to distinguish between smooth/rough regimes
 
-  if (reno < renocrit) { // Smooth regime
-    diffpow = 2.0/3.0;
-    tmr = ((1.0/Constants::Karman)*log(zbot*ustar/(30.0*vmu)))/(13.6 * pow(sc,diffpow));
+  if (reno < Wiso::renocrit) { // Smooth regime
+    const Scalar diffpow = 2.0/3.0;
+    const scalar tmr = ((1.0/Constants::Karman)*log(zbot*ustar/(30.0*vmu)))/(13.6 * pow(sc,diffpow));
   } else {
-    diffpow = 1.0/2.0;
-    tmr = ((1.0/Constants::Karman)*log(zbot/z0)-5.0)/(7.3*pow(reno,0.25)*pow(sc,diffpow));
+    const Scalar diffpow = 1.0/2.0;
+    Scalar tmr = ((1.0/Constants::Karman)*log(zbot/z0)-5.0)/(7.3*pow(reno,0.25)*pow(sc,diffpow));
   }
 
-  difn = pow(1.0/difrmj, diffpow);
+  difn = pow(1.0/Wiso::difrm[isosp];, diffpow);
   kmol = (difn - 1.0)/(difn + tmr);
 
-  alphakn = 1.0 - kmol;
+  Scalar alphakn = 1.0 - kmol;
 
   return alphakn;
 
