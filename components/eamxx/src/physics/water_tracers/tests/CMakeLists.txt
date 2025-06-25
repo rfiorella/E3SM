@@ -3,7 +3,7 @@ include(ScreamUtils)
 include_directories(${CMAKE_CURRENT_SOURCE_DATA}/..)
 
 set(WISO_TESTS_SRCS
-    water_isotopes_alphaeq_vi.cpp)
+    fractionation_factor_tests.cpp)
 
 
 # All tests should understand the same baseline args
