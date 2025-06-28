@@ -19,12 +19,13 @@ namespace WaterIsotopes {
 template <typename Scalar>
 struct WaterIsotopologues {
 
+  using Constants = physics::Constants<Scalar>;
   // this structure defines the various water isotopologues considered
   static constexpr int isospec  = 6;    // maximum number of water species
  
   static constexpr std::array<Scalar,isospec> fisub = {1.0, 1.0, 2.0, 1.0, 1.0, 2.0}; // not sure what this is?
-  static constexpr std::array<Scalar,isospec> mwiso = {18.0, 18.0, 19.0, 20.0, 19.0, 20.0}; // molecular weights of water isotope species
-  static constexpr std::array<Scalar,isospec> mwratiso = {1.0, 1.0, 19.0/18.0, 20.0/18.0, 19.0/18.0, 20.0/18.0};   // molecular weight ratios with respect to h216o
+  static constexpr std::array<Scalar,isospec> mwiso = {constants::MWH2O, 18.011, 19.044, 20.015, 19.015, 20.019}; // molecular weights of water isotope species
+  static constexpr std::array<Scalar,isospec> mwratiso = {1.0, 1.0, 1.057, 1.111, 1.055, 1.111};   // molecular weight ratios with respect to h216o
   static constexpr std::array<Scalar,isospec> rnat = {1.0, 0.9976, 155.76e-6, 2005.2e-6, 402e-6, 77.88e-6}; // VSMOW ratios
   static constexpr std::array<Scalar,isospec> difrm = {1.0, 1.0, 0.9757, 0.9727, 0.9858, 0.9679}; // Merlivat 1978 + Schoenemann 2014
   static constexpr std::array<Scalar,isospec> rstd = {1.0, 1.0, 1.0, 1.0, 1.0, 1.0}; // Prescribed isotope ratio wrt H216O (mostly for numerics) 
