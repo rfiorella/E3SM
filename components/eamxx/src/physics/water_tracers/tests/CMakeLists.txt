@@ -5,7 +5,6 @@ include_directories(${CMAKE_CURRENT_SOURCE_DATA}/..)
 set(WISO_TESTS_SRCS
     fractionation_factor_tests.cpp)
 
-
 # All tests should understand the same baseline args
 if (SCREAM_ENABLE_BASELINE_TESTS)
   if (SCREAM_ONLY_GENERATE_BASELINES)

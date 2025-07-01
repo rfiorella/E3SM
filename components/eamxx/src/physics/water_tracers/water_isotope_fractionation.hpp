@@ -149,33 +149,24 @@ Scalar AlphaKMol(const std::string& isosp, const Scalar& rbot, const Scalar& zbo
   Merlivat and Jouzel 1979 closure assumption */
 
   const Scalar difair = 2.36e-5;    // molecular diffusivity of air
-  const Scalar muair = 1.789e-5;        // dynamic viscosity of air [Pa*s]
+  const Scalar muair = 1.789e-5;    // dynamic viscosity of air [Pa*s]
 
   // local variables
   const Scalar z0 = pow(ustar, 2.0)/(81.1*Constants::gravit); // roughness length via Charnock's equation
   const Scalar vmu = muair / rbot; // kinematic viscocity of air [m2/s]
   const Scalar reno = ustar*z0 / vmu; // Reynolds number
   const Scalar sc = vmu/difair; // Schmidt number (momentum to mass diffusivity)
-  Scalar tmr;
-
- 
-  Scalar difn;
-  Scalar difrmj;
-  Scalar kmol = 0.5;
-  
-  difrmj = Wiso::difrm[isosp];
-
 
   if (reno < Wiso::renocrit) { // Smooth regime
     const Scalar diffpow = 2.0/3.0;
     const scalar tmr = ((1.0/Constants::Karman)*log(zbot*ustar/(30.0*vmu)))/(13.6 * pow(sc,diffpow));
   } else {
     const Scalar diffpow = 1.0/2.0;
-    Scalar tmr = ((1.0/Constants::Karman)*log(zbot/z0)-5.0)/(7.3*pow(reno,0.25)*pow(sc,diffpow));
+    const Scalar tmr = ((1.0/Constants::Karman)*log(zbot/z0)-5.0)/(7.3*pow(reno,0.25)*pow(sc,diffpow));
   }
 
-  difn = pow(1.0/Wiso::difrm[isosp];, diffpow);
-  kmol = (difn - 1.0)/(difn + tmr);
+  Scalar difn = pow(1.0/Wiso::difrm[isosp];, diffpow);
+  Scalar kmol = (difn - 1.0)/(difn + tmr);
 
   Scalar alphakn = 1.0 - kmol;
 
