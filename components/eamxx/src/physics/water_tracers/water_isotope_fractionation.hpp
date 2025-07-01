@@ -42,6 +42,7 @@ Scalar AlphaEqIceVapor(const std::string& iso, const Scalar& tk) {
   } else if (iso == "HTO") { // update for HTO
     wiso_alpi = pow(wiso_alpi, 2.0);
   };
+  assert(wiso_alpi >= 1.0);
   return wiso_alpi;
 };
 
@@ -71,6 +72,7 @@ Scalar AlphaEqLiquidVapor(const std::string& isosp, const Scalar& tk) {
   } else if (isosp == "HTO") { // update for HTO
     wiso_alpl = pow(wiso_alpl, 2.0);
   };
+  assert(wiso_alpl >= 1.0);
   return wiso_alpl;
 };
 
@@ -98,7 +100,9 @@ Scalar AlphaKineticEvap(const std::string& isosp, const Scalar& tk, const Scalar
   dondi = pow((1.0/difrmj),Wiso::dkfac);
   //TODO: Rederive this equation
   wiso_akel = alpeq*heff / (alpeq*dondi*(heff-1.0) + 1.0);
+  assert(wiso_akel >= 1.0)
   return wiso_akel;
+
 };
 
 template <typename Scalar>
@@ -113,7 +117,6 @@ Scalar AlphaKineticDepo(const std::string& isosp, const Scalar& tk, const Scalar
   Scalar difrmj;
   Scalar dondi;
   Scalar wiso_akci;
-
 
   if (tk < Wiso::tkini) {
     sat1 = min(max(1.0, rh), 0); //this needs updating
@@ -156,7 +159,7 @@ Scalar AlphaKMol(const std::string& isosp, const Scalar& rbot, const Scalar& zbo
   const Scalar vmu = muair / rbot; // kinematic viscocity of air [m2/s]
   const Scalar reno = ustar*z0 / vmu; // Reynolds number
   const Scalar sc = vmu/difair; // Schmidt number (momentum to mass diffusivity)
-
+  
   if (reno < Wiso::renocrit) { // Smooth regime
     const Scalar diffpow = 2.0/3.0;
     const scalar tmr = ((1.0/Constants::Karman)*log(zbot*ustar/(30.0*vmu)))/(13.6 * pow(sc,diffpow));
@@ -165,17 +168,16 @@ Scalar AlphaKMol(const std::string& isosp, const Scalar& rbot, const Scalar& zbo
     const Scalar tmr = ((1.0/Constants::Karman)*log(zbot/z0)-5.0)/(7.3*pow(reno,0.25)*pow(sc,diffpow));
   }
 
-  Scalar difn = pow(1.0/Wiso::difrm[isosp];, diffpow);
-  Scalar kmol = (difn - 1.0)/(difn + tmr);
+  const difn = pow(1.0/Wiso::difrm[isosp];, diffpow);
+  const kmol = (difn - 1.0)/(difn + tmr);
 
-  Scalar alphakn = 1.0 - kmol;
+  const Scalar alphakn = 1.0 - kmol;
+
+  assert(alphakn <= 1.0);
 
   return alphakn;
 
 };
-
-
-
 
 void WtypeGetAlpha() {
   /* return fractionation factor given a source water type and 
