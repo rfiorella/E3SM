@@ -100,7 +100,6 @@ Scalar AlphaKineticEvap(const std::string& isosp, const Scalar& tk, const Scalar
   dondi = pow((1.0/difrmj),Wiso::dkfac);
   //TODO: Rederive this equation
   wiso_akel = alpeq*heff / (alpeq*dondi*(heff-1.0) + 1.0);
-  assert(wiso_akel >= 1.0)
   return wiso_akel;
 
 };
@@ -159,17 +158,18 @@ Scalar AlphaKMol(const std::string& isosp, const Scalar& rbot, const Scalar& zbo
   const Scalar vmu = muair / rbot; // kinematic viscocity of air [m2/s]
   const Scalar reno = ustar*z0 / vmu; // Reynolds number
   const Scalar sc = vmu/difair; // Schmidt number (momentum to mass diffusivity)
+  Scalar diffpow, tmr;
   
-  if (reno < Wiso::renocrit) { // Smooth regime
-    const Scalar diffpow = 2.0/3.0;
-    const scalar tmr = ((1.0/Constants::Karman)*log(zbot*ustar/(30.0*vmu)))/(13.6 * pow(sc,diffpow));
+  if (reno < Wiso::recrit) { // Smooth regime
+    diffpow = 2.0/3.0;
+    tmr = ((1.0/Constants::Karman)*log(zbot*ustar/(30.0*vmu)))/(13.6 * pow(sc,diffpow));
   } else {
-    const Scalar diffpow = 1.0/2.0;
-    const Scalar tmr = ((1.0/Constants::Karman)*log(zbot/z0)-5.0)/(7.3*pow(reno,0.25)*pow(sc,diffpow));
+    diffpow = 1.0/2.0;
+    tmr = ((1.0/Constants::Karman)*log(zbot/z0)-5.0)/(7.3*pow(reno,0.25)*pow(sc,diffpow));
   }
 
-  const difn = pow(1.0/Wiso::difrm[isosp];, diffpow);
-  const kmol = (difn - 1.0)/(difn + tmr);
+  const Scalar difn = pow(1.0/Wiso::difrm[IsotopologueToIndex.at(isosp)], diffpow);
+  const Scalar kmol = (difn - 1.0)/(difn + tmr);
 
   const Scalar alphakn = 1.0 - kmol;
 

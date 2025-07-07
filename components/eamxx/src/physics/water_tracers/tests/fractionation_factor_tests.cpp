@@ -1,6 +1,6 @@
 #include "catch2/catch.hpp"
 #include "../water_isotopes.hpp"
-#include "../water_isotope_fractionation.cpp"
+#include "../water_isotope_fractionation.hpp"
 
 #include "share/eamxx_types.hpp"
 #include "ekat/ekat_scalar_traits.hpp"
@@ -61,50 +61,50 @@ TEST_CASE("AlphaKMol computes kinetic fractionations across wind speeds", "[Alph
         {0.01, {
             {"H2O", 1.00000},
             {"H216O", 1.00000},
-            {"HDO", 0.98411},
-            {"H218O", 0.98214},
-            {"H217O", 0.99073},
-            {"HTO", 0.97898}
+            {"HDO", 0.99308},
+            {"H218O", 0.99222},
+            {"H217O", 0.99598},
+            {"HTO", 0.99082}
         }},
         {0.1, {
             {"H2O", 1.00000},
             {"H216O", 1.00000},
-            {"HDO", 0.98427},
-            {"H218O", 0.98232},
-            {"H217O", 0.99083},
-            {"HTO", 0.97919}
+            {"HDO", 0.99444},
+            {"H218O", 0.99374},
+            {"H217O", 0.99677},
+            {"HTO", 0.99262}
         }},
         {0.2, {
             {"H2O", 1.00000},
             {"H216O", 1.00000},
-            {"HDO", 0.98432},
-            {"H218O", 0.98237},
-            {"H217O", 0.99085},
-            {"HTO", 0.97925}
+            {"HDO", 0.99475},
+            {"H218O", 0.99409},
+            {"H217O", 0.99695},
+            {"HTO", 0.99303}
         }},
         {0.3, {
             {"H2O", 1.00000},
             {"H216O", 1.00000},
-            {"HDO", 0.96729},
-            {"H218O", 0.96332},
-            {"H217O", 0.98077},
-            {"HTO", 0.95700}
+            {"HDO", 0.99612},
+            {"H218O", 0.99563},
+            {"H217O", 0.99775},
+            {"HTO", 0.99485}
         }},
         {0.5, {
             {"H2O", 1.00000},
             {"H216O", 1.00000},
-            {"HDO", 0.97851},
-            {"H218O", 0.97586},
-            {"H217O", 0.98742},
-            {"HTO", 0.97164}
+            {"HDO", 0.99450},
+            {"H218O", 0.99381},
+            {"H217O", 0.99680},
+            {"HTO", 0.99270}
         }},
         {1.0, {
             {"H2O", 1.00000},
             {"H216O", 1.00000},
-            {"HDO", 0.98348},
-            {"H218O", 0.98144},
-            {"H217O", 0.99036},
-            {"HTO", 0.97817}
+            {"HDO", 0.99202},
+            {"H218O", 0.99102},
+            {"H217O", 0.99535},
+            {"HTO", 0.98942}
         }}
     };
 
@@ -112,7 +112,7 @@ TEST_CASE("AlphaKMol computes kinetic fractionations across wind speeds", "[Alph
         DYNAMIC_SECTION("Friction velocity = " << U) {
             for (const auto& species : scream::WaterIsotopes::WaterIsotopologueNames) {
                 UNSCOPED_INFO("Testing species: " << species << " at u* = " << U);
-                double result = scream::WaterIsotopes::AlphaKMol(species, U);
+                double result = scream::WaterIsotopes::AlphaKMol(species, 1.225, 10., U);
                 REQUIRE_THAT(result, Catch::Matchers::WithinRel(expected_values[U][species], 1e-5));
             }
         }
