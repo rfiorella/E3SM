@@ -583,7 +583,7 @@ end function bfb_expm1
          cdistr, mu_r, lamr, logn0r, qv2qi_depos_tend, precip_total_tend, nevapr, qr_evap_tend, vap_liq_exchange,                      &
          vap_ice_exchange, liq_ice_exchange, pratot, prctot
 
-    real(rtype), intent(inout), dimension(kts:kte,49) :: p3_tend_out ! micro physics tendencies
+    real(rtype), intent(inout), dimension(kts:kte,50) :: p3_tend_out ! micro physics tendencies
 
     logical(btype), intent(out) :: is_hydromet_present
 
@@ -1065,6 +1065,7 @@ end function bfb_expm1
       p3_tend_out(k,33) = qc2qr_ice_shed_tend         ! source for rain mass due to cloud water/ice collision above freezing and shedding or wet growth and shedding
       p3_tend_out(k,34) = 0._rtype                    ! used to be qcmul, but that has been removed.  Kept at 0.0 as placeholder.
       p3_tend_out(k,35) = ncshdc                      ! source for rain number due to cloud water/ice collision above freezing  and shedding (combined with NRSHD in the paper)
+      p3_tend_out(k,50) = qiberg                      ! Bergeron process rate (liquid -> ice via WBF)
       ! Outputs associated with aerocom comparison:
       pratot(k) = qc2qr_accret_tend                   ! cloud drop accretion by rain
       prctot(k) = qc2qr_autoconv_tend                 ! cloud drop autoconversion to rain
@@ -1359,7 +1360,7 @@ end function bfb_expm1
     ! AaronDonahue, the following variable (p3_tend_out) is a catch-all for passing P3-specific variables outside of p3_main
     ! so that they can be written as ouput.  NOTE TO C++ PORT: This variable is entirely optional and doesn't need to be
     ! included in the port to C++, or can be changed if desired.
-    real(rtype), intent(out),   dimension(its:ite,kts:kte,49)   :: p3_tend_out ! micro physics tendencies
+    real(rtype), intent(out),   dimension(its:ite,kts:kte,50)   :: p3_tend_out ! micro physics tendencies
     real(rtype), intent(in),    dimension(its:ite,3)            :: col_location
     real(rtype), intent(in),    dimension(its:ite,kts:kte)      :: inv_qc_relvar
     real(rtype), intent(out),   dimension(its:ite,kts:kte)      :: diag_equiv_reflectivity,diag_ze_rain,diag_ze_ice  ! equivalent reflectivity [dBZ]

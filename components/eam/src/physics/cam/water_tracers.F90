@@ -80,6 +80,7 @@ module water_tracers
   public :: wtrc_readnl           ! read the water_trace namelist
   public :: wtrc_register         ! register constituents
   public :: wtrc_mg_inter         ! interface between the MG2 microphysics and wtrc_apply_rates
+  public :: wtrc_p3_inter         ! interface between P3 microphysics and water tracers/isotopes
   public :: wtrc_store_cnst       ! Store the constituent values for use during init
 
 ! Queries
@@ -2062,6 +2063,427 @@ call wtrc_apply_rates(state, ptend, pbuf, top_lev, dtime, .true., precr, preci, 
 !**************
 
 end subroutine wtrc_mg_inter
+
+
+!=======================================================================
+subroutine wtrc_p3_inter(state, ptend, pbuf, tend_out, rime_frac, &
+                         top_lev, dtime, cld_frac_l, cld_frac_i, cld_frac_r, &
+                         precip_liq_surf, precip_ice_surf)
+
+!-----------------------------------------------------------------------
+!
+! Purpose: Interface between P3 microphysics and water tracer/isotope system.
+!          Maps P3 process rates into the process rate matrix framework
+!          used by the existing water tracer infrastructure, then applies
+!          isotope fractionation and sedimentation.
+!
+! Method:
+!   1. Build process rate matrix from P3 tend_out array
+!   2. Apply process rates iteratively to isotope tracers
+!      - Vapor deposition: Rayleigh fractionation
+!      - Collection/freezing: proportional (no fractionation)
+!      - Bergeron: liquid->vapor->ice with Rayleigh
+!   3. Apply sedimentation proportionally using P3 sedimentation tendencies
+!   4. Compute isotope precipitation proportionally from P3 surface precip
+!   5. Update ptend for isotope tracers
+!
+! P3 uses a single unified ice category (no separate snow), so all
+! ice-phase isotopes use iwtice. The iwtstsnow type is not used for
+! stratiform microphysics with P3.
+!
+! Author: /RPF - March 2026
+!------------------------------------------------------------------------
+
+use physics_types,  only: physics_state, physics_ptend
+use physics_buffer, only: physics_buffer_desc
+use physconst,      only: gravit, rhoh2o
+
+!*****************
+!Declare Variables
+!*****************
+
+!model state object:
+type(physics_state), intent(in)    :: state
+
+!model physics tendency object:
+type(physics_ptend), intent(inout) :: ptend
+
+!Physics buffer:
+type(physics_buffer_desc), pointer :: pbuf(:)
+
+!P3 tendency output array (50 indices):
+real(r8), intent(in) :: tend_out(pcols,pver,50)
+
+!Rime mass fraction (qm/qi) for each column/level:
+real(r8), intent(in) :: rime_frac(pcols,pver)
+
+integer,  intent(in) :: top_lev       ! Top vertical level
+real(r8), intent(in) :: dtime         ! length of timestep (s)
+
+!Cloud fractions:
+real(r8), intent(in) :: cld_frac_l(pcols,pver) ! liquid cloud fraction
+real(r8), intent(in) :: cld_frac_i(pcols,pver) ! ice cloud fraction
+real(r8), intent(in) :: cld_frac_r(pcols,pver) ! rain cloud fraction
+
+!Surface precipitation from P3:
+real(r8), intent(in) :: precip_liq_surf(pcols)  ! liquid precip rate (m/s)
+real(r8), intent(in) :: precip_ice_surf(pcols)  ! ice precip rate (m/s)
+
+!Local variables:
+integer  :: i, k, m, iwset, ncol
+integer  :: msrc, mdst, mbase
+integer  :: isrctype, idsttype, rtype
+integer  :: ispec, iter
+real(r8) :: R              ! isotope ratio
+real(r8) :: alpha          ! fractionation factor
+real(r8) :: fd             ! fractional change in vapor
+real(r8) :: dliqiso        ! change in liquid due to equilibration
+
+real(r8) :: pre_rates_grid(pcols,pver,pwtype,pwtype,pwtype) ! Process rates (kg/kg/sec)
+
+! Local copies of state for iterative application
+real(r8) :: qloc(pcols,pver,pcnst)
+real(r8) :: qloc0(pcols,pver,pcnst)
+real(r8) :: tloc(pcols,pver)
+
+! Temporary arrays for sign-split process rates
+real(r8) :: qidep_pos(pcols,pver)   ! positive deposition (vapor->ice)
+
+! Sedimentation tendencies from P3
+real(r8) :: sed_tend_liq(pcols,pver)  ! liquid sedimentation tendency
+real(r8) :: sed_tend_rain(pcols,pver) ! rain sedimentation tendency
+real(r8) :: sed_tend_ice(pcols,pver)  ! ice sedimentation tendency
+real(r8) :: q_bulk_pre_sed            ! pre-sedimentation bulk mixing ratio
+real(r8) :: sed_delta                 ! sedimentation mass change
+
+!***********************************************
+
+if (.not. trace_water) return
+
+!get number of columns:
+ncol = state%ncol
+
+!Copy initial state:
+qloc(:ncol,top_lev:,:)  = state%q(:ncol,top_lev:,:)
+qloc0(:ncol,top_lev:,:) = qloc(:ncol,top_lev:,:)
+tloc(:ncol,top_lev:)    = state%t(:ncol,top_lev:)
+
+!**********************************************
+! Build process rate matrix from P3 tend_out
+!**********************************************
+
+call wtrc_init_rates(top_lev, pre_rates_grid)
+
+! Split deposition into positive (deposition) part only for vapor->ice
+! Sublimation is already separate in tend_out(:,:,23)
+do k = top_lev, pver
+  do i = 1, ncol
+    qidep_pos(i,k) = max(tend_out(i,k,17), 0._r8)
+  end do
+end do
+
+! Vapor -> ice: deposition + nucleation (will get Rayleigh fractionation
+! automatically in the application loop below)
+call wtrc_add_rates(pre_rates_grid, ncol, top_lev, iwtvap, iwtice, iwtvap, &
+                    qidep_pos + tend_out(:,:,19))
+
+! Ice -> vapor: sublimation
+call wtrc_add_rates(pre_rates_grid, ncol, top_lev, iwtice, iwtvap, iwtice, &
+                    tend_out(:,:,23))
+
+! Rain -> vapor: evaporation
+call wtrc_add_rates(pre_rates_grid, ncol, top_lev, iwtstrain, iwtvap, iwtstrain, &
+                    tend_out(:,:,11))
+
+! Liquid -> rain: autoconversion + accretion (no fractionation)
+call wtrc_add_rates(pre_rates_grid, ncol, top_lev, iwtliq, iwtstrain, iwtliq, &
+                    tend_out(:,:,3) + tend_out(:,:,2))
+
+! Liquid -> ice: heterogeneous freezing + collection by ice (no fractionation)
+call wtrc_add_rates(pre_rates_grid, ncol, top_lev, iwtliq, iwtice, iwtliq, &
+                    tend_out(:,:,28) + tend_out(:,:,15))
+
+! Rain -> ice: immersion freezing + collection by ice (no fractionation)
+call wtrc_add_rates(pre_rates_grid, ncol, top_lev, iwtstrain, iwtice, iwtstrain, &
+                    tend_out(:,:,29) + tend_out(:,:,18))
+
+! Bergeron process: liquid -> ice via WBF
+! Use the (iwtliq, iwtliq, iwtliq) encoding that wtrc_apply_rates
+! recognizes as Bergeron-to-ice (see line ~2340 in wtrc_apply_rates)
+call wtrc_add_rates(pre_rates_grid, ncol, top_lev, iwtliq, iwtliq, iwtliq, &
+                    tend_out(:,:,50))
+
+! Ice -> rain: melting (no fractionation, inherit ice composition)
+call wtrc_add_rates(pre_rates_grid, ncol, top_lev, iwtice, iwtstrain, iwtice, &
+                    tend_out(:,:,24))
+
+! Liquid -> rain: ice shedding (cloud water shed as rain after
+! collision with ice above freezing)
+call wtrc_add_rates(pre_rates_grid, ncol, top_lev, iwtliq, iwtstrain, iwtliq, &
+                    tend_out(:,:,33))
+
+!**********************************************
+! Apply process rates iteratively
+! This replicates the core logic of wtrc_apply_rates
+! but simplified for P3 (no separate snow, no MG2 sedimentation)
+!**********************************************
+
+do iter = 1, wtrc_niter
+  do k = top_lev, pver
+    do i = 1, ncol
+      do isrctype = 1, pwtype
+        do idsttype = 1, pwtype
+          rtype = isrctype
+
+          if (pre_rates_grid(i,k,idsttype,isrctype,rtype) .gt. 0._r8) then
+            do iwset = 1, wtrc_nwset
+
+              msrc  = wtrc_iawset(isrctype, iwset)
+              mbase = wtrc_iawset(isrctype, 1)
+              mdst  = wtrc_iawset(idsttype, iwset)
+
+              ! Calculate water tracer/isotope ratio:
+              R = wtrc_ratio(iwspec(msrc), qloc0(i,k,msrc), qloc0(i,k,mbase))
+
+              if (wisotope .and. (iwset .ne. 1) .and. (isrctype .eq. iwtvap) .and. &
+                  (idsttype .eq. iwtice)) then
+                ! Rayleigh distillation for vapor -> ice deposition
+                ispec = iwspec(mdst)
+
+                alpha = wtrc_get_alpha( &
+                  (qloc0(i,k,wtrc_iawset(iwtvap,WTRC_WSET_STD)) + &
+                   qloc(i,k,wtrc_iawset(iwtvap,WTRC_WSET_STD))) / 2._r8, &
+                  tloc(i,k), ispec, isrctype, idsttype, .true., state%pmid(i,k))
+
+                ! Calculate change in vapor mass:
+                if (qloc0(i,k,mbase) > wtrc_qmin) then
+                  fd = qloc(i,k,mbase) / qloc0(i,k,mbase)
+                else
+                  fd = 1._r8
+                end if
+                fd = min(1._r8, max(0._r8, fd))
+
+                ! Update vapor and ice:
+                qloc(i,k,msrc) = qloc0(i,k,msrc) * (fd**alpha)
+                qloc(i,k,mdst) = qloc(i,k,mdst) + (qloc0(i,k,msrc) - qloc(i,k,msrc))
+
+              else if (((isrctype .eq. iwtliq) .or. (isrctype .eq. iwtice)) .and. &
+                       (isrctype .eq. idsttype)) then
+                ! Bergeron process handling
+                if (isrctype .eq. iwtliq) then
+                  ! Bergeron to ice: liquid -> vapor -> ice
+                  mdst = wtrc_iawset(iwtice, iwset)
+
+                  if (wisotope .and. (iwset .gt. 1)) then
+                    ispec = iwspec(wtrc_iawset(iwtice, iwset))
+
+                    alpha = wtrc_get_alpha( &
+                      (qloc0(i,k,wtrc_iawset(iwtvap,WTRC_WSET_STD)) + &
+                       qloc(i,k,wtrc_iawset(iwtvap,WTRC_WSET_STD))) / 2._r8, &
+                      tloc(i,k), ispec, iwtvap, iwtice, .true., state%pmid(i,k))
+
+                    ! Step 1: liquid -> vapor (proportional)
+                    qloc(i,k,wtrc_iawset(iwtvap,iwset)) = &
+                      qloc(i,k,wtrc_iawset(iwtvap,iwset)) + &
+                      R * pre_rates_grid(i,k,idsttype,isrctype,rtype) * dtime / wtrc_niter
+                    qloc(i,k,msrc) = qloc(i,k,msrc) - &
+                      R * pre_rates_grid(i,k,idsttype,isrctype,rtype) * dtime / wtrc_niter
+
+                    ! Save vapor state
+                    qloc0(i,k,wtrc_iawset(iwtvap,iwset)) = qloc(i,k,wtrc_iawset(iwtvap,iwset))
+
+                    ! Step 2: vapor -> ice (Rayleigh)
+                    fd = (qloc0(i,k,wtrc_iawset(iwtvap,1)) / &
+                         (qloc0(i,k,wtrc_iawset(iwtvap,1)) + &
+                          pre_rates_grid(i,k,idsttype,isrctype,rtype) * dtime / wtrc_niter))
+                    fd = min(1._r8, max(0._r8, fd))
+
+                    qloc(i,k,wtrc_iawset(iwtvap,iwset)) = &
+                      qloc0(i,k,wtrc_iawset(iwtvap,iwset)) * (fd**alpha)
+                    qloc(i,k,mdst) = qloc(i,k,mdst) + &
+                      (qloc0(i,k,wtrc_iawset(iwtvap,iwset)) - &
+                       qloc(i,k,wtrc_iawset(iwtvap,iwset)))
+                  else
+                    ! Non-isotope: proportional transfer
+                    qloc(i,k,mdst) = qloc(i,k,mdst) + &
+                      R * pre_rates_grid(i,k,idsttype,isrctype,rtype) * dtime / wtrc_niter
+                    qloc(i,k,msrc) = qloc(i,k,msrc) - &
+                      R * pre_rates_grid(i,k,idsttype,isrctype,rtype) * dtime / wtrc_niter
+                  end if
+                end if
+                ! Note: isrctype=iwtice case (Bergeron to snow) not used in P3
+
+              else
+                ! All other processes: proportional transfer (no fractionation)
+                alpha = 1._r8
+                qloc(i,k,mdst) = qloc(i,k,mdst) + &
+                  alpha * R * pre_rates_grid(i,k,idsttype,isrctype,rtype) * dtime / wtrc_niter
+                qloc(i,k,msrc) = qloc(i,k,msrc) - &
+                  alpha * R * pre_rates_grid(i,k,idsttype,isrctype,rtype) * dtime / wtrc_niter
+              end if
+
+            end do ! iwset
+            qloc0(i,k,:) = qloc(i,k,:) ! update state
+          end if ! positive rates
+        end do ! idsttype
+
+        ! Equilibrate vapor and cloud water
+        do iwset = 1, wtrc_nwset
+          if (wisotope .and. (iwset .ne. 1)) then
+            alpha = wtrc_get_alpha(qloc0(i,k,wtrc_iawset(iwtvap,WTRC_WSET_STD)), &
+                                   tloc(i,k), iwspec(wtrc_iawset(iwtvap,iwset)), &
+                                   iwtvap, iwtliq, .false., 1._r8, .false.)
+            call wtrc_liqvap_equil(alpha, 1._r8, &
+                                   qloc(i,k,wtrc_iawset(iwtvap,1)), &
+                                   qloc(i,k,wtrc_iawset(iwtliq,1)), &
+                                   qloc(i,k,wtrc_iawset(iwtvap,iwset)), &
+                                   qloc(i,k,wtrc_iawset(iwtliq,iwset)), dliqiso)
+          end if
+        end do
+        qloc0(i,k,:) = qloc(i,k,:) ! update state
+
+      end do ! isrctype
+    end do ! i
+  end do ! k
+end do ! iter
+
+!**********************************************
+! Apply sedimentation proportionally
+! P3 computes sedimentation internally; we use
+! the sedimentation tendencies to proportionally
+! adjust isotope tracers
+!**********************************************
+
+! Extract sedimentation tendencies from P3
+! tend_out indices 36, 38, 40 are sedimentation tendencies (kg/kg/s)
+sed_tend_liq(:ncol,top_lev:)  = tend_out(:ncol,top_lev:,36)
+sed_tend_rain(:ncol,top_lev:) = tend_out(:ncol,top_lev:,38)
+sed_tend_ice(:ncol,top_lev:)  = tend_out(:ncol,top_lev:,40)
+
+! The pre-sedimentation bulk value can be reconstructed:
+! q_bulk_pre_sed = q_bulk_post_micro = state%q + micro_tend * dtime
+! micro_tend = total_tend - sed_tend
+! total_tend = (q_final - q_initial) / dtime = ptend%q
+! So: q_bulk_pre_sed = state%q + (ptend%q - sed_tend) * dtime
+!                    = q_final - sed_tend * dtime
+! But we need the pre-sed value for computing ratios.
+! A simpler approach: use the current qloc (which has microphysics applied)
+! as the pre-sedimentation isotope value.
+
+do k = top_lev, pver
+  do i = 1, ncol
+    do iwset = 1, wtrc_nwset
+
+      ! Cloud liquid sedimentation
+      msrc  = wtrc_iawset(iwtliq, iwset)
+      mbase = wtrc_iawset(iwtliq, 1)
+      q_bulk_pre_sed = qloc0(i,k,mbase)
+      if (q_bulk_pre_sed > wtrc_qmin) then
+        sed_delta = sed_tend_liq(i,k) * dtime
+        R = qloc(i,k,msrc) / q_bulk_pre_sed
+        qloc(i,k,msrc) = qloc(i,k,msrc) + R * sed_delta
+      end if
+
+      ! Rain sedimentation
+      msrc  = wtrc_iawset(iwtstrain, iwset)
+      mbase = wtrc_iawset(iwtstrain, 1)
+      q_bulk_pre_sed = qloc0(i,k,mbase)
+      if (q_bulk_pre_sed > wtrc_qmin) then
+        sed_delta = sed_tend_rain(i,k) * dtime
+        R = qloc(i,k,msrc) / q_bulk_pre_sed
+        qloc(i,k,msrc) = qloc(i,k,msrc) + R * sed_delta
+      end if
+
+      ! Ice sedimentation
+      msrc  = wtrc_iawset(iwtice, iwset)
+      mbase = wtrc_iawset(iwtice, 1)
+      q_bulk_pre_sed = qloc0(i,k,mbase)
+      if (q_bulk_pre_sed > wtrc_qmin) then
+        sed_delta = sed_tend_ice(i,k) * dtime
+        R = qloc(i,k,msrc) / q_bulk_pre_sed
+        qloc(i,k,msrc) = qloc(i,k,msrc) + R * sed_delta
+      end if
+
+    end do ! iwset
+  end do ! i
+end do ! k
+
+!**********************************************
+! Compute isotope surface precipitation
+! Proportional to bulk precipitation using
+! the ratio at the lowest model level
+!**********************************************
+
+call wtrc_p3_set_precip(ncol, pbuf, qloc, precip_liq_surf, precip_ice_surf)
+
+!**********************************************
+! Update tendencies for isotope tracers
+!**********************************************
+
+do m = 1, wtrc_ncnst
+  ptend%q(:ncol,top_lev:,wtrc_indices(m)) = &
+    (qloc(:ncol,top_lev:,wtrc_indices(m)) - state%q(:ncol,top_lev:,wtrc_indices(m))) / dtime
+end do
+
+! Mark isotope tracers as active in ptend
+! (ptend%lq should already be set for isotope indices during ptend_init)
+
+end subroutine wtrc_p3_inter
+
+
+!=======================================================================
+subroutine wtrc_p3_set_precip(ncol, pbuf, qloc, precip_liq_surf, precip_ice_surf)
+!-----------------------------------------------------------------------
+! Purpose: Set isotope surface precipitation fields in the physics buffer
+!          for P3 microphysics. Uses proportional approach based on
+!          isotope ratios at the lowest model level.
+!-----------------------------------------------------------------------
+
+use physics_buffer, only: physics_buffer_desc, pbuf_get_field
+
+integer,  intent(in) :: ncol
+type(physics_buffer_desc), pointer :: pbuf(:)
+real(r8), intent(in) :: qloc(pcols,pver,pcnst)
+real(r8), intent(in) :: precip_liq_surf(pcols)
+real(r8), intent(in) :: precip_ice_surf(pcols)
+
+! Local variables
+integer  :: iwset, i
+real(r8) :: R_rain, R_ice
+real(r8), pointer :: wtprec(:)
+
+do iwset = 1, wtrc_nwset
+  ! Stratiform rain precipitation
+  if (wtrc_srfpcp_indices(iwtstrain,iwset) > 0) then
+    call pbuf_get_field(pbuf, wtrc_srfpcp_indices(iwtstrain,iwset), wtprec)
+    do i = 1, ncol
+      if (qloc(i,pver,wtrc_iawset(iwtstrain,1)) > wtrc_qmin) then
+        R_rain = qloc(i,pver,wtrc_iawset(iwtstrain,iwset)) / &
+                 qloc(i,pver,wtrc_iawset(iwtstrain,1))
+      else
+        R_rain = wtrc_get_rstd(iwspec(wtrc_iawset(iwtstrain,iwset)))
+      end if
+      wtprec(i) = R_rain * precip_liq_surf(i)
+    end do
+  end if
+
+  ! Stratiform snow/ice precipitation
+  ! P3 uses a single ice category; precipitation exits as ice
+  if (wtrc_srfpcp_indices(iwtstsnow,iwset) > 0) then
+    call pbuf_get_field(pbuf, wtrc_srfpcp_indices(iwtstsnow,iwset), wtprec)
+    do i = 1, ncol
+      if (qloc(i,pver,wtrc_iawset(iwtice,1)) > wtrc_qmin) then
+        R_ice = qloc(i,pver,wtrc_iawset(iwtice,iwset)) / &
+                qloc(i,pver,wtrc_iawset(iwtice,1))
+      else
+        R_ice = wtrc_get_rstd(iwspec(wtrc_iawset(iwtice,iwset)))
+      end if
+      wtprec(i) = R_ice * precip_ice_surf(i)
+    end do
+  end if
+end do
+
+end subroutine wtrc_p3_set_precip
 
 
 !=======================================================================

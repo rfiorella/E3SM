@@ -36,6 +36,9 @@ module micro_p3_interface
   use time_manager,   only: is_first_step, get_curr_date
   use perf_mod,       only: t_startf, t_stopf
   use micro_p3_utils, only: do_Cooper_inP3
+  use water_tracer_vars, only: trace_water, wtrc_ncnst, wtrc_indices
+  use water_tracers,    only: wtrc_register, wtrc_implements_cnst, &
+                              wtrc_p3_inter, wtrc_init
   use pio,            only: file_desc_t, pio_nowrite
   use cam_pio_utils,    only: cam_pio_openfile,cam_pio_closefile
   use cam_grid_support, only: cam_grid_check, cam_grid_id, cam_grid_get_dim_names
@@ -354,6 +357,11 @@ end subroutine micro_p3_readnl
    call add_hist_coord('P3_input_dim',  P3_in_dimsize, 'Input field dimension for p3_main subroutine',  'N/A', P3_input_dim)
    call add_hist_coord('P3_output_dim', P3_out_dimsize, 'Output field dimension for p3_main subroutine', 'N/A', P3_output_dim)
 
+   ! Register water isotope tracers if enabled
+   if (trace_water) then
+     call wtrc_register()
+   end if
+
    if (masterproc) write(iulog,'(A20)') '    P3 register finished'
   end subroutine micro_p3_register
 
@@ -368,6 +376,10 @@ end subroutine micro_p3_readnl
 
     micro_p3_implements_cnst = any(name == cnst_names)
 
+    ! Also check water isotope tracers
+    if (.not. micro_p3_implements_cnst .and. trace_water) then
+      micro_p3_implements_cnst = wtrc_implements_cnst(name)
+    end if
 
   end function micro_p3_implements_cnst
 
@@ -382,7 +394,11 @@ end subroutine micro_p3_readnl
     character(len=*), intent(in) :: name     ! constituent name
     real(rtype), intent(out) :: q(:,:)   ! mass mixing ratio (gcol, plev)
 
-    if (micro_p3_implements_cnst(name)) q = 0.0_rtype
+    if (any(name == cnst_names)) then
+      q = 0.0_rtype
+    else if (trace_water .and. wtrc_implements_cnst(name)) then
+      q = 0.0_rtype
+    end if
 
   end subroutine micro_p3_init_cnst
 
@@ -642,7 +658,8 @@ end subroutine micro_p3_readnl
    call addfld('P3_nr_ice_shed_tend', (/ 'lev' /), 'A', 'kg/kg/s', 'P3 Tendency for source for rain number from collision of rain/ice above freezing and shedding')
    call addfld('P3_qc2qr_ice_shed_tend',  (/ 'lev' /), 'A', 'kg/kg/s', 'P3 Tendency for source for rain mass due to cloud water/ice collision above freezing and shedding or wet growth and shedding')
    call addfld('P3_ncshdc', (/ 'lev' /), 'A', 'kg/kg/s', 'P3 Tendency for source for rain number due to cloud water/ice collision above freezing  and shedding (combined with NRSHD in the paper)')
-   ! Sedimentation 
+   call addfld('P3_qiberg', (/ 'lev' /), 'A', 'kg/kg/s', 'P3 Tendency for Bergeron process (liquid to ice via WBF)')
+   ! Sedimentation
    call addfld('P3_sed_CLDLIQ',  (/ 'lev' /), 'A', 'kg/kg/s', 'P3 Tendency for liquid cloud content due to sedimentation')
    call addfld('P3_sed_NUMLIQ',  (/ 'lev' /), 'A', 'kg/kg/s', 'P3 Tendency for liquid cloud number due to sedimentation')
    call addfld('P3_sed_CLDRAIN', (/ 'lev' /), 'A', 'kg/kg/s', 'P3 Tendency for rain cloud content due to sedimentation')
@@ -759,6 +776,7 @@ end subroutine micro_p3_readnl
          call add_default('P3_nr_ice_shed_tend', 1, ' ')
          call add_default('P3_qc2qr_ice_shed_tend',  1, ' ')
          call add_default('P3_ncshdc', 1, ' ')
+         call add_default('P3_qiberg', 1, ' ')
          ! Sedimentation
          call add_default('P3_sed_CLDLIQ',  1, ' ')
          call add_default('P3_sed_NUMLIQ',  1, ' ')
@@ -813,6 +831,11 @@ end subroutine micro_p3_readnl
       deallocate(ccn_values)
 
    endif
+
+   ! Initialize water isotope tracers if enabled
+   if (trace_water) then
+     call wtrc_init()
+   end if
 
   end subroutine micro_p3_init
 
@@ -1007,7 +1030,7 @@ end subroutine micro_p3_readnl
     real(rtype) :: cld_frac_r(pcols,pver)      !rain cloud fraction
     real(rtype) :: cld_frac_l(pcols,pver)      !liquid cloud fraction
     real(rtype) :: cld_frac_i(pcols,pver)      !ice cloud fraction
-    real(rtype) :: tend_out(pcols,pver,49) !microphysical tendencies
+    real(rtype) :: tend_out(pcols,pver,50) !microphysical tendencies
     real(rtype), dimension(pcols,pver) :: liq_ice_exchange ! sum of liq-ice phase change tendenices
     real(rtype), dimension(pcols,pver) :: vap_liq_exchange ! sum of vap-liq phase change tendenices
     real(rtype), dimension(pcols,pver) :: vap_ice_exchange ! sum of vap-ice phase change tendenices
@@ -1078,6 +1101,9 @@ end subroutine micro_p3_readnl
     real(rtype) :: cdnumc(pcols)      
     real(rtype) :: icinc(pcols,pver) 
     real(rtype) :: icwnc(pcols,pver) 
+
+    ! Water isotope variables
+    real(rtype) :: rime_frac(pcols,pver)  ! rime mass fraction (qm/qi) for isotopes
 
     ! variables for the CNT primary / heterogeneous freezing
     real(rtype), pointer :: frzimm(:,:)
@@ -1183,6 +1209,12 @@ end subroutine micro_p3_readnl
     lq(ixcldrim)  = .true.
     lq(ixnumrain) = .true.
     lq(ixrimvol)  = .true.
+    ! Include water isotope tracers in tendency
+    if (trace_water) then
+      do icol = 1, wtrc_ncnst
+        lq(wtrc_indices(icol)) = .true.
+      end do
+    end if
     call physics_ptend_init(ptend, psetcols, "micro_p3", ls=.true., lq=lq)
 
     ! HANDLE AEROSOL ACTIVATION
@@ -1428,6 +1460,24 @@ end subroutine micro_p3_readnl
     ptend%q(:ncol,:pver,ixnumice)  = ( max(0._rtype,numice(:ncol,:pver) ) - state%q(:ncol,:pver,ixnumice)  )/dtime
     ptend%q(:ncol,:pver,ixcldrim)  = ( max(0._rtype,qm(:ncol,:pver)  ) - state%q(:ncol,:pver,ixcldrim)  )/dtime
     ptend%q(:ncol,:pver,ixrimvol)  = ( max(0._rtype,rimvol(:ncol,:pver) ) - state%q(:ncol,:pver,ixrimvol)  )/dtime
+
+    ! Apply water isotope fractionation if enabled
+    if (trace_water) then
+      ! Compute rime mass fraction for isotope fractionation weighting
+      rime_frac(:,:) = 0._rtype
+      do k = top_lev, pver
+        do icol = 1, ncol
+          if (ice(icol,k) > qsmall) then
+            rime_frac(icol,k) = qm(icol,k) / ice(icol,k)
+            rime_frac(icol,k) = min(1._rtype, max(0._rtype, rime_frac(icol,k)))
+          end if
+        end do
+      end do
+
+      call wtrc_p3_inter(state, ptend, pbuf, tend_out, rime_frac, &
+                         top_lev, dtime, cld_frac_l, cld_frac_i, cld_frac_r, &
+                         precip_liq_surf, precip_ice_surf)
+    end if
 
     ! Update t_prev and qv_prev to be used by evap_precip
     t_prev(:ncol,:pver) = temp(:ncol,:pver)
@@ -1679,7 +1729,8 @@ end subroutine micro_p3_readnl
    call outfld('P3_qc2qr_ice_shed_tend',  tend_out(:,:,33), pcols, lchnk) 
 !   call outfld('P3_qcmul',               tend_out(:,:,34), pcols, lchnk) ! Not actually used, so not actually recorded.  Commented out here for continuity of the array.
    call outfld('P3_ncshdc',               tend_out(:,:,35), pcols, lchnk)
-   ! sedimentation 
+   call outfld('P3_qiberg',              tend_out(:,:,50), pcols, lchnk)
+   ! sedimentation
    call outfld('P3_sed_CLDLIQ',           tend_out(:,:,36), pcols, lchnk)
    call outfld('P3_sed_NUMLIQ',           tend_out(:,:,37), pcols, lchnk)
    call outfld('P3_sed_CLDRAIN',          tend_out(:,:,38), pcols, lchnk)
