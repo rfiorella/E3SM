@@ -81,6 +81,7 @@
   -->
 
     <desc option="WISO"         >EAM with water isotopes/tracers.</desc>
+    <value compset="_EAM%WISO">&eam_phys_defaults; &eam_chem_defaults;</value>
 
       <!-- SCREAM configurations -->
       <value compset="_EAM%SCREAM-LR">-phys default -shoc_sgs -microphys p3 -chem spa -nlev 72 -rad rrtmgp -bc_dep_to_snow_updates -cppdefs '-DSCREAM'</value>

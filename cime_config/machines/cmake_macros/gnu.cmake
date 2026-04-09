@@ -17,9 +17,33 @@ if (compile_threaded)
   string(APPEND LDFLAGS " -fopenmp")
 endif()
 if (DEBUG)
-  string(APPEND CFLAGS " -g -Wall -fbacktrace -fcheck=bounds -ffpe-trap=invalid,zero,overflow")
+  # C flags with comprehensive memory sanitizers
+  string(APPEND CFLAGS " -g -Wall -fbacktrace")
+  string(APPEND CFLAGS " -fcheck=bounds -ffpe-trap=invalid,zero,overflow")
+  string(APPEND CFLAGS " -fsanitize=address -fsanitize=undefined")
+  string(APPEND CFLAGS " -fstack-protector-all -fno-omit-frame-pointer")
+  
+  # C++ flags with comprehensive memory sanitizers
   string(APPEND CXXFLAGS " -g -Wall -fbacktrace")
-  string(APPEND FFLAGS " -g -Wall -fbacktrace -fcheck=bounds -ffpe-trap=zero,overflow")
+  string(APPEND CXXFLAGS " -fsanitize=address -fsanitize=undefined")
+  string(APPEND CXXFLAGS " -fstack-protector-all -fno-omit-frame-pointer")
+  
+  # Fortran flags with comprehensive checking and initialization
+  string(APPEND FFLAGS " -g -Wall -fbacktrace")
+  string(APPEND FFLAGS " -fcheck=all")
+  string(APPEND FFLAGS " -ffpe-trap=invalid,zero,overflow,underflow")
+  string(APPEND FFLAGS " -finit-real=snan")
+  string(APPEND FFLAGS " -finit-integer=-2147483647")
+  string(APPEND FFLAGS " -finit-logical=true")
+  string(APPEND FFLAGS " -finit-character=0")
+  string(APPEND FFLAGS " -Wuninitialized -Wmaybe-uninitialized")
+  string(APPEND FFLAGS " -fstack-protector-all")
+  string(APPEND FFLAGS " -fsanitize=address")
+  string(APPEND FFLAGS " -fno-omit-frame-pointer")
+  
+  # Link with sanitizers
+  string(APPEND LDFLAGS " -fsanitize=address -fsanitize=undefined")
+  
   string(APPEND CPPDEFS " -DYAKL_DEBUG")
 endif()
 if (NOT DEBUG)

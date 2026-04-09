@@ -231,13 +231,17 @@ subroutine phys_register
           if (.not. do_clubb_sgs .and. .not. do_shoc_sgs) call macrop_driver_register()
           call microp_aero_register()
           call microp_driver_register()
-       end if
-       
-       ! Register CLUBB_SGS here
-       if (do_clubb_sgs) call clubb_register_cam()
-       
-       ! Register SHOC_SGS here
-       if (do_shoc_sgs) call shoc_register_e3sm()
+        end if
+        
+        ! water tracers/isotopes
+        ! CRITICAL: Must register BEFORE CLUBB/SHOC because they query water tracer pbuf fields
+        if(trace_water) call wtrc_register()
+        
+        ! Register CLUBB_SGS here
+        if (do_clubb_sgs) call clubb_register_cam()
+        
+        ! Register SHOC_SGS here
+        if (do_shoc_sgs) call shoc_register_e3sm()
        
 
        call pbuf_add_field('PREC_STR',  'physpkg',dtype_r8,(/pcols/),prec_str_idx)
@@ -271,9 +275,10 @@ subroutine phys_register
           call modal_aero_wateruptake_reg()
        endif
 
-       ! water tracers/isotopes
-       if(trace_water) call wtrc_register()
-       ! register chemical constituents including aerosols ...
+        ! water tracers/isotopes
+        ! MOVED EARLIER: now registered before CLUBB/SHOC (see line ~236)
+        ! if(trace_water) call wtrc_register()
+        ! register chemical constituents including aerosols ...
        call chem_register(species_class)
 
        ! co2 constituents
