@@ -645,6 +645,7 @@ end subroutine clubb_init_cnst
                                       iiedsclr_rt, iiedsclr_thl, iiedsclr_CO2 ! "    "
     use constituents,           only: cnst_get_ind
     use phys_control,           only: phys_getopts
+    use cam_abortutils,         only: endrun
 
     use parameters_tunable, only: params_list
 
@@ -678,6 +679,7 @@ end subroutine clubb_init_cnst
     integer :: nmodes, nspec, pmam_ncnst, m
     integer :: ixnumliq
     integer :: lptr
+    integer :: ierr                             ! Error code for pbuf_get_index
 
     real(core_rknd)  :: zt_g(pverp)                        ! Height dummy array
     real(core_rknd)  :: zi_g(pverp)                        ! Height dummy array
@@ -784,9 +786,31 @@ end subroutine clubb_init_cnst
     
     !water tracers:
     wtdlf_idx   = pbuf_get_index('WTDLF')              ! RPF - removed errcode=ierr 
-    wtrc_wprtp_idx = pbuf_get_index('wtrc_WPRTP_nadv') ! from this and next 2 entries
-    wtrc_rtp2_idx  = pbuf_get_index('wtrc_RTP2_nadv')  ! as it's not used in EAM
-    wtrc_rtpthlp_idx = pbuf_get_index('wtrc_RTTH_nadv')
+    
+    ! Get water tracer pbuf indices (may not exist if trace_water=.false.)
+    if (trace_water) then
+      wtrc_wprtp_idx = pbuf_get_index('wtrc_WPRTP_nadv', errcode=ierr)
+      if (ierr < 0) then
+        if (masterproc) write(iulog,*) 'WARNING: wtrc_WPRTP_nadv not found in pbuf'
+        wtrc_wprtp_idx = -1
+      end if
+      
+      wtrc_rtp2_idx  = pbuf_get_index('wtrc_RTP2_nadv', errcode=ierr)
+      if (ierr < 0) then
+        if (masterproc) write(iulog,*) 'WARNING: wtrc_RTP2_nadv not found in pbuf'
+        wtrc_rtp2_idx = -1
+      end if
+      
+      wtrc_rtpthlp_idx = pbuf_get_index('wtrc_RTTH_nadv', errcode=ierr)
+      if (ierr < 0) then
+        if (masterproc) write(iulog,*) 'WARNING: wtrc_RTTH_nadv not found in pbuf'
+        wtrc_rtpthlp_idx = -1
+      end if
+    else
+      wtrc_wprtp_idx = -1
+      wtrc_rtp2_idx = -1
+      wtrc_rtpthlp_idx = -1
+    end if
 
     iisclr_rt  = -1
     iisclr_thl = -1
@@ -804,6 +828,15 @@ end subroutine clubb_init_cnst
        offset = 2 ! diffuse temperature and moisture explicitly
        edsclr_dim = edsclr_dim + offset       
        !water tracers:
+       if (trace_water) then
+         ! Validate wtrc_nwset was properly initialized
+         if (wtrc_nwset <= 0) then
+           write(iulog,*) 'ERROR: wtrc_nwset not initialized when trace_water=.true.'
+           write(iulog,*) '  This indicates wtrc_register() was not called properly'
+           write(iulog,*) '  wtrc_nwset = ', wtrc_nwset
+           call endrun('clubb_ini_cam: wtrc_nwset validation failed')
+         end if
+       end if
        offset = wtrc_nwset
        edsclr_dim = edsclr_dim + offset
     endif
@@ -1673,10 +1706,15 @@ end subroutine clubb_init_cnst
    call pbuf_get_field(pbuf, up2_idx,     up2,     start=(/1,1,itim_old/), kount=(/pcols,pverp,1/))
    call pbuf_get_field(pbuf, vp2_idx,     vp2,     start=(/1,1,itim_old/), kount=(/pcols,pverp,1/))
 
-   !water tracers:
-   call pbuf_get_field(pbuf, wtrc_wprtp_idx, wtrc_wprtp, start=(/1,1,1,itim_old/), kount=(/pcols,pverp,wtrc_nwset,1/))
-   call pbuf_get_field(pbuf, wtrc_rtp2_idx, wtrc_rtp2, start=(/1,1,1,itim_old/), kount=(/pcols,pverp,wtrc_nwset,1/))
-   call pbuf_get_field(pbuf, wtrc_rtpthlp_idx, wtrc_rtpthlp, start=(/1,1,1,itim_old/), kount=(/pcols,pverp,wtrc_nwset,1/))
+   !water tracers: only access if properly initialized
+   if (trace_water .and. wtrc_nwset > 0 .and. wtrc_wprtp_idx > 0) then
+     call pbuf_get_field(pbuf, wtrc_wprtp_idx, wtrc_wprtp, &
+                         start=(/1,1,1,itim_old/), kount=(/pcols,pverp,wtrc_nwset,1/))
+     call pbuf_get_field(pbuf, wtrc_rtp2_idx, wtrc_rtp2, &
+                         start=(/1,1,1,itim_old/), kount=(/pcols,pverp,wtrc_nwset,1/))
+     call pbuf_get_field(pbuf, wtrc_rtpthlp_idx, wtrc_rtpthlp, &
+                         start=(/1,1,1,itim_old/), kount=(/pcols,pverp,wtrc_nwset,1/))
+   end if
    call pbuf_get_field(pbuf, upwp_idx,    upwp,    start=(/1,1,itim_old/), kount=(/pcols,pverp,1/))
    call pbuf_get_field(pbuf, vpwp_idx,    vpwp,    start=(/1,1,itim_old/), kount=(/pcols,pverp,1/))
    if (linearize_pbl_winds) then
