@@ -1,0 +1,717 @@
+╭─── Claude Code v2.1.104 ─────────────────────────────────────────────────────╮
+│                                    │ Tips for getting started                │
+│            Welcome back!           │ ✔ Run /init to create a CLAUDE.md file… │
+│                                    │ ─────────────────────────────────────── │
+│              ▗ ▗   ▖ ▖             │ Recent activity                         │
+│                                    │ No recent activity                      │
+│                ▘▘ ▝▝               │                                         │
+│                                    │                                         │
+│   Sonnet 4.6 · API Usage Billing   │                                         │
+│       ~/code/E3SM/EAMv3-wiso       │                                         │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+❯ /init                                                                         
+
+⏺ I'll analyze this codebase to create a comprehensive CLAUDE.md file. Let me
+  start by exploring the repository structure and key documentation.
+
+  Searched for 6 patterns, read 12 files, listed 11 directories (ctrl+o to 
+  expand)
+
+⏺ Bash(git log --oneline -20)
+  ⎿  2f332ef044 Update water_isotopes.F90 and water_types.F90 from CAM6
+     1dff92c5f6 Merge branch 'singhbalwinder/joverfelt/eamxx/fix-mam4xx-mic
+     rophysics-NBFB-bug' (PR #6942)
+     … +15 lines (ctrl+o to expand)
+
+  Searched for 1 pattern, read 1 file, listed 1 directory (ctrl+o to expand)
+
+⏺ Now I'll create a comprehensive CLAUDE.md file based on my analysis of the
+  codebase.
+
+⏺ Write(CLAUDE.md)
+  ⎿  Wrote 284 lines to CLAUDE.md
+      1 # CLAUDE.md
+      2 
+      3 This file provides guidance to Claude Code (claude.ai/code) when 
+        working with code in this repository.
+      4 
+      5 ## Project Overview
+      6 
+      7 This is the **E3SM (Energy Exascale Earth System Model)** reposit
+        ory, a state-of-the-art fully coupled Earth system model for clim
+        ate research. This branch (`rfiorella/eam-v3/wiso`) focuses on im
+        plementing **water isotope tracers in the P3 microphysics scheme*
+        * (EAMv3-wiso).
+      8 
+      9 **Water Isotope Project**: Porting water isotope infrastructure f
+        rom EAMv2-wiso (MG2 microphysics) to EAMv3-wiso (P3 microphysics)
+        . See `P3_ISOTOPE_README.md` for comprehensive project documentat
+        ion, including a 10-phase implementation plan (~190-250 person-da
+        ys effort).
+     … +274 lines (ctrl+o to expand)
+
+⏺ I've successfully created a comprehensive CLAUDE.md file for this E3SM
+  repository. Here's what it covers:
+
+  Key Sections
+
+  1. Project Overview - E3SM climate model and the current water isotope
+  implementation project
+  2. Build System (CIME) - Complete commands for creating cases, building, and
+  running tests
+  3. Repository Structure - Major components and detailed EAM atmosphere model
+  structure
+  4. Water Isotope Infrastructure - Current code locations and targets for new
+  P3 implementation
+  5. Implementation Project Details - 10-phase plan with effort estimates and
+  current status
+  6. Development Workflow - Git workflow, code guidelines, testing strategy, and
+   file naming conventions
+  7. Common Patterns - Physics loops, isotope tracer patterns, fractionation
+  calculations
+  8. Key Physics Concepts - P3 microphysics background and isotope fractionation
+   theory
+  9. References - Documentation links and scientific papers
+
+  Highlights
+
+  The file emphasizes:
+  - Practical commands for building and testing E3SM cases
+  - Water isotope project specifics - references the existing P3_ISOTOPE_*.md
+  documentation files
+  - Code architecture - where the P3 microphysics code lives and how water
+  isotopes fit in
+  - Development context - the phased implementation approach (currently in Phase
+   0, moving to Phase 1)
+  - Physics understanding - why rain evaporation (Phase 2) is the highest
+  priority
+
+  The documentation is tailored to help future Claude instances quickly
+  understand this is a climate model with an active water isotope implementation
+   project, providing the essential context and commands needed to work
+  productively in this codebase.
+
+✻ Brewed for 2m 7s
+
+❯ Read the md files and come up with an implementation plan                     
+
+⏺ I'll read through the P3 isotope documentation files to create a comprehensive
+   implementation plan.
+
+  Read 4 files (ctrl+o to expand)
+
+⏺ Based on my analysis of the comprehensive P3 isotope documentation, I'll
+  create a concrete implementation plan.
+
+⏺ Write(P3_ISOTOPE_IMPLEMENTATION_PLAN.md)
+  ⎿  Wrote 861 lines to P3_ISOTOPE_IMPLEMENTATION_PLAN.md
+       1 # P3 Water Isotope Implementation - Concrete Implementation Plan
+       2 
+       3 **Project**: Port water isotope infrastructure from EAMv2-wiso t
+         o EAMv3-wiso  
+       4 **Created**: 2026-04-23  
+       5 **Status**: Phase 0 Complete → Phase 1 Ready to Start  
+       6 **Total Effort**: 190-250 person-days (6-12 months with 1-2 FTEs
+         )
+       7 
+       8 ---
+       9 
+      10 ## Executive Summary
+     … +851 lines (ctrl+o to expand)
+
+⏺ Perfect! I've created a comprehensive implementation plan. Let me create one
+  more document - a quick-start guide to help you get started immediately.
+
+⏺ Write(GETTING_STARTED.md)
+  ⎿  Wrote 483 lines to GETTING_STARTED.md
+      1 # Getting Started with P3 Water Isotope Implementation
+      2 
+      3 **Quick-start guide for beginning Phase 1 implementation**
+      4 
+      5 ---
+      6 
+      7 ## 📋 Prerequisites Checklist
+      8 
+      9 Before starting Phase 1, ensure you have:
+     … +473 lines (ctrl+o to expand)
+
+⏺ Perfect! Now let me create a summary of what I've created for you.
+
+  Summary: P3 Water Isotope Implementation Plan
+
+  I've analyzed all the comprehensive documentation you've created and
+  synthesized it into three new actionable documents:
+
+  📄 Documents Created
+
+  1. P3_ISOTOPE_IMPLEMENTATION_PLAN.md (Comprehensive Plan - 500+ lines)
+    - Executive summary with critical path visualization
+    - Detailed week-by-week roadmap for all 10 phases
+    - Day-by-day breakdown of Phase 1 & 2 (critical phases)
+    - Resource requirements: Personnel, compute, data needs
+    - Risk management with mitigation strategies
+    - Testing strategy at all levels (unit, integration, validation)
+    - Success metrics for each phase
+    - Deliverables tracking table
+  2. GETTING_STARTED.md (Quick-Start Guide)
+    - Prerequisites checklist before starting
+    - Phase 1 week-by-week guide with exact commands
+    - File organization showing what goes where
+    - Testing workflows with example code
+    - Common issues & solutions troubleshooting
+    - Phase 1 completion checklist
+  3. Updated CLAUDE.md (Repository Guide)
+    - Context about E3SM and this branch
+    - Build system commands (CIME)
+    - Repository structure
+    - Water isotope project overview
+    - Development workflow
+
+  ---
+  🎯 Key Insights from the Plan
+
+  Critical Path (Must Complete - 120-160 days):
+
+  Phase 0 (Planning) ✓ → Phase 1 (Infrastructure) → Phase 2 (Rain Evaporation)
+    → Phase 3 (Vapor-Liquid) → Phase 4 (Vapor-Ice) → Phase 7 (Sedimentation)
+    → Phase 9 (Conservation & Validation)
+
+  Highest Scientific Priority: Phase 2 (Rain Evaporation)
+
+  - Below-cloud evaporation is the dominant process controlling surface
+  precipitation isotope ratios
+  - Uses Stewart (1975) model for fractionation
+  - Enables validation against GNIP observations
+  - Start this immediately after Phase 1
+
+  Resource Estimates:
+
+  - Timeline: 6-8 months with 2 FTEs, or 10-12 months with 1 FTE
+  - Compute: ~15,000-20,000 node-hours
+  - Personnel: Minimum 1 FTE (Fortran + E3SM expert), recommended 2 FTEs
+
+  Parallel Work Opportunities:
+
+  - Phase 8 (Convection) can be developed in parallel with Phases 2-7
+  - Phases 5-6 can proceed in parallel once Phase 4 is complete
+  - Testing can overlap with development of later phases
+
+  ---
+  📋 Implementation Approach
+
+  Incremental & Test-Driven:
+  - Each phase builds on previous phases
+  - Extensive testing at each phase before proceeding
+  - Early scientific validation (Phase 2) to catch issues
+
+  Risk Mitigation:
+  - Technical risks identified with mitigation strategies
+  - Early testing of critical assumptions (Phase 2)
+  - Regular check-ins with science team
+
+  Documentation-First:
+  - 50 detailed GitHub issues ready to import
+  - Function-level specifications
+  - Clear acceptance criteria for each task
+
+  ---
+  🚀 Next Steps (Immediate)
+
+  1. Phase 0 Review Meeting (This week)
+    - Review implementation plan with team
+    - Confirm resource allocation
+    - Assign personnel
+    - Set milestone dates
+  2. Development Environment Setup (1-2 days)
+    - Create feature branch: feature/p3-isotopes-phase1
+    - Clone/update EAMv2-wiso for reference
+    - Set up testing framework
+  3. Start Phase 1 (Week 1, Day 1)
+    - Begin Issue #1.1: Port water_isotopes.F90
+    - Expected: 15-20 days to complete Phase 1
+    - Deliverable: Model compiles with isotope infrastructure (inactive)
+
+  ---
+  📊 Phase Breakdown
+
+  ┌───────┬──────────┬───────────────┬────────────────────┬─────────────────┐
+  │ Phase │ Duration │   Priority    │ Scientific Impact  │  Dependencies   │
+  ├───────┼──────────┼───────────────┼────────────────────┼─────────────────┤
+  │ 1     │ 15-20d   │ 🔴 Critical   │ None               │ Phase 0 review  │
+  │       │          │               │ (infrastructure)   │                 │
+  ├───────┼──────────┼───────────────┼────────────────────┼─────────────────┤
+  │ 2     │ 20-25d   │ 🔴 Critical + │ Rain evaporation   │ Phase 1         │
+  │       │          │  Highest      │                    │                 │
+  ├───────┼──────────┼───────────────┼────────────────────┼─────────────────┤
+  │ 3     │ 15-20d   │ 🟠 High       │ Condensation       │ Phase 2         │
+  ├───────┼──────────┼───────────────┼────────────────────┼─────────────────┤
+  │ 4     │ 20-25d   │ 🟠 High       │ Ice processes      │ Phase 3         │
+  ├───────┼──────────┼───────────────┼────────────────────┼─────────────────┤
+  │ 5     │ 15-20d   │ 🟡 Medium     │ Phase changes      │ Phase 4         │
+  ├───────┼──────────┼───────────────┼────────────────────┼─────────────────┤
+  │ 6     │ 15-20d   │ 🟡 Medium     │ Collection/riming  │ Phase 5         │
+  ├───────┼──────────┼───────────────┼────────────────────┼─────────────────┤
+  │ 7     │ 20-25d   │ 🔴 Critical   │ Sedimentation      │ Phase 6         │
+  ├───────┼──────────┼───────────────┼────────────────────┼─────────────────┤
+  │ 8     │ 12-16d   │ 🟠 High       │ Convection         │ Phase 7 (or     │
+  │       │          │               │                    │ Phase 1)        │
+  ├───────┼──────────┼───────────────┼────────────────────┼─────────────────┤
+  │ 9     │ 14-19d   │ 🔴 Critical   │ Validation         │ Phase 8         │
+  ├───────┼──────────┼───────────────┼────────────────────┼─────────────────┤
+  │ 10    │ 15-22d   │ 🟢 Optional   │ Stratosphere/HTO   │ Phase 9         │
+  └───────┴──────────┴───────────────┴────────────────────┴─────────────────┘
+
+  ---
+  ✅ Success Criteria
+
+  Phase 1: Code compiles and runs ✓
+  Phase 2: Rain evaporation depletes δD correctly ✓
+  Phase 7: Precipitation isotopes qualitatively match observations ✓
+  Phase 9: Quantitative validation (δD-δ18O slope ~8, temperature gradient
+  ~0.6‰/°C) ✓
+
+  Final Goal: Publication-ready isotope-enabled E3SM v3 with P3 microphysics
+
+  ---
+  🔧 Files to Modify (Phase 1)
+
+  Port from EAMv2-wiso:
+  - share/util/water_isotopes.F90 (777 lines)
+  - share/util/water_types.F90 (171 lines)
+  - components/eam/src/physics/cam/water_tracer_vars.F90 (122 lines)
+  - components/eam/src/physics/cam/water_tracers.F90 (subset: ~1,500 lines of
+  7,813)
+
+  Modify in EAMv3-wiso:
+  - components/eam/src/physics/cam/physics_types.F90 (add isotope state)
+  - components/eam/src/physics/cam/physpkg.F90 (call initialization)
+  - components/eam/bld/namelist_files/namelist_definition.xml (add namelist)
+
+  ---
+  🎓 Learning Resources
+
+  Included in Documents:
+  - Detailed function descriptions with line numbers
+  - Example code snippets for each phase
+  - Unit test templates
+  - Troubleshooting guide
+
+  Scientific Background:
+  - Stewart (1975) rain evaporation model explained
+  - Fractionation physics overview (equilibrium + kinetic)
+  - P3 microphysics integration strategy
+
+  ---
+  Recommendation
+
+  Start immediately with Phase 1 using the week-by-week guide in
+  GETTING_STARTED.md. The plan is:
+
+  1. ✅ Phase 0 complete (documentation exists)
+  2. 🟡 Phase 0 review needed (team approval)
+  3. 🟢 Phase 1 ready to start (all documentation prepared)
+
+  The implementation is well-scoped, scientifically justified, and technically
+  feasible. The phased approach with early validation (Phase 2) will catch any
+  fundamental issues before significant time is invested.
+
+  Total effort: ~6-12 months depending on team size, with clear deliverables and
+   validation at each phase.
+
+  Good luck with the implementation! The documentation provides everything
+  needed to get started. Let me know if you have questions about the plan or
+  need clarification on any phase.
+✻ Crunched for 3m 17s
+
+❯ How many of these phases can you implement in parallel with subagents?        
+
+⏺ Great question! Let me analyze the parallelization opportunities. The key
+  constraint is dependencies between phases, not agent capabilities.
+
+  Parallelization Analysis
+
+  Phase Dependencies (What Blocks What)
+
+  graph TB
+      P1[Phase 1: Infrastructure<br/>BLOCKING]
+
+      P2[Phase 2: Rain Evaporation]
+      P3[Phase 3: Vapor-Liquid]
+      P4[Phase 4: Vapor-Ice]
+      P5[Phase 5: Freezing/Melting]
+      P6[Phase 6: Collection]
+      P7[Phase 7: Sedimentation]
+      P8[Phase 8: Convection<br/>✓ INDEPENDENT]
+      P9A[Phase 9: Conservation<br/>✓ Can prep early]
+      P9B[Phase 9: Integration]
+
+      P1 --> P2
+      P1 -.->|Independent!| P8
+      P1 -.->|Can prep| P9A
+
+      P2 --> P3
+      P3 --> P4
+      P4 --> P5
+      P4 --> P6
+      P5 --> P7
+      P6 --> P7
+
+      P7 --> P9B
+      P8 --> P9B
+      P9A --> P9B
+
+      style P8 fill:#90EE90
+      style P9A fill:#90EE90
+
+  🎯 Realistic Parallelization Strategy
+
+⏺ Write(PARALLEL_IMPLEMENTATION_STRATEGY.md)
+  ⎿  Wrote 426 lines to PARALLEL_IMPLEMENTATION_STRATEGY.md
+      1 # Parallel Implementation Strategy with Subagents
+      2 
+      3 **Goal**: Maximize parallel work while minimizing merge conflicts
+         and coordination overhead.
+      4 
+      5 ---
+      6 
+      7 ## 🚀 Recommended: 3-Agent Parallel Strategy
+      8 
+      9 This is the **sweet spot** for parallelization - significant spee
+        dup without excessive coordination.
+     … +416 lines (ctrl+o to expand)
+
+⏺ Answer: Significant Parallelization Possible! 🚀
+
+  Based on my dependency analysis, here's what can be parallelized:
+
+  Recommended: 3-Agent Strategy (30% Time Savings)
+
+  Timeline: 5-6 months (vs 9-10 months sequential)
+
+  Agent 1 (Critical Path): Phases 2 → 3 → 4 → 7 (Stratiform microphysics)
+  Agent 2 (Parallel):      Phase 8 (Convection) - STARTS IMMEDIATELY AFTER PHASE
+   1
+  Agent 3 (Delayed):       Phases 5 + 6 (Freezing & Collection) - STARTS AFTER
+  PHASE 4
+
+  Key Insights
+
+  🟢 Fully Independent Phases (Zero Conflicts):
+  - Phase 8 (Convection) can run completely in parallel with Phases 2-7
+    - Different files: zm_conv_intr.F90, uwshcu.F90 vs micro_p3.F90
+    - Different physics: Convection runs BEFORE microphysics in physics sequence
+    - Only needs Phase 1 infrastructure
+
+  🟡 Partially Independent (Manageable Conflicts):
+  - Phases 5 & 6 can run in parallel with Phase 7
+    - Modify different functions in micro_p3.F90
+    - Extend same framework (requires coordination)
+    - Can merge before Phase 7 testing completes
+
+  🔴 Must Be Sequential:
+  - Phase 1: Blocking (all agents wait)
+  - Phases 2→3→4→7: Build on each other (critical path)
+  - Phase 9: Integration (all agents wait)
+
+  Timeline Comparison
+
+  Sequential (1 dev):         ████████████████████ 9 months
+
+  3-Agent Parallel:           ███████████ 5-6 months
+    Agent 1 (Phases 2-4,7):   ███████████████
+    Agent 2 (Phase 8):        ███ (done early, waits)
+    Agent 3 (Phases 5-6):           ███████ (joins late)
+                              ↑ Integration
+                              Phase 9
+
+  5-Agent Aggressive:         ██████████ 4.5-5 months
+    (Higher coordination cost, diminishing returns)
+
+  Why This Works
+
+  File Isolation:
+  - Agent 1: micro_p3.F90 (functions: evaporate_rain, ice_nucleation,
+  sedimentation)
+  - Agent 2: zm_conv_intr.F90, uwshcu.F90 (NO OVERLAP)
+  - Agent 3: micro_p3.F90 (functions: freezing, melting, collection)
+
+  Physics Independence:
+  - Convection → Stratiform → Sedimentation (sequential execution order)
+  - But development can be parallel because they use same infrastructure (Phase
+  1)
+
+  Practical Implementation
+
+  Week 1-3: All agents work on Phase 1 together (or wait)
+
+  Week 4+:
+  # Agent 1 starts Phase 2
+  git checkout -b agent1-stratiform
+
+  # Agent 2 starts Phase 8 IN PARALLEL
+  git checkout -b agent2-convection
+
+  # Agent 3 waits until Agent 1 finishes Phase 4 (~Week 12)
+  git checkout -b agent3-collection
+
+  Coordination:
+  - Daily 5-min standups
+  - Weekly integration testing (merge all branches, test together)
+  - Critical sync points: After Phase 1, After Phase 4, Before Phase 9
+
+  My Recommendation
+
+  Start with 2-agent approach (Agents 1 & 2), then add Agent 3 after validating
+  parallel workflow works:
+
+  1. Phase 1-2: Test parallel development with low-risk pair
+  2. Phase 3-7: Add Agent 3 if first parallel cycle succeeded
+  3. Phase 9: All agents integrate
+
+  This gives 25-30% time savings with manageable risk and coordination overhead.
+
+  Would you like me to set up the agent coordination framework now, or do you
+  want to proceed with Phase 1 first and parallelize later?
+
+✻ Worked for 1m 25s
+
+❯ setup agent coordination. Could you also sketch out an isotope physics md     
+  with any questions you have about implementation that you can refer to?       
+
+⏺ I'll create both documents - an agent coordination framework and an isotope
+  physics reference with implementation questions.
+
+⏺ Write(AGENT_COORDINATION.md)
+  ⎿  Wrote 757 lines to AGENT_COORDINATION.md
+       1 # Agent Coordination Framework
+       2 
+       3 **Project**: P3 Water Isotope Implementation  
+       4 **Strategy**: 3-Agent Parallel Development  
+       5 **Expected Timeline**: 5-6 months  
+       6 **Created**: 2026-04-23
+       7 
+       8 ---
+       9 
+      10 ## 🎯 Agent Assignments
+     … +747 lines (ctrl+o to expand)
+
+⏺ Now let me create the isotope physics reference with implementation questions:
+
+⏺ Write(ISOTOPE_PHYSICS.md)
+  ⎿  Wrote 682 lines to ISOTOPE_PHYSICS.md
+      1 # Isotope Physics Reference & Implementation Questions
+      2 
+      3 **Purpose**: Scientific reference for developers + open questions
+         requiring decisions  
+      4 **Audience**: Agent developers, science team, reviewers  
+      5 **Status**: Living document - update as questions are resolved
+      6 
+      7 ---
+      8 
+      9 ## Table of Contents
+     … +672 lines (ctrl+o to expand)
+
+⏺ Perfect! I've created both documents. Here's what you now have:
+
+  📋 Document Summary
+
+  1. AGENT_COORDINATION.md - Complete Coordination Framework
+
+  What's in it:
+  - 3-agent assignment strategy with clear responsibilities
+  - Daily standup format (async, 5 min) with template
+  - Weekly sync meeting structure (30 min) with agenda
+  - Branch strategy and naming conventions
+  - Merge protocol (daily pulls, weekly integration)
+  - Conflict resolution procedures for high-risk files
+  - Testing coordination (unit tests independent, integration weekly)
+  - Progress tracking with GitHub Projects setup
+  - Escalation protocol with response times
+
+  Key Features:
+  - Agents can work independently 90% of the time
+  - Clear sync points (after Phase 1, after Phase 4, before Phase 9)
+  - Rotating "Integration Manager" role
+  - Detailed procedures for handling merge conflicts
+
+  ---
+  2. ISOTOPE_PHYSICS.md - Science Reference + 19 Implementation Questions
+
+  What's in it:
+
+  Core Physics (Reference Material):
+
+  - Isotope ratio notation (δD, δ¹⁸O)
+  - Equilibrium fractionation (liquid-vapor, ice-vapor)
+  - Kinetic fractionation (diffusivity-based)
+  - Combined fractionation rules
+
+  Process-Specific Physics (8 Sections):
+
+  - A. Rain evaporation (Stewart model) - Phase 2
+  - B. Condensation (Rayleigh distillation) - Phase 3
+  - C. Ice nucleation & deposition - Phase 4
+  - D. Bergeron process - Phase 6
+  - E. Freezing & melting - Phase 5
+  - F. Riming - Phase 6
+  - G. Sedimentation - Phase 7
+  - H. Convection - Phase 8
+
+  19 Implementation Questions (Prioritized):
+
+  🔴 HIGH PRIORITY (Must decide for Phase 2):
+  - Q4: Raindrop size distribution? → Marshall-Palmer recommended
+  - Q5: Stewart parameter φ = 0.9? → Start with EAMv2 value
+  - Q6: Layer-by-layer application? → Independent per layer
+  - Q2: Kinetic exponent n = 0.58? → Make configurable
+
+  🟠 MEDIUM PRIORITY (Phase 3-4):
+  - Q7: Kinetic effects in condensation? → Equilibrium only
+  - Q8: Extract P3 condensation rate? → Modify P3 to output rate
+  - Q9: Supersaturation-dependent kinetics? → Match EAMv2
+  - Q10: Homogeneous vs heterogeneous? → Treat differently
+
+  🟡 LOW PRIORITY (Phase 5-6):
+  - Q11-15: Bergeron, freezing, melting, riming details
+
+  🟢 DEFERRED (Can decide later):
+  - Q1, Q3, Q16-19: Temperature ranges, sublimation, convection details
+
+  Each question includes:
+  - Issue: What's ambiguous?
+  - Options: A/B/C choices
+  - EAMv2-wiso approach: What MG2 did
+  - Literature: What papers say
+  - Recommendation: Suggested approach
+  - Priority: When to decide
+
+  Additional Content:
+
+  - Parameter values: Fixed (from literature) and tunable
+  - Validation targets: GNIP, TES, AIRS, aircraft data
+  - Key references: 8 essential papers with summaries
+  - Decision log: Template for tracking choices
+  - Quick reference: Expected values table
+
+  ---
+  🎯 How Agents Should Use These Documents
+
+  Daily Workflow:
+
+  Morning:
+  # 1. Pull latest changes
+  git checkout agent1-stratiform
+  git merge origin/feature/p3-isotopes-phase1
+
+  # 2. Post daily standup (from AGENT_COORDINATION.md template)
+  "Agent 1, Phase 2, Yesterday: Ported stewart_isoevap()..."
+
+  # 3. Start work
+
+  During Development:
+  # When you hit a physics question:
+  # 1. Check ISOTOPE_PHYSICS.md
+  # 2. Find relevant question (e.g., Q5: Stewart parameter φ)
+  # 3. Use recommendation or ask in #p3-isotopes-science channel
+  # 4. Document decision in Decision Log
+
+  End of Day:
+  # Push your work
+  git push origin agent1-stratiform
+
+  # Post update
+  "Pushed updates: Modified water_tracers.F90 (+150 lines)"
+
+  Friday:
+  # Integration Manager runs weekly merge test
+  # All agents review results
+  # Plan next week
+
+  ---
+  🔬 Example: Agent 1 Encounters Physics Question
+
+  Scenario: Agent 1 is implementing Stewart model (Phase 2, Week 5)
+
+  Code:
+  ! Need to choose raindrop size distribution
+  ! Option A: Marshall-Palmer (simple)
+  ! Option B: P3 predicted DSD (complex)
+
+  Action:
+  # 1. Check ISOTOPE_PHYSICS.md
+  vim ISOTOPE_PHYSICS.md
+  # Search for "Q4"
+
+  # Finds: "Q4: Raindrop size distribution for Stewart model?"
+  # Recommendation: Marshall-Palmer (tested, simple)
+  # EAMv2-wiso: Used Marshall-Palmer
+
+  # 2. Implement recommendation
+  # Use Marshall-Palmer: N(D) = N₀·exp(-Λ·D)
+
+  # 3. Update Decision Log
+  # Add line: "Q4: Marshall-Palmer, [Date], Follows EAMv2, simple"
+
+  # 4. Continue implementation
+
+  If Still Uncertain:
+  # Post in #p3-isotopes-science Slack:
+  "Q4 (raindrop size): Recommendation is Marshall-Palmer. 
+  But P3 has actual DSD. Should we use it for consistency?
+  See ISOTOPE_PHYSICS.md Q4."
+
+  # Science team discusses
+  # Decision made and logged
+
+  ---
+  📊 Complete Document Set (Now Available)
+
+  You now have 9 comprehensive documents:
+
+  1. ✅ CLAUDE.md - Repository guide
+  2. ✅ P3_ISOTOPE_README.md - Project overview
+  3. ✅ P3_ISOTOPE_IMPLEMENTATION_SPEC.md - Technical spec (27KB)
+  4. ✅ P3_ISOTOPE_FUNCTION_MAPPING.md - Function mappings (30KB)
+  5. ✅ P3_ISOTOPE_ISSUES.md - 50 detailed issues (55KB)
+  6. ✅ P3_ISOTOPE_DEPENDENCIES.md - Dependency diagrams
+  7. ✅ P3_ISOTOPE_IMPLEMENTATION_PLAN.md - Detailed week-by-week plan ⭐ NEW
+  8. ✅ AGENT_COORDINATION.md - Agent coordination framework ⭐ NEW
+  9. ✅ ISOTOPE_PHYSICS.md - Physics reference + questions ⭐ NEW
+
+  Bonus: ✅ GETTING_STARTED.md - Quick-start guide
+
+  Total: ~220KB of documentation, covering:
+  - Science background
+  - Implementation strategy
+  - Coordination procedures
+  - Physics questions
+  - Testing protocols
+  - Validation plans
+
+  ---
+  🚀 Ready to Launch
+
+  You can now:
+
+  1. Assign 3 agents to branches (see AGENT_COORDINATION.md)
+  2. Start Phase 1 with all agents together (Week 1-3)
+  3. Split into parallel after Phase 1:
+    - Agent 1: Critical path (Phases 2→3→4→7)
+    - Agent 2: Convection (Phase 8) - starts immediately
+    - Agent 3: Collection (Phases 5+6) - starts Week 12
+  4. Refer to ISOTOPE_PHYSICS.md when physics questions arise
+  5. Follow coordination protocol in AGENT_COORDINATION.md
+  6. Track progress with weekly integration tests
+
+  Expected timeline: 5-6 months (vs 10 months sequential)
+
+  Time savings: ~30% with manageable coordination overhead
+
+  Would you like me to:
+  1. Create a kickoff checklist for starting Phase 1?
+  2. Set up the actual GitHub project board structure?
+  3. Create template files for daily standups and weekly reports?
+  4. Something else?
+
+✻ Cogitated for 3m 37s
