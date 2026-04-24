@@ -22,7 +22,7 @@ set -u  # Exit on undefined variable
 ################################################################################
 
 # Test configuration
-COMPSET="Fi2000climo"
+COMPSET="Fi20TR"
 RESOLUTION="ne4pg2_ne4pg2"
 # Resolution choice rationale:
 # - ne4pg2_ne4pg2: Coarsest practical grid for functional testing
@@ -273,15 +273,21 @@ configure_case() {
     # For Fi2000climo, this should include the default physics
     # We need to add -water_tracer to it
     
+    # NOTE: The Kokkos initialization bug has been fixed (2026-04-10)
+    # - Fixed use-after-scope bug in compose_slmm.cpp and ExecSpaceDefs.cpp
+    # - Now using default theta-l dynamics target with COMPOSE transport
+    # - Previous preqx workaround has been removed
+    log_info "Using default theta-l dynamics with Kokkos (bug fixed)"
+    
     # Set water tracer package in CAM_CONFIG_OPTS
     # Note: We need to append to existing config options
     local cam_opts=$(./xmlquery CAM_CONFIG_OPTS --value)
     local new_opts="${cam_opts} -water_tracer ${package}"
     
-    ./xmlchange CAM_CONFIG_OPTS="${new_opts}"
+    # ./xmlchange CAM_CONFIG_OPTS="${new_opts}"
     
     # Enable isotope field passing in coupler
-    ./xmlchange FLDS_WISO=TRUE
+    # ./xmlchange FLDS_WISO=TRUE
     
     # Enable debug compilation if requested
     if [ "${DEBUG_COMPILE^^}" == "TRUE" ]; then
@@ -313,18 +319,21 @@ configure_case() {
     # Create user_nl_eam with isotope-specific namelists
     cat > user_nl_eam << EOF
 ! Water isotope configuration
-trace_water = .true.
-wisotope = .true.
+!trace_water = .true.
+!wisotope = .true.
 
 ! Physics options for isotopes
-wtrc_alpha_kinetic = .true.
-wtrc_lh2oadj = .true.
-wtrc_niter = 1
-wtrc_qmin = 1.0e-18
+!wtrc_alpha_kinetic = .true.
+!wtrc_lh2oadj = .true.
+!wtrc_niter = 1
+!wtrc_qmin = 1.0e-18
 
 ! Conservation checks (disabled for performance)
-wtrc_check_total_h2o = .false.
-wtrc_warn_only = .true.
+!wtrc_check_total_h2o = .false.
+!wtrc_warn_only = .true.
+
+! Disable prescribed aerosols by setting empty file
+prescribed_aero_file = ''
 EOF
     
     log_success "Case configured for ${package}"

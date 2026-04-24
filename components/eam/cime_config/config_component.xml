@@ -125,6 +125,11 @@
       <value compset="ARM97_EAM%SCM.*MMF"               >scam_arm97_MMF-1mom</value>
       <value compset="RICO_EAM%SCM.*MMF"                >scam_rico_MMF-1mom</value>
       <value compset="20TR_EAM%CMIP6.*MMF"              >20TR_MMF-1mom_CMIP6</value>
+      <!-- Water Isotope Compsets (Fi*) -->
+      <value compset="1850.*_EAM%WISO"                  >1850_eam_wiso</value>
+      <value compset="2000.*_EAM%WISO"                  >2000_eam_wiso</value>
+      <value compset="2010.*_EAM%WISO"                  >2010_eam_wiso</value>
+      <value compset="HIST.*_EAM%WISO"                  >20TR_eam_wiso</value>
     </values>
 
     <group>run_component_cam</group>

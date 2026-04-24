@@ -1097,7 +1097,9 @@ if ($prescribed_aero_model eq 'modal' or $chem =~ /_mam/) {
   $aer_model = 'bam';
 }
 
-if ($aer_model eq 'mam' ) {
+# Only create mode_defs for prognostic MAM, not for prescribed SPA
+# SPA provides aerosol optical properties directly without modal aerosol constituents
+if ($aer_model eq 'mam' && !$spa_chem) {
 
   my $aero_modes = '3mode';
   if ($chem =~ /_mam4/) {$aero_modes = '4mode';}

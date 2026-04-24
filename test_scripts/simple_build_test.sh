@@ -51,6 +51,7 @@ cat > user_nl_eam << 'EOF'
 trace_water = .true.
 wisotope = .true.
 wtrc_alpha_kinetic = .true.
+prescribed_aero_file = ''
 EOF
 
 echo "Setting up case..."

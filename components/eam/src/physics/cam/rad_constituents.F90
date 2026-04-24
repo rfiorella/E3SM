@@ -316,7 +316,8 @@ subroutine rad_cnst_readnl(nlfile)
 
    ! Parse the namelist input strings
 
-   ! Mode definition stings
+   ! Mode definition strings
+   ! With Option 1 fix in build-namelist, mode_defs will be empty when using SPA
    call parse_mode_defs(mode_defs, modes)
    
    ! Lists of externally mixed entities for climate and diagnostic calculations
@@ -435,8 +436,12 @@ subroutine rad_cnst_init()
    ! or physics buffer arrays.
    if (masterproc) write(iulog,*) nl//subname//': checking for radiative constituents'
 
-   ! Finish initializing the mode definitions.
-   call init_mode_comps(modes)
+   ! Finish initializing the mode definitions (skip if no modes defined, e.g., when using SPA).
+   if (modes%nmodes > 0) then
+      call init_mode_comps(modes)
+   else
+      if (masterproc) write(iulog,*) nl//subname//': No modes defined, skipping mode component initialization'
+   end if
 
    ! Finish initializing the gas, bulk aerosol, and mode lists.
    do i = 0, N_DIAG

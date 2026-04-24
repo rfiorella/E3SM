@@ -28,8 +28,16 @@ namespace Homme {
 // own. As a side benefit, we'll end up running on GPU platforms optimally
 // without having to specify --kokkos-ndevices on the command line.
 void initialize_kokkos () {
-  // This is in fact const char*, but Kokkos::initialize requires char*.
-  std::vector<char*> args;
+  // FIX: Use static storage to ensure strings persist for Kokkos::initialize()
+  // The previous implementation used a local std::vector<char> which went out of 
+  // scope before Kokkos::initialize() could parse the arguments, causing a 
+  // heap-buffer-overflow detected by AddressSanitizer.
+  // Static storage ensures the strings live for the entire program lifetime.
+  static std::vector<std::string> arg_storage;
+  static std::vector<char*> args_ptrs;
+  
+  arg_storage.clear();
+  args_ptrs.clear();
 
   //   This is the only way to get the round-robin rank assignment Kokkos
   // provides, as that algorithm is hardcoded in Kokkos::initialize(int& narg,
@@ -56,19 +64,17 @@ void initialize_kokkos () {
 #ifdef HOMMEXX_ENABLE_GPU  
   std::stringstream ss;
   ss << "--kokkos-num-devices=" << nd;
-  const auto key = ss.str();
-  std::vector<char> str(key.size()+1);
-  std::copy(key.begin(), key.end(), str.begin());
-  str.back() = 0;
-  args.push_back(const_cast<char*>(str.data()));
+  arg_storage.push_back(ss.str());
+  args_ptrs.push_back(const_cast<char*>(arg_storage.back().c_str()));
 #endif
 
-
+  // String literals have static storage duration, so this is safe without 
+  // adding to arg_storage
   const char* silence = "--kokkos-disable-warnings";
-  args.push_back(const_cast<char*>(silence));
+  args_ptrs.push_back(const_cast<char*>(silence));
 
-  int narg = args.size();
-  Kokkos::initialize(narg, args.data());
+  int narg = args_ptrs.size();
+  Kokkos::initialize(narg, args_ptrs.data());
 }
 
 ThreadPreferences::ThreadPreferences ()

@@ -239,7 +239,18 @@ static bool in_charge_of_kokkos = false;
 static void initialize_kokkos () {
   if (Kokkos::is_initialized()) return;
   in_charge_of_kokkos = true;
-  std::vector<char*> args;
+  
+  // FIX: Use static storage to ensure strings persist for Kokkos::initialize()
+  // The previous implementation used a local std::vector<char> which went out of 
+  // scope before Kokkos::initialize() could parse the arguments, causing a 
+  // heap-buffer-overflow detected by AddressSanitizer.
+  // Static storage ensures the strings live for the entire program lifetime.
+  static std::vector<std::string> arg_storage;
+  static std::vector<char*> args_ptrs;
+  
+  arg_storage.clear();
+  args_ptrs.clear();
+  
 #ifdef HOMMEXX_ENABLE_GPU
   int nd;
   const auto ret = cudaGetDeviceCount(&nd);
@@ -249,16 +260,17 @@ static void initialize_kokkos () {
   }
   std::stringstream ss;
   ss << "--kokkos-ndevices=" << nd;
-  const auto key = ss.str();
-  std::vector<char> str(key.size()+1);
-  std::copy(key.begin(), key.end(), str.begin());
-  str.back() = 0;
-  args.push_back(const_cast<char*>(str.data()));
+  arg_storage.push_back(ss.str());
+  args_ptrs.push_back(const_cast<char*>(arg_storage.back().c_str()));
 #endif
+
+  // String literals have static storage duration, so this is safe without 
+  // adding to arg_storage
   const char* silence = "--kokkos-disable-warnings";
-  args.push_back(const_cast<char*>(silence));
-  int narg = args.size();
-  Kokkos::initialize(narg, args.data());
+  args_ptrs.push_back(const_cast<char*>(silence));
+  
+  int narg = args_ptrs.size();
+  Kokkos::initialize(narg, args_ptrs.data());
 }
 
 static void check_threading () {
