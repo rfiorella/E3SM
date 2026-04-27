@@ -1323,7 +1323,7 @@ end subroutine micro_p3_readnl
 
     ! CALL P3
     !==============
-    ! TODO: get proper value for 'it' from time module
+    ! Note: 'it' (model time step) is set above via get_nstep().
     precip_liq_surf = 0.0_rtype
     precip_ice_surf = 0.0_rtype
     prec_pcw = 0.0_rtype
@@ -1476,7 +1476,7 @@ end subroutine micro_p3_readnl
 
       call wtrc_p3_inter(state, ptend, pbuf, tend_out, rime_frac, &
                          top_lev, dtime, cld_frac_l, cld_frac_i, cld_frac_r, &
-                         precip_liq_surf, precip_ice_surf)
+                         precip_liq_surf, precip_ice_surf, precip_liq_flux)
     end if
 
     ! Update t_prev and qv_prev to be used by evap_precip

@@ -2068,7 +2068,7 @@ end subroutine wtrc_mg_inter
 !=======================================================================
 subroutine wtrc_p3_inter(state, ptend, pbuf, tend_out, rime_frac, &
                          top_lev, dtime, cld_frac_l, cld_frac_i, cld_frac_r, &
-                         precip_liq_surf, precip_ice_surf)
+                         precip_liq_surf, precip_ice_surf, precip_liq_flux)
 
 !-----------------------------------------------------------------------
 !
@@ -2097,6 +2097,7 @@ subroutine wtrc_p3_inter(state, ptend, pbuf, tend_out, rime_frac, &
 use physics_types,  only: physics_state, physics_ptend
 use physics_buffer, only: physics_buffer_desc
 use physconst,      only: gravit, rhoh2o
+use water_isotopes, only: difrm
 
 !*****************
 !Declare Variables
@@ -2129,6 +2130,9 @@ real(r8), intent(in) :: cld_frac_r(pcols,pver) ! rain cloud fraction
 real(r8), intent(in) :: precip_liq_surf(pcols)  ! liquid precip rate (m/s)
 real(r8), intent(in) :: precip_ice_surf(pcols)  ! ice precip rate (m/s)
 
+!Liquid precipitation flux profile from P3 (kg/m2/s at each interface):
+real(r8), intent(in) :: precip_liq_flux(pcols,pver+1)
+
 !Local variables:
 integer  :: i, k, m, iwset, ncol
 integer  :: msrc, mdst, mbase
@@ -2148,6 +2152,16 @@ real(r8) :: tloc(pcols,pver)
 
 ! Temporary arrays for sign-split process rates
 real(r8) :: qidep_pos(pcols,pver)   ! positive deposition (vapor->ice)
+
+! Rain evaporation partial equilibration variables (Phase 2)
+real(r8) :: dz(pcols,pver)          ! layer thickness in height (m)
+real(r8) :: totrnfx(pcols,pver)     ! rain flux at each level (kg/m2/s)
+real(r8) :: radius                  ! mean raindrop radius (m)
+real(r8) :: fequil                  ! equilibration fraction
+real(r8) :: alpliq                  ! equilibrium liquid-vapor fractionation factor
+real(r8) :: evap_iso                ! isotopic evaporation tendency (kg/kg/s)
+real(r8) :: evap_bulk               ! bulk evaporation rate at this level (kg/kg/s)
+real(r8) :: ivtmp, iltmp, vtmp, ltmp ! temporaries for wtrc_liqvap_equil
 
 ! Sedimentation tendencies from P3
 real(r8) :: sed_tend_liq(pcols,pver)  ! liquid sedimentation tendency
@@ -2191,9 +2205,9 @@ call wtrc_add_rates(pre_rates_grid, ncol, top_lev, iwtvap, iwtice, iwtvap, &
 call wtrc_add_rates(pre_rates_grid, ncol, top_lev, iwtice, iwtvap, iwtice, &
                     tend_out(:,:,23))
 
-! Rain -> vapor: evaporation
-call wtrc_add_rates(pre_rates_grid, ncol, top_lev, iwtstrain, iwtvap, iwtstrain, &
-                    tend_out(:,:,11))
+! Rain -> vapor: evaporation is handled separately with partial isotopic
+! equilibration below (after the main iterative loop). It is intentionally
+! NOT added to the rate matrix here.
 
 ! Liquid -> rain: autoconversion + accretion (no fractionation)
 call wtrc_add_rates(pre_rates_grid, ncol, top_lev, iwtliq, iwtstrain, iwtliq, &
@@ -2346,6 +2360,124 @@ do iter = 1, wtrc_niter
     end do ! i
   end do ! k
 end do ! iter
+
+!**********************************************
+! Phase 2: Rain evaporation with partial isotopic equilibration
+!
+! Rain evaporation was intentionally excluded from the main rate-matrix
+! iterative loop above so that it can receive physically correct
+! fractionation here.  The approach follows the EAMv2-wiso implementation
+! in wtrc_precip_evap (the active, non-Stewart path):
+!
+!   1. Proportional transfer (rain isotope ratio) as a starting point.
+!   2. Partial liquid-vapour isotopic equilibration parameterised by
+!      the timescale from wtrc_equil_time, which uses a Marshall-Palmer
+!      mean raindrop radius.
+!
+! totrnfx is the rain flux (kg/m2/s) derived from P3's precip_liq_flux
+! profile (mean of top and bottom layer interface fluxes), which is the
+! proper input to the Marshall-Palmer radius formula.
+!**********************************************
+
+! Compute layer thickness from interface heights
+do k = top_lev, pver
+  do i = 1, ncol
+    dz(i,k) = state%zi(i,k) - state%zi(i,k+1)
+  end do
+end do
+
+! Rain flux at each level (kg/m2/s) for the Marshall-Palmer radius calculation.
+! Use the mean of the top and bottom interface fluxes from P3's rain sedimentation.
+! precip_liq_flux(i,k) is the flux at the TOP of layer k (interface k),
+! precip_liq_flux(i,k+1) is the flux at the BOTTOM of layer k (interface k+1).
+do k = top_lev, pver
+  do i = 1, ncol
+    totrnfx(i,k) = 0.5_r8 * (precip_liq_flux(i,k) + precip_liq_flux(i,k+1))
+    totrnfx(i,k) = max(0._r8, totrnfx(i,k))
+  end do
+end do
+
+! Apply rain evaporation isotope fractionation
+do k = top_lev, pver
+  do i = 1, ncol
+
+    evap_bulk = tend_out(i,k,11)  ! bulk evap rate (kg/kg/s), positive = evaporation
+
+    if (evap_bulk > 0._r8 .and. &
+        qloc(i,k,wtrc_iawset(iwtstrain,1)) > wtrc_qmin) then
+
+      do iwset = 1, wtrc_nwset
+
+        if (iwset .eq. WTRC_WSET_STD) then
+          ! Standard (bulk) water: proportional transfer to conserve mass
+          qloc(i,k,wtrc_iawset(iwtvap,1))    = qloc(i,k,wtrc_iawset(iwtvap,1))    + evap_bulk * dtime
+          qloc(i,k,wtrc_iawset(iwtstrain,1)) = qloc(i,k,wtrc_iawset(iwtstrain,1)) - evap_bulk * dtime
+          qloc(i,k,wtrc_iawset(iwtstrain,1)) = max(0._r8, qloc(i,k,wtrc_iawset(iwtstrain,1)))
+
+        else if (wisotope) then
+          ispec = iwspec(wtrc_iawset(iwtstrain, iwset))
+
+          ! Equilibrium liquid-vapour fractionation factor (no kinetics here;
+          ! kinetics are folded into fequil via difrm)
+          alpliq = wtrc_get_alpha( &
+            qloc0(i,k,wtrc_iawset(iwtvap,WTRC_WSET_STD)), &
+            tloc(i,k), ispec, iwtvap, iwtliq, .false., 1._r8, .false.)
+
+          ! Marshall-Palmer mean raindrop radius from rain flux
+          if (totrnfx(i,k) > 0._r8) then
+            ! Formula: radius (m) = 2 / (4.1 * (flux_mm_hr)^(-0.21)) / 1000
+            ! where flux_mm_hr = totrnfx * 3600 (totrnfx in kg/m2/s ~ mm/s,
+            ! multiply by 3600 to get mm/hr)
+            radius = 2._r8 / (4.1_r8 * (totrnfx(i,k) * 3600._r8)**(-0.21_r8)) / 1000._r8
+            radius = max(0.1e-3_r8, min(3.e-3_r8, radius))  ! clamp to [0.1, 3] mm
+          else
+            radius = 1.e-3_r8  ! default 1 mm
+          end if
+
+          ! Compute equilibration fraction (fraction of drop exposure time
+          ! relative to isotopic adjustment timescale)
+          call wtrc_equil_time(ispec, tloc(i,k), state%pmid(i,k), &
+                               radius, dz(i,k), alpliq, difrm(ispec), fequil)
+          fequil = min(1._r8, max(0._r8, fequil))
+
+          ! Starting evaporation: proportional to rain isotope ratio.
+          ! Use qloc0 for the bulk denominator so the ratio is computed
+          ! relative to the pre-evaporation bulk rain (the iwset=1 pass
+          ! already decremented qloc(:,iwtstrain,1)).
+          R = wtrc_ratio(ispec, &
+                         qloc(i,k,wtrc_iawset(iwtstrain,iwset)), &
+                         qloc0(i,k,wtrc_iawset(iwtstrain,1)))
+          evap_iso = evap_bulk * R
+
+          ! Apply proportional evaporation tendency
+          qloc(i,k,wtrc_iawset(iwtvap,iwset))    = qloc(i,k,wtrc_iawset(iwtvap,iwset))    + evap_iso * dtime
+          qloc(i,k,wtrc_iawset(iwtstrain,iwset)) = qloc(i,k,wtrc_iawset(iwtstrain,iwset)) - evap_iso * dtime
+          qloc(i,k,wtrc_iawset(iwtstrain,iwset)) = max(0._r8, qloc(i,k,wtrc_iawset(iwtstrain,iwset)))
+
+          ! Partial liquid-vapour isotopic equilibration using fequil.
+          ! wtrc_liqvap_equil adjusts vapiso and liqiso toward equilibrium;
+          ! dliqiso is the change applied to liquid (positive = gain).
+          vtmp  = max(wtrc_qmin, qloc(i,k,wtrc_iawset(iwtvap,1)))
+          ivtmp = qloc(i,k,wtrc_iawset(iwtvap,iwset))
+          ltmp  = max(wtrc_qmin, qloc(i,k,wtrc_iawset(iwtstrain,1)))
+          iltmp = max(0._r8,     qloc(i,k,wtrc_iawset(iwtstrain,iwset)))
+
+          if (ltmp > wtrc_qmin .and. vtmp > wtrc_qmin) then
+            call wtrc_liqvap_equil(alpliq, fequil, vtmp, ltmp, ivtmp, iltmp, dliqiso)
+            ! dliqiso > 0 means liquid gained (vapor lost) isotope mass
+            qloc(i,k,wtrc_iawset(iwtvap,iwset))    = qloc(i,k,wtrc_iawset(iwtvap,iwset))    - dliqiso
+            qloc(i,k,wtrc_iawset(iwtstrain,iwset)) = qloc(i,k,wtrc_iawset(iwtstrain,iwset)) + dliqiso
+          end if
+
+        end if
+      end do ! iwset
+
+    end if
+  end do ! i
+end do ! k
+
+! Update qloc0 so the sedimentation section uses the post-evaporation state
+qloc0(:ncol,top_lev:,:) = qloc(:ncol,top_lev:,:)
 
 !**********************************************
 ! Apply sedimentation proportionally
