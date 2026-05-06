@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir -p /Users/rfiorella/code/E3SM/EAMXX-wiso/.claude /Users/rfiorella/code/E3SM/EAMXX-wiso/specs)",
+      "Read(//data/**)",
+      "Bash(grep -i -E '\\\\.\\(hpp|cpp|h\\)$')",
+      "Bash(grep -rn 'CMP,LEV\\\\|LEV,CMP\\\\|COL,CMP,LEV\\\\|COL,LEV,CMP\\\\|{COL,CMP\\\\|{COL,LEV,CMP' components/eamxx/src/)",
+      "Bash(grep -rn '{COL,CMP,LEV}' components/eamxx/src/)",
+      "Bash(components/eamxx/scripts/test-all-eamxx --help)"
+    ]
+  }
+}

@@ -1,0 +1,28 @@
+project_name: EAMXX-wiso
+workflow_types:
+  - model-e3sm
+spec_storage_mode: immutable      # specs not git-tracked; revisions land as new files
+specs_dir: specs/
+
+model_e3sm:
+  # This project focuses on standalone EAMxx (SCREAM) compilation via CMake,
+  # not full coupled E3SM compsets. Compset is not the primary driver here.
+  build_mode: eamxx-standalone-cmake
+  target_compset: null            # n/a for standalone EAMxx builds
+  target_resolution: ne4          # lowest available; for fast iteration on isotope code
+
+  default_platform: docker-local
+  container_image: rfiorella/model-containers:e3sm-openmpi-dev-latest
+
+  # Path mapping for the docker-local platform.
+  # The container mounts the host source at the /code/... path.
+  host_source_path: /Users/rfiorella/code/E3SM/EAMXX-wiso
+  container_source_path: /code/E3SM/EAMXX-wiso
+
+  # Baseline path is the in-container view; create on first use.
+  baseline_path: /data/baselines/EAMXX-wiso
+  baseline_created: false
+
+  # Pointers to the standalone EAMxx build/test surface inside this repo.
+  eamxx_source_subdir: components/eamxx
+  eamxx_test_command_hint: "cd components/eamxx && ./scripts/test-all-eamxx --help"
