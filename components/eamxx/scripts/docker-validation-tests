@@ -1,0 +1,17 @@
+#!/bin/bash
+# Wrapper to run water-tracers-config-validation-tests inside Docker
+# This ensures the test environment matches the build environment
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+EAMXX_DIR="$(dirname "$SCRIPT_DIR")"
+E3SM_DIR="$(dirname "$(dirname "$EAMXX_DIR")")"
+
+CONTAINER_IMAGE="rfiorella/model-containers:e3sm-openmpi-dev-latest"
+
+echo "Running validation tests in Docker container..."
+docker run --rm \
+  -v "${E3SM_DIR}:${E3SM_DIR}" \
+  "${CONTAINER_IMAGE}" \
+  bash -c "cd ${EAMXX_DIR} && ./scripts/water-tracers-config-validation-tests"

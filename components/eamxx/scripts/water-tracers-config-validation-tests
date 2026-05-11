@@ -1,0 +1,164 @@
+#!/bin/bash
+# Test script to verify CMake validation of water tracer configurations
+# Tests that malformed configs are rejected at configure time with clear errors
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+EAMXX_DIR="$(dirname "$SCRIPT_DIR")"
+TEST_DIR="${EAMXX_DIR}/build/validation_tests"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Test counter
+TESTS_RUN=0
+TESTS_PASSED=0
+
+# Helper: run a test that should FAIL at configure time
+test_should_fail() {
+  local test_name=$1
+  local config_file=$2
+  local expected_error=$3
+
+  TESTS_RUN=$((TESTS_RUN + 1))
+  echo ""
+  echo "========================================="
+  echo "Test: ${test_name}"
+  echo "========================================="
+
+  local build_dir="${TEST_DIR}/${test_name}"
+  rm -rf "${build_dir}"
+  mkdir -p "${build_dir}"
+
+  echo "Config file: ${config_file}"
+  echo "Expected error pattern: ${expected_error}"
+
+  if cmake -S "${EAMXX_DIR}" -B "${build_dir}" \
+      -DCMAKE_BUILD_TYPE=Debug \
+      -DSCREAM_TRACE_WATER=ON \
+      -DSCREAM_WATER_TRACERS_FILE="${config_file}" \
+      &> "${build_dir}/cmake_output.log"; then
+    echo -e "${RED}✗ FAIL${NC}: Configuration succeeded but should have failed"
+    cat "${build_dir}/cmake_output.log"
+    return 1
+  else
+    # Check if error message contains expected pattern
+    if grep -q "${expected_error}" "${build_dir}/cmake_output.log"; then
+      echo -e "${GREEN}✓ PASS${NC}: Configuration failed with expected error"
+      TESTS_PASSED=$((TESTS_PASSED + 1))
+      return 0
+    else
+      echo -e "${YELLOW}⚠ PARTIAL${NC}: Configuration failed but error message doesn't match"
+      echo "Expected pattern: ${expected_error}"
+      echo "Actual output:"
+      cat "${build_dir}/cmake_output.log"
+      return 1
+    fi
+  fi
+}
+
+# Create temporary test config files
+TEMP_CONFIGS="${TEST_DIR}/temp_configs"
+mkdir -p "${TEMP_CONFIGS}"
+
+# Test 1: Empty tracer list
+cat > "${TEMP_CONFIGS}/empty.cmake" << 'EOF'
+# Empty config - no add_water_tracer calls
+EOF
+test_should_fail "empty_tracer_list" "${TEMP_CONFIGS}/empty.cmake" "at least one tracer"
+
+# Test 2: First tracer not H2O
+cat > "${TEMP_CONFIGS}/first_not_h2o.cmake" << 'EOF'
+add_water_tracer(NAME hdo ISOTOPOLOGUE HDO)
+add_water_tracer(NAME bulk ISOTOPOLOGUE H2O)
+EOF
+test_should_fail "first_not_h2o" "${TEMP_CONFIGS}/first_not_h2o.cmake" "First tracer.*must be H2O"
+
+# Test 3: Unknown isotopologue
+cat > "${TEMP_CONFIGS}/unknown_iso.cmake" << 'EOF'
+add_water_tracer(NAME bulk ISOTOPOLOGUE H2O)
+add_water_tracer(NAME fake ISOTOPOLOGUE NOTREAL)
+EOF
+test_should_fail "unknown_isotopologue" "${TEMP_CONFIGS}/unknown_iso.cmake" "Unknown isotopologue"
+
+# Test 4: Duplicate tracer names
+cat > "${TEMP_CONFIGS}/duplicate_names.cmake" << 'EOF'
+add_water_tracer(NAME bulk ISOTOPOLOGUE H2O)
+add_water_tracer(NAME bulk ISOTOPOLOGUE HDO)
+EOF
+test_should_fail "duplicate_names" "${TEMP_CONFIGS}/duplicate_names.cmake" "Duplicate tracer name"
+
+# Test 5: SCREAM_NUM_WATER_TRACERS deprecated
+echo ""
+echo "========================================="
+echo "Test: deprecated_scream_num_water_tracers"
+echo "========================================="
+TESTS_RUN=$((TESTS_RUN + 1))
+
+build_dir="${TEST_DIR}/deprecated_var"
+rm -rf "${build_dir}"
+mkdir -p "${build_dir}"
+
+if cmake -S "${EAMXX_DIR}" -B "${build_dir}" \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DSCREAM_TRACE_WATER=OFF \
+    -DSCREAM_NUM_WATER_TRACERS=2 \
+    &> "${build_dir}/cmake_output.log"; then
+  echo -e "${RED}✗ FAIL${NC}: Configuration succeeded but should have failed"
+  cat "${build_dir}/cmake_output.log"
+else
+  if grep -q "SCREAM_NUM_WATER_TRACERS is deprecated" "${build_dir}/cmake_output.log"; then
+    echo -e "${GREEN}✓ PASS${NC}: Deprecated variable rejected with clear message"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+  else
+    echo -e "${YELLOW}⚠ PARTIAL${NC}: Failed but error message doesn't mention deprecation"
+    cat "${build_dir}/cmake_output.log"
+  fi
+fi
+
+# Test 6: Missing config file
+echo ""
+echo "========================================="
+echo "Test: missing_config_file"
+echo "========================================="
+TESTS_RUN=$((TESTS_RUN + 1))
+
+build_dir="${TEST_DIR}/missing_file"
+rm -rf "${build_dir}"
+mkdir -p "${build_dir}"
+
+if cmake -S "${EAMXX_DIR}" -B "${build_dir}" \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DSCREAM_TRACE_WATER=ON \
+    -DSCREAM_WATER_TRACERS_FILE="/does/not/exist.cmake" \
+    &> "${build_dir}/cmake_output.log"; then
+  echo -e "${RED}✗ FAIL${NC}: Configuration succeeded but should have failed"
+else
+  if grep -q "not found" "${build_dir}/cmake_output.log"; then
+    echo -e "${GREEN}✓ PASS${NC}: Missing file rejected"
+    TESTS_PASSED=$((TESTS_PASSED + 1))
+  else
+    echo -e "${YELLOW}⚠ PARTIAL${NC}: Failed but error message unclear"
+    cat "${build_dir}/cmake_output.log"
+  fi
+fi
+
+# Summary
+echo ""
+echo "========================================="
+echo "Validation Test Summary"
+echo "========================================="
+echo "Tests run: ${TESTS_RUN}"
+echo "Tests passed: ${TESTS_PASSED}"
+
+if [ "${TESTS_PASSED}" -eq "${TESTS_RUN}" ]; then
+  echo -e "${GREEN}All validation tests passed!${NC}"
+  exit 0
+else
+  echo -e "${RED}Some validation tests failed${NC}"
+  exit 1
+fi

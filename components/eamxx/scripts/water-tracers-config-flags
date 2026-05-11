@@ -1,0 +1,31 @@
+#!/bin/bash
+# Helper script to generate CMake flags for water tracer test configurations
+# Usage: ./scripts/water-tracers-config-flags <config_name>
+#
+# Outputs CMake flags suitable for passing to cmake command
+
+set -e
+
+if [ $# -ne 1 ]; then
+  echo "Usage: $0 <config_name>" >&2
+  echo "  config_name: bulk_only | registry_n4" >&2
+  exit 1
+fi
+
+CONFIG=$1
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+EAMXX_DIR="$(dirname "$SCRIPT_DIR")"
+
+case "$CONFIG" in
+  bulk_only)
+    echo "-DSCREAM_WATER_TRACERS_FILE=${EAMXX_DIR}/cmake/water_tracers/bulk_only.cmake"
+    ;;
+  registry_n4)
+    echo "-DSCREAM_WATER_TRACERS_FILE=${EAMXX_DIR}/cmake/water_tracers/registry_n4.cmake"
+    ;;
+  *)
+    echo "Unknown config: $CONFIG" >&2
+    echo "Available: bulk_only, registry_n4" >&2
+    exit 1
+    ;;
+esac

@@ -1,0 +1,25 @@
+#!/bin/bash
+# Wrapper script to run cmake inside Docker container with standard settings
+# Usage: ./scripts/docker-cmake [cmake args...]
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+EAMXX_DIR="$(dirname "$SCRIPT_DIR")"
+E3SM_DIR="$(dirname "$(dirname "$EAMXX_DIR")")"
+
+CONTAINER_IMAGE="rfiorella/model-containers:e3sm-openmpi-dev-latest"
+
+# Standard CMake settings for container builds
+docker run --rm \
+  -v "${E3SM_DIR}:${E3SM_DIR}" \
+  "${CONTAINER_IMAGE}" \
+  bash -c "mkdir -p /tmp/scream_input && cd ${EAMXX_DIR} && cmake \
+    -DCMAKE_CXX_COMPILER=/usr/bin/g++ \
+    -DCMAKE_C_COMPILER=/usr/bin/gcc \
+    -DCMAKE_Fortran_COMPILER=/usr/bin/gfortran \
+    -DCMAKE_MAKE_PROGRAM=/usr/bin/make \
+    -DSCREAM_INPUT_ROOT=/tmp/scream_input \
+    -DSCREAM_TEST_MAX_RANKS=1 \
+    -DSCREAM_ENABLE_BASELINE_TESTS=OFF \
+    $@"
