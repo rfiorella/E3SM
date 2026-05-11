@@ -370,7 +370,9 @@ void SurfaceCouplingExporter::compute_eamxx_exports(const double dt, const bool 
 
   const auto& p_int                = get_field_in("p_int").get_view<const Real**>();
   const auto& pseudo_density       = get_field_in("pseudo_density").get_view<const Pack**>();
-  const auto& qv                   = get_field_in("qv").get_view<const Pack**>();
+  // qv is now rank-3 (COL, CMP, LEV); extract bulk water at CMP=0
+  const auto  qv_rank3             = get_field_in("qv").get_view<const Pack***>();
+  const auto& qv                   = scream::WaterTracers::get_bulk_water_subview(qv_rank3);
   const auto& T_mid                = get_field_in("T_mid").get_view<const Pack**>();
   // TODO: This will need to change if we ever switch from horiz_winds to U and V
   const auto& horiz_winds          = get_field_in("horiz_winds").get_view<const Real***>();

@@ -12,6 +12,7 @@
 #include "share/field/field_identifier.hpp"
 #include "share/field/field.hpp"
 #include "share/field/field_group.hpp"
+#include "physics/water_tracers/water_tracers.hpp"
 
 #include <ekat_comm.hpp>
 #include <ekat_parameter_list.hpp>
@@ -385,7 +386,18 @@ protected:
       tracer_groups.push_back("non_turbulence_advected_tracers");
     }
 
-    FieldIdentifier fid(name, grid->get_3d_scalar_layout(FieldTag::LevelMidPoint), u, grid->name());
+    // qv and all water tracers are ALWAYS allocated as (COL, CMP, LEV) where
+    // CMP = water_tracer dimension of size WTRC_MAX_CNST.
+    // When SCREAM_TRACE_WATER=OFF, WTRC_MAX_CNST=1 (unit CMP dim, no runtime cost).
+    // When SCREAM_TRACE_WATER=ON, WTRC_MAX_CNST=SCREAM_NUM_WATER_TRACERS.
+    // This ensures a single, stable signature across all builds for processes
+    // that need isotope-aware hooks (P3, SHOC, dynamics).
+    // Note: WTRC_MAX_CNST is a preprocessor define, not a namespace member
+    FieldIdentifier fid(name,
+                        grid->get_3d_vector_layout(FieldTag::LevelMidPoint,
+                                                    WTRC_MAX_CNST,
+                                                    "water_tracer"),
+                        u, grid->name());
     FieldRequest req(fid, tracer_groups, ps);
     req.calling_process = this->name();
 
