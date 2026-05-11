@@ -161,11 +161,15 @@ void ZMDeepConvection::run_impl (const double dt)
   const auto& pblh        = get_field_in("pbl_height")    .get_view<const Real*>();
   const auto& landfrac    = get_field_in("landfrac")      .get_view<const Real*>();
   const auto& thl_sec     = get_field_in("thl_sec")       .get_view<const Pack**>();
-  const auto& qc          = get_field_in("qc")            .get_view<const Pack**>();
+  // Water mass tracers are now rank-3 (COL, CMP, LEV); extract bulk water at CMP=0
+  const auto  qc_rank3    = get_field_in("qc")            .get_view<const Pack***>();
+  const auto& qc          = scream::WaterTracers::get_bulk_water_subview(qc_rank3);
 
   // variables updated by ZM
   const auto& T_mid       = get_field_out("T_mid")        .get_view<Pack**>();
-  const auto& qv          = get_field_out("qv")           .get_view<Pack**>();
+  // qv is now rank-3 (COL, CMP, LEV); extract bulk water at CMP=0
+  const auto  qv_rank3    = get_field_out("qv")           .get_view<Pack***>();
+  const auto& qv          = scream::WaterTracers::get_bulk_water_subview(qv_rank3);
   const auto& hwinds_fld  = get_field_out("horiz_winds");
   const auto& uwind       = hwinds_fld.get_component(0)   .get_view<Pack**>();
   const auto& vwind       = hwinds_fld.get_component(1)   .get_view<Pack**>();

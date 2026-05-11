@@ -310,16 +310,24 @@ void P3Microphysics::initialize_impl (const RunType /* run_type */)
     cld_frac_l_in = get_field_in("cldfrac_liq").get_view<const Pack **>();
     cld_frac_i_in = get_field_in("cldfrac_ice").get_view<const Pack **>();
   }
-  const  auto& qv             = get_field_out("qv").get_view<Pack**>();
-  const  auto& qc             = get_field_out("qc").get_view<Pack**>();
+  // All water mass tracers are now rank-3 (COL, CMP, LEV); extract bulk water at CMP=0
+  const  auto  qv_rank3       = get_field_out("qv").get_view<Pack***>();
+  const  auto& qv             = scream::WaterTracers::get_bulk_water_subview(qv_rank3);
+  const  auto  qc_rank3       = get_field_out("qc").get_view<Pack***>();
+  const  auto& qc             = scream::WaterTracers::get_bulk_water_subview(qc_rank3);
   const  auto& nc             = get_field_out("nc").get_view<Pack**>();
-  const  auto& qr             = get_field_out("qr").get_view<Pack**>();
+  const  auto  qr_rank3       = get_field_out("qr").get_view<Pack***>();
+  const  auto& qr             = scream::WaterTracers::get_bulk_water_subview(qr_rank3);
   const  auto& nr             = get_field_out("nr").get_view<Pack**>();
-  const  auto& qi             = get_field_out("qi").get_view<Pack**>();
-  const  auto& qm             = get_field_out("qm").get_view<Pack**>();
+  const  auto  qi_rank3       = get_field_out("qi").get_view<Pack***>();
+  const  auto& qi             = scream::WaterTracers::get_bulk_water_subview(qi_rank3);
+  const  auto  qm_rank3       = get_field_out("qm").get_view<Pack***>();
+  const  auto& qm             = scream::WaterTracers::get_bulk_water_subview(qm_rank3);
   const  auto& ni             = get_field_out("ni").get_view<Pack**>();
   const  auto& bm             = get_field_out("bm").get_view<Pack**>();
-  auto qv_prev                = get_field_out("qv_prev_micro_step").get_view<Pack**>();
+  // qv_prev is also rank-3; extract bulk water
+  auto qv_prev_rank3          = get_field_out("qv_prev_micro_step").get_view<Pack***>();
+  auto qv_prev                = scream::WaterTracers::get_bulk_water_subview(qv_prev_rank3);
   const auto& precip_liq_surf_mass = get_field_out("precip_liq_surf_mass").get_view<Real*>();
   const auto& precip_ice_surf_mass = get_field_out("precip_ice_surf_mass").get_view<Real*>();
   auto cld_frac_r             = get_field_out("rainfrac").get_view<Pack**>();

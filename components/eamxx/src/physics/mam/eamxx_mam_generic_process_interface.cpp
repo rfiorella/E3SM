@@ -329,10 +329,14 @@ void MAMGenericInterface::populate_interstitial_wet_aero(
 void MAMGenericInterface::populate_wet_atm(
     mam_coupling::WetAtmosphere &wet_atm) {
   // store fields only to be converted to dry mmrs in wet_atm_
-  wet_atm.qv = get_field_in("qv").get_view<const Real **>();
-  wet_atm.qc = get_field_in("qc").get_view<const Real **>();
+  // Water mass tracers are now rank-3 (COL, CMP, LEV); extract bulk water at CMP=0
+  const auto qv_rank3 = get_field_in("qv").get_view<const Real ***>();
+  wet_atm.qv = scream::WaterTracers::get_bulk_water_subview(qv_rank3);
+  const auto qc_rank3 = get_field_in("qc").get_view<const Real ***>();
+  wet_atm.qc = scream::WaterTracers::get_bulk_water_subview(qc_rank3);
   wet_atm.nc = get_field_in("nc").get_view<const Real **>();
-  wet_atm.qi = get_field_in("qi").get_view<const Real **>();
+  const auto qi_rank3 = get_field_in("qi").get_view<const Real ***>();
+  wet_atm.qi = scream::WaterTracers::get_bulk_water_subview(qi_rank3);
   wet_atm.ni = get_field_in("ni").get_view<const Real **>();
 }
 void MAMGenericInterface::populate_dry_atm(mam_coupling::DryAtmosphere &dry_atm,

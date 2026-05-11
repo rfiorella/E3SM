@@ -73,7 +73,9 @@ void TurbulentMountainStress::run_impl (const double /* dt */)
 
   // Helper views
   const auto pseudo_density = get_field_in("pseudo_density").get_view<const Pack**>();
-  const auto qv             = get_field_in("qv").get_view<const Pack**>();
+  // qv is now rank-3 (COL, CMP, LEV); extract bulk water at CMP=0
+  const auto qv_rank3       = get_field_in("qv").get_view<const Pack***>();
+  const auto qv             = scream::WaterTracers::get_bulk_water_subview(qv_rank3);
   const auto dz             = m_buffer.dz;
   const auto z_int          = m_buffer.z_int;
 

@@ -283,8 +283,12 @@ void SHOCMacrophysics::initialize_impl (const RunType run_type)
   const auto& surf_evap           = get_field_in("surf_evap").get_view<const Real*>();
   const auto& surf_mom_flux       = get_field_in("surf_mom_flux").get_view<const Real**>();
   const auto& qtracers            = get_group_out("turbulence_advected_tracers").m_monolithic_field->get_strided_view<Pack***>();
-  const auto& qc                  = get_field_out("qc").get_view<Pack**>();
-  const auto& qv                  = get_field_out("qv").get_view<Pack**>();
+  // Water mass tracers are now rank-3 (COL, CMP, LEV); extract bulk water at CMP=0
+  const auto  qc_rank3            = get_field_out("qc").get_view<Pack***>();
+  const auto& qc                  = scream::WaterTracers::get_bulk_water_subview(qc_rank3);
+  // qv is now rank-3 (COL, CMP, LEV); extract bulk water at CMP=0
+  const auto  qv_rank3            = get_field_out("qv").get_view<Pack***>();
+  const auto& qv                  = scream::WaterTracers::get_bulk_water_subview(qv_rank3);
   const auto& tke                 = get_field_out("tke").get_view<Pack**>();
   const auto& cldfrac_liq         = get_field_out("cldfrac_liq").get_view<Pack**>();
   const auto& cldfrac_liq_prev    = get_field_out("cldfrac_liq_prev").get_view<Pack**>();
@@ -613,7 +617,9 @@ void SHOCMacrophysics::check_flux_state_consistency(const double dt)
 
   const auto& pseudo_density = get_field_in ("pseudo_density").get_view<const Pack**>();
   const auto& surf_evap      = get_field_out("surf_evap").get_view<Real*>();
-  const auto& qv             = get_field_out("qv").get_view<Pack**>();
+  // qv is now rank-3 (COL, CMP, LEV); extract bulk water at CMP=0
+  const auto  qv_rank3       = get_field_out("qv").get_view<Pack***>();
+  const auto& qv             = scream::WaterTracers::get_bulk_water_subview(qv_rank3);
 
   const auto nlevs           = m_num_levs;
   const auto nlev_packs      = ekat::npack<Pack>(nlevs);

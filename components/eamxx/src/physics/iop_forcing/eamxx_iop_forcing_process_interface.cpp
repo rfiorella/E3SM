@@ -277,7 +277,9 @@ void IOPForcing::run_impl (const double dt)
   const auto ps = get_field_in("ps").get_view<const Real*>();
   const auto horiz_winds = get_field_out("horiz_winds").get_view<Pack***>();
   const auto T_mid = get_field_out("T_mid").get_view<Pack**>();
-  const auto qv = get_field_out("qv").get_view<Pack**>();
+  // qv is now rank-3 (COL, CMP, LEV); extract bulk water at CMP=0
+  const auto qv_rank3 = get_field_out("qv").get_view<Pack***>();
+  const auto qv = scream::WaterTracers::get_bulk_water_subview(qv_rank3);
   const auto Q = get_group_out("tracers").m_monolithic_field->get_view<Pack***>();
 
   // Load data from IOP files, if necessary

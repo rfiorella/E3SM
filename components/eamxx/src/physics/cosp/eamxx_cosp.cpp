@@ -232,7 +232,9 @@ void Cosp::run_impl (const double dt)
     m_sunlit_real.sync_to_host();
     // Compute z_mid
     const auto T_mid_d = get_field_in("T_mid").get_view<const Real**>();
-    const auto qv_d  = get_field_in("qv").get_view<const Real**>();
+    // qv is now rank-3 (COL, CMP, LEV); extract bulk water at CMP=0
+    const auto qv_rank3_d = get_field_in("qv").get_view<const Real***>();
+    const auto qv_d  = scream::WaterTracers::get_bulk_water_subview(qv_rank3_d);
     const auto p_mid_d = get_field_in("p_mid").get_view<const Real**>();
     const auto phis_d  = get_field_in("phis").get_view<const Real*>();
     const auto pseudo_density_d = get_field_in("pseudo_density").get_view<const Real**>();
@@ -276,10 +278,14 @@ void Cosp::run_impl (const double dt)
     m_z_mid.sync_to_host();
     const auto z_mid_h = m_z_mid.get_view<const Real**,Host>();
     const auto T_mid_h   = get_field_in("T_mid").get_view<const Real**, Host>();
-    const auto qv_h      = get_field_in("qv").get_view<const Real**, Host>();
+    // qv is now rank-3 (COL, CMP, LEV); extract bulk water at CMP=0
+    const auto qv_rank3_h = get_field_in("qv").get_view<const Real***, Host>();
+    const auto qv_h      = scream::WaterTracers::get_bulk_water_subview(qv_rank3_h);
     const auto p_mid_h   = get_field_in("p_mid").get_view<const Real**,Host>();
-    const auto qc_h      = get_field_in("qc").get_view<const Real**, Host>();
-    const auto qi_h      = get_field_in("qi").get_view<const Real**, Host>();
+    const auto qc_rank3_h = get_field_in("qc").get_view<const Real***, Host>();
+    const auto qc_h      = scream::WaterTracers::get_bulk_water_subview(qc_rank3_h);
+    const auto qi_rank3_h = get_field_in("qi").get_view<const Real***, Host>();
+    const auto qi_h      = scream::WaterTracers::get_bulk_water_subview(qi_rank3_h);
     const auto sunlit_h  = m_sunlit_real.get_view<const Real*, Host>();
     const auto skt_h     = get_field_in("surf_radiative_T").get_view<const Real*, Host>();
     const auto p_int_h   = get_field_in("p_int").get_view<const Real**, Host>();

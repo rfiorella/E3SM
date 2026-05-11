@@ -554,10 +554,14 @@ void RRTMGPRadiation::run_impl (const double dt) {
   auto d_sfc_alb_dir_nir = get_field_in("sfc_alb_dir_nir").get_view<const Real*>();
   auto d_sfc_alb_dif_vis = get_field_in("sfc_alb_dif_vis").get_view<const Real*>();
   auto d_sfc_alb_dif_nir = get_field_in("sfc_alb_dif_nir").get_view<const Real*>();
-  auto d_qv = get_field_in("qv").get_view<const Real**>();
-  auto d_qc = get_field_in("qc").get_view<const Real**>();
+  // Water mass tracers are now rank-3 (COL, CMP, LEV); extract bulk water at CMP=0
+  const auto d_qv_rank3 = get_field_in("qv").get_view<const Real***>();
+  auto d_qv = scream::WaterTracers::get_bulk_water_subview(d_qv_rank3);
+  const auto d_qc_rank3 = get_field_in("qc").get_view<const Real***>();
+  auto d_qc = scream::WaterTracers::get_bulk_water_subview(d_qc_rank3);
   auto d_nc = get_field_in("nc").get_view<const Real**>();
-  auto d_qi = get_field_in("qi").get_view<const Real**>();
+  const auto d_qi_rank3 = get_field_in("qi").get_view<const Real***>();
+  auto d_qi = scream::WaterTracers::get_bulk_water_subview(d_qi_rank3);
   auto d_cldfrac_tot = get_field_in("cldfrac_tot").get_view<const Real**>();
   auto d_rel = get_field_in("eff_radius_qc").get_view<const Real**>();
   auto d_rei = get_field_in("eff_radius_qi").get_view<const Real**>();
