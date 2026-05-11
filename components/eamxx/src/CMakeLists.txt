@@ -4,6 +4,10 @@ if (NOT SCREAM_LIB_ONLY)
   target_link_libraries (eamxx_test_support PUBLIC Catch2::Catch2)
 endif()
 
+# Note: Water tracer configuration (SCREAM_TRACE_WATER, SCREAM_NUM_WATER_TRACERS,
+# WTRC_MAX_CNST) is set at components/eamxx/CMakeLists.txt level to ensure it
+# propagates to all subdirectories including tests
+
 add_subdirectory(share)
 
 add_subdirectory(dynamics)

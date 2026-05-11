@@ -21,6 +21,6 @@ if (SCREAM_ENABLE_MAM)
 endif()
 add_subdirectory(gw)
 
-if (SCREAM_TRACE_WATER)
-  add_subdirectory(water_tracers)
-endif()
+# Always add water_tracers subdirectory
+# Note: WTRC_MAX_CNST and SCREAM_TRACE_WATER are set globally in src/CMakeLists.txt
+add_subdirectory(water_tracers)
