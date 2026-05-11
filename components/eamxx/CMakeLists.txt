@@ -526,6 +526,163 @@ endif()
 # scripts work correctly. We are not really interested in building/testing SCREAM.
 if (NOT DEFINED ENV{SCREAM_FAKE_ONLY})
 
+  ####################################################################
+  #            Water tracer configuration                            #
+  ####################################################################
+  # Must be set at this level so WTRC_MAX_CNST is available to ALL
+  # targets including src/, tests/, and all subdirectories
+  option(SCREAM_TRACE_WATER "Enable water isotope tracer support" OFF)
+
+  # DEPRECATED: SCREAM_NUM_WATER_TRACERS is no longer user-settable
+  if (DEFINED SCREAM_NUM_WATER_TRACERS)
+    message(FATAL_ERROR
+      "SCREAM_NUM_WATER_TRACERS is deprecated and cannot be set directly.\n"
+      "Use -DSCREAM_WATER_TRACERS_FILE=<path> to configure tracers.\n"
+      "The tracer count is derived from the configured list.\n"
+      "See components/eamxx/cmake/water_tracers/ for examples.")
+  endif()
+
+  # Water tracer registry: mapping tracer indices to isotopologue catalog
+  set(SCREAM_WATER_TRACERS_FILE "" CACHE FILEPATH
+      "CMake file defining water tracers via add_water_tracer() calls")
+
+  # Global tracer list (populated by add_water_tracer calls)
+  set(SCREAM_WATER_TRACER_LIST "" CACHE INTERNAL "List of configured tracers")
+
+  # Function to register a water tracer
+  # Usage: add_water_tracer(NAME <name> ISOTOPOLOGUE <iso> [TAG])
+  # - NAME: unique per-tracer identifier (e.g., "bulk", "passive", "hdo")
+  # - ISOTOPOLOGUE: one of the catalog names from water_isotopes.hpp WaterIsotopologueNames
+  # - TAG: optional flag indicating this is a passive tag tracer (no fractionation)
+  function(add_water_tracer)
+    cmake_parse_arguments(TRACER "TAG" "NAME;ISOTOPOLOGUE" "" ${ARGN})
+
+    if (NOT DEFINED TRACER_NAME)
+      message(FATAL_ERROR "add_water_tracer: NAME is required")
+    endif()
+    if (NOT DEFINED TRACER_ISOTOPOLOGUE)
+      message(FATAL_ERROR "add_water_tracer: ISOTOPOLOGUE is required")
+    endif()
+
+    # Set TAG flag (default false)
+    if (TRACER_TAG)
+      set(is_tag "true")
+    else()
+      set(is_tag "false")
+    endif()
+
+    # Append to global list (format: "name|isotopologue|is_tag")
+    set(entry "${TRACER_NAME}|${TRACER_ISOTOPOLOGUE}|${is_tag}")
+    set(SCREAM_WATER_TRACER_LIST "${SCREAM_WATER_TRACER_LIST};${entry}"
+        CACHE INTERNAL "List of configured tracers")
+  endfunction()
+
+  if (SCREAM_TRACE_WATER)
+    # Load tracer configuration file if provided
+    if (NOT SCREAM_WATER_TRACERS_FILE)
+      message(FATAL_ERROR
+        "SCREAM_TRACE_WATER=ON requires -DSCREAM_WATER_TRACERS_FILE=<path>.\n"
+        "See components/eamxx/cmake/water_tracers/ for examples.")
+    endif()
+
+    if (NOT EXISTS "${SCREAM_WATER_TRACERS_FILE}")
+      message(FATAL_ERROR
+        "SCREAM_WATER_TRACERS_FILE not found: ${SCREAM_WATER_TRACERS_FILE}")
+    endif()
+
+    # Include the config file (calls add_water_tracer)
+    include("${SCREAM_WATER_TRACERS_FILE}")
+
+    # Remove empty first element if present (artifact of list initialization)
+    if (SCREAM_WATER_TRACER_LIST)
+      list(REMOVE_AT SCREAM_WATER_TRACER_LIST 0)
+    endif()
+
+    # Validation: tracer list must not be empty
+    list(LENGTH SCREAM_WATER_TRACER_LIST tracer_count)
+    if (tracer_count EQUAL 0)
+      message(FATAL_ERROR
+        "SCREAM_WATER_TRACERS_FILE must define at least one tracer.\n"
+        "File: ${SCREAM_WATER_TRACERS_FILE}")
+    endif()
+
+    # Validation: first tracer must be H2O (catalog index 0)
+    list(GET SCREAM_WATER_TRACER_LIST 0 first_tracer)
+    string(REPLACE "|" ";" first_parts "${first_tracer}")
+    list(GET first_parts 1 first_iso)
+    if (NOT first_iso STREQUAL "H2O" AND NOT first_iso STREQUAL "H216O")
+      message(FATAL_ERROR
+        "First tracer (index 0) must be H2O or H216O (catalog index 0).\n"
+        "Found: ${first_iso}\n"
+        "File: ${SCREAM_WATER_TRACERS_FILE}")
+    endif()
+
+    # Validation: check for known isotopologues and duplicates
+    set(known_isotopologues "H2O;H216O;HDO;H218O;H217O;HTO")
+    set(seen_names "")
+    foreach(entry ${SCREAM_WATER_TRACER_LIST})
+      string(REPLACE "|" ";" parts "${entry}")
+      list(GET parts 0 name)
+      list(GET parts 1 iso)
+
+      # Check isotopologue is known
+      if (NOT iso IN_LIST known_isotopologues)
+        message(FATAL_ERROR
+          "Unknown isotopologue '${iso}' in tracer '${name}'.\n"
+          "Known: ${known_isotopologues}\n"
+          "File: ${SCREAM_WATER_TRACERS_FILE}")
+      endif()
+
+      # Check for duplicate names
+      if (name IN_LIST seen_names)
+        message(FATAL_ERROR
+          "Duplicate tracer name '${name}' in tracer list.\n"
+          "File: ${SCREAM_WATER_TRACERS_FILE}")
+      endif()
+      list(APPEND seen_names "${name}")
+    endforeach()
+
+    set(WTRC_MAX_CNST ${tracer_count})
+    message(STATUS "Water tracers configured: ${tracer_count}")
+
+  else()
+    # SCREAM_TRACE_WATER=OFF: single bulk H2O tracer (implicit)
+    set(SCREAM_WATER_TRACER_LIST "bulk|H2O|false" CACHE INTERNAL "")
+    set(WTRC_MAX_CNST 1)
+  endif()
+
+  # Propagate WTRC_MAX_CNST to all targets via add_compile_definitions
+  # This affects all targets defined after this point (src, tests, etc.)
+  add_compile_definitions("WTRC_MAX_CNST=${WTRC_MAX_CNST}")
+  if (SCREAM_TRACE_WATER)
+    add_compile_definitions(SCREAM_TRACE_WATER)
+  endif()
+
+  # Generate water_tracer_registry.gen.hpp
+  set(REGISTRY_GEN_HPP "${CMAKE_CURRENT_BINARY_DIR}/water_tracer_registry.gen.hpp")
+
+  # Build registry entries for the template
+  set(SCREAM_WATER_TRACER_REGISTRY_ENTRIES "")
+  foreach(entry ${SCREAM_WATER_TRACER_LIST})
+    string(REPLACE "|" ";" parts "${entry}")
+    list(GET parts 0 name)
+    list(GET parts 1 iso)
+    list(GET parts 2 is_tag)
+
+    # Append entry (note: catalog_index() is constexpr function in template)
+    set(SCREAM_WATER_TRACER_REGISTRY_ENTRIES
+        "${SCREAM_WATER_TRACER_REGISTRY_ENTRIES}  {\"${name}\", catalog_index(\"${iso}\"), ${is_tag}},\n")
+  endforeach()
+
+  configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/water_tracers/water_tracer_registry.gen.hpp.in"
+    "${REGISTRY_GEN_HPP}"
+    @ONLY
+  )
+
+  # Make generated header available to all downstream targets
+  include_directories("${CMAKE_CURRENT_BINARY_DIR}")
+
   add_subdirectory(tpls)
   add_subdirectory(src)
 
