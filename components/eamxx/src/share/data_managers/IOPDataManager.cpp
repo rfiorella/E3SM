@@ -2,6 +2,7 @@
 #include "share/remap/iop_remapper.hpp"
 #include "share/scorpio_interface/eamxx_scorpio_interface.hpp"
 #include "share/data_managers/IOPDataManager.hpp"
+#include "physics/water_tracers/water_tracers.hpp"
 
 #include <ekat_assert.hpp>
 #include <ekat_pack.hpp>
@@ -725,11 +726,13 @@ set_fields_from_iop_data(const field_mgr_ptr field_mgr, const std::string& grid_
     nc_iop = get_iop_field("NUMLIQ").get_view<Real*>();
   }
   if (set_qc) {
-    qc = field_mgr->get_field("qc", grid_name).get_view<Real**>();
+    const auto qc_rank3 = field_mgr->get_field("qc", grid_name).get_view<Real***>();
+    qc = scream::WaterTracers::get_bulk_water_subview(qc_rank3);
     qc_iop = get_iop_field("CLDLIQ").get_view<Real*>();
   }
   if (set_qi) {
-    qi = field_mgr->get_field("qi", grid_name).get_view<Real**>();
+    const auto qi_rank3 = field_mgr->get_field("qi", grid_name).get_view<Real***>();
+    qi = scream::WaterTracers::get_bulk_water_subview(qi_rank3);
     qi_iop = get_iop_field("CLDICE").get_view<Real*>();
   }
   if (set_ni) {

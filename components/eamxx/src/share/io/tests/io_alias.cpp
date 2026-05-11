@@ -70,7 +70,10 @@ create_test_field_manager(const std::shared_ptr<const AbstractGrid> &grid,
   auto fm = std::make_shared<FieldManager>(grid);
 
   // Create some test fields with realistic EAMxx names
-  FieldIdentifier fid1("qv", layout3d, kg / kg, grid->name());
+  // qv now uses 3D vector layout with water_tracer dimension
+  // Must match the real qv layout from add_tracer()
+  auto layout3d_qv = grid->get_3d_vector_layout(FieldTag::LevelMidPoint, 1, "water_tracer");
+  FieldIdentifier fid1("qv", layout3d_qv, kg / kg, grid->name());
   FieldIdentifier fid2("T_mid", layout3d, K, grid->name());
   FieldIdentifier fid3("ps", layout2d, Pa, grid->name());
 
