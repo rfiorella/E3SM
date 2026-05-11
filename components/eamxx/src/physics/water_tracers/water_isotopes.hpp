@@ -1,10 +1,9 @@
 #ifndef WATER_ISOTOPES
 #define WATER_ISOTOPES
 
-#include "share/eamxx_types.hpp"
-#include "physics_constants.hpp"
+#include "share/core/eamxx_types.hpp"
+#include "share/physics/physics_constants.hpp"
 
-#include "ekat/util/ekat_string_utils.hpp"
 #include "ekat/ekat_scalar_traits.hpp"
 #include "ekat/logging/ekat_logger.hpp"
 
