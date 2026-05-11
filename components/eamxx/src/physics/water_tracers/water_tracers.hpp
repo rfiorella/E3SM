@@ -12,8 +12,14 @@ namespace WaterTracers {
 constexpr int pcnst   = 7; /* value set elsewhere */;
 constexpr int pwtspec = 7; /* value set elsewhere */;
 constexpr int pwtype  = 7; /* value set elsewhere */;
-//constexpr int SET_WTRC_MAX_CNST = /* define as in Fortran environment */;
-constexpr int WTRC_MAX_CNST = 1;
+
+// WTRC_MAX_CNST is provided by CMake as a preprocessor define
+// When SCREAM_TRACE_WATER=OFF: WTRC_MAX_CNST=1 (enforced at configure time)
+// When SCREAM_TRACE_WATER=ON:  WTRC_MAX_CNST=SCREAM_NUM_WATER_TRACERS
+#ifndef WTRC_MAX_CNST
+#error "WTRC_MAX_CNST must be defined by CMake"
+#endif
+
 constexpr int WTRC_WSET_STD = 1;
 
 // Namelist Variables (runtime-configurable)
@@ -42,6 +48,15 @@ inline std::array<double, pwtspec> wtrc_fixed_alpha = {1.0};
 inline std::array<double, pwtspec> wtrc_fixed_rstd  = {1.0};
 
 inline std::string water_tracer_model = "none";
+
+// DEPRECATED: The following arrays are legacy scaffolding that is replaced
+// by the compile-time water tracer registry (water_tracer_registry.hpp).
+// Use the registry query API instead:
+//   - tracer_name(i)          replaces wtrc_names[i]
+//   - tracer_isotopologue(i)  replaces wtrc_species[i]
+//   - tracer_is_tag(i)        replaces wtrc_is_tag[i]
+// These arrays are retained temporarily for backwards compatibility but are
+// not populated and should not be used in new code.
 
 // Tracer name arrays (fixed-length strings like Fortran)
 using NameArray = std::array<std::string, WTRC_MAX_CNST>;
@@ -87,7 +102,21 @@ inline std::array<int, pcnst> iwater = {};
 inline std::array<int, pcnst> iwspec = {};
 inline std::array<bool, pcnst> iwistag = {};
 
-} // namespace water_tracers
+// Subview accessor for bulk water tracer (CMP index 0)
+// Returns a (COL, LEV) view from a rank-3 (COL, CMP, LEV) water field.
+// Compiled in all builds - with WTRC_MAX_CNST=1 (default), this extracts
+// the single CMP slice; with WTRC_MAX_CNST>1, it extracts the bulk tracer.
+//
+// Usage: auto qv_bulk = get_bulk_water_subview(qv_rank3);
+//
+// Template parameter ViewType should be a Kokkos::View<Real***, ...>
+template<typename ViewType>
+KOKKOS_INLINE_FUNCTION
+auto get_bulk_water_subview(const ViewType& water_field_rank3) {
+  return Kokkos::subview(water_field_rank3, Kokkos::ALL(), 0, Kokkos::ALL());
+}
+
+} // namespace WaterTracers
 } // namespace scream
 
 #endif // WATER_TRACERS
