@@ -3,13 +3,13 @@ host_source_path: /code/E3SM/EAMXX-wiso
 container_image: rfiorella/model-containers:e3sm-openmpi-dev-latest
 default_platform: docker-local
 
-# Full-grid Tier-2 target — placeholders, fill in via /init-project
-target_compset: TODO(init-project)
-target_resolution: TODO(init-project)
+# Full-grid Tier-2 target
+target_compset: F2010-SCREAMv1
+target_resolution: ne4pg2_ne4pg2
 
 # DP test harness — referenced by specs with model_specific.dp_proxy: true
-dp_compset: TODO(init-project)
-dp_resolution: TODO(init-project)
+dp_compset: F2010-SCREAMv1-DP
+dp_resolution: ne4pg2
 
 # Where regression and Tier-2 baselines live (host paths; container mount
 # is /home/e3smuser/baselines per docker-local.md)
