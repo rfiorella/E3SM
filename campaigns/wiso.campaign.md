@@ -27,23 +27,27 @@ specs:
   - path: specs/2026-05-26-extend-cloud-multi-tracer.md
   - path: specs/2026-05-26-extend-precip-multi-tracer.md
 
-  # Group 2: fractionation primitives (PRs 6-9). PR 5 lives off-chain.
+  # Group 2: fractionation primitives + utilities (PRs 6-9b). PR 5 lives off-chain.
   - path: specs/2026-05-26-equilibrium-fractionation.md
   - path: specs/2026-05-26-alpha-diff-functions.md
   - path: specs/2026-05-26-net-fractionation.md
   - path: specs/2026-05-26-wtrc-ratio-utility.md
+  - path: specs/2026-05-26-wiso-namelist.md
+  - path: specs/2026-05-26-wtrc-mass-fixer.md
 
   # DP harness brought forward so group 3 specs can use it.
   - path: specs/2026-05-26-dp-harness.md
 
   # Group 3: parameterization hooks (PRs 10-14)
   - path: specs/2026-05-26-ocean-evap-hook.md
+  - path: specs/2026-05-26-surface-flux-inputs.md
   - path: specs/2026-05-26-shoc-hook.md
   - path: specs/2026-05-26-p3-hook.md
   - path: specs/2026-05-26-zm-hook.md
   - path: specs/2026-05-26-rrtmgp-radiation-audit.md
 
-  # Group 4: auxiliary + tagged tracers (PRs 15-20)
+  # Group 4: auxiliary + tagged tracers (PRs 14c, 15-20)
+  - path: specs/2026-05-26-tritium-decay.md
   - path: specs/2026-05-26-ch4-oxidation-hdo.md
   - path: specs/2026-05-26-region-tagged-evap.md
   - path: specs/2026-05-26-sh-decomp-prototype.md
@@ -51,6 +55,11 @@ specs:
   - path: specs/2026-05-26-evap-tracer-multiplicative.md
   - path: specs/2026-05-26-condensation-tagged.md
   - path: specs/2026-05-26-parcel-integrated.md
+
+  # Group 4.5: production support (PRs 20a-20c)
+  - path: specs/2026-05-26-wiso-initial-conditions.md
+  - path: specs/2026-05-26-wiso-diagnostics.md
+  - path: specs/2026-05-26-wiso-restart.md
 
   # Group 5: comprehensive guide
   - path: specs/2026-05-26-wiso-user-guide.md
@@ -91,21 +100,33 @@ baseline policy live in `wiso_campaign_plan.md` in the repo root.
   pre-campaign baseline. Order: enum + add_tracer → qv → cloud → precip,
   because the cloud/precip array shapes follow the qv pattern.
 
-- **Group 2 (PRs 6-9)** — pure functions; no group-1 dependency on
-  fractionation arithmetic. Could run in parallel with group 1, but
-  stacked-PR mode runs them after. PR 9 (`wtrc_ratio` utility) is a
-  blocking dependency for group 3.
+- **Group 2 (PRs 6-9b)** — pure functions (6-9) followed by namelist
+  plumbing (9a) and the mass fixer (9b). PR 9 (`wtrc_ratio` utility) is
+  a blocking dependency for group 3; PR 9a unblocks group-3 hooks that
+  read runtime wiso flags; PR 9b is required before production science
+  runs because small concentrations + roundoff produce negative isotope
+  masses that break sum-of-species closure.
 
 - **DP harness PR before group 3** — group-3 hooks validate against the
   DP harness; harness must merge first.
 
 - **Group 3 (PRs 10-14)** — depends on group 1 (array shapes) and PR 9
   (ratio utility). Order matches frequency of phase-change calls:
-  ocean evap → SHOC → P3 → ZM → RRTMGP audit.
+  ocean evap → surface-flux inputs → SHOC → P3 → ZM → RRTMGP audit.
+  PR 10b (surface-flux inputs) lands immediately after PR 10 because
+  the ocean-evap hook computes the kinetic-fractionation factor and PR
+  10b delivers the bulk flux from the coupler that the hook modifies.
 
-- **Group 4 (PRs 15-20)** — depends on the full stack. PR 17 split into
-  17a (analysis) and 17b (implementation) because spherical-harmonic
-  decomposition is research-grade and benefits from a prototype phase.
+- **Group 4 (PRs 14c, 15-20)** — depends on the full stack. PR 14c
+  (tritium decay) leads the group as a small standalone PR that
+  exercises the catalog's HTO entry. PR 17 split into 17a (analysis)
+  and 17b (implementation) because spherical-harmonic decomposition is
+  research-grade and benefits from a prototype phase.
+
+- **Group 4.5 (PRs 20a-20c)** — production support. IC, diagnostics,
+  restart. Not blocking for scientific build-out but required before
+  multi-year production runs. Group boundary triggers Tier-2 in a
+  multi-segment configuration (restart proof).
 
 - **Group 5 (PR 21b)** — documentation pass at the end.
 

@@ -117,9 +117,10 @@ skill. Repeated here for visibility:
 | DP integration | ~10 min | End-to-end run with hooks active, conservation holds |
 | Full-grid Tier-2 | hours | BFB / non-BFB-with-tolerance vs baseline |
 
-Steps 6-9 stop at Unit. Steps 10-14 add Component + DP. Group boundaries
-(after step 4, after step 9, after step 14, after step 20) trigger
-Tier-2.
+Steps 6-9 stop at Unit. Steps 9a-9b (namelist + mass-fixer) add
+Component. Steps 10-14 add Component + DP. Group boundaries (after
+step 4, after step 9b, after step 14b, after step 20, after step 20c)
+trigger Tier-2.
 
 ## Spec groups
 
@@ -142,17 +143,19 @@ Group 1 boundary: Tier-2 full-grid baseline regenerated with the array
 machinery in place but `tracer_count = 1`. This becomes the baseline for
 groups 2-3.
 
-### Group 2 — fractionation primitives (PRs 6-9)
+### Group 2 — fractionation primitives + utilities (PRs 6-9b)
 
 PR 5 (phase-change enumeration) is moved out of the chain — see
 "Out-of-chain work" below.
 
 | PR | Spec id | Title | Tier | Notes |
 |---|---|---|---|---|
-| 6 | `2026-MM-DD-equilibrium-fractionation` | Equilibrium fractionation functions | 0 | Unit tests vs published tabulated values. CMake-selectable schemes. |
-| 7 | `2026-MM-DD-alpha-diff-functions` | Molecular-diffusivity fractionation | 0 | Unit tests with exact expected values. |
-| 8 | `2026-MM-DD-net-fractionation` | Net fractionation (Brutsaert + Craig-Gordon, Stewart 1975, Ciais-Jouzel 1994) | 0 | Unit tests. CMake-selectable. |
+| 6 | `2026-MM-DD-equilibrium-fractionation` | Equilibrium fractionation functions | 0 | Unit tests vs published tabulated values. CMake-selectable schemes. **Deliverables include** `components/eamxx/tests/water_tracers/data/horita-wesolowski-1994.csv`, `data/majoube-1971.csv`, `data/merlivat-nief-1967.csv` per `tracer-conservation` skill convention. |
+| 7 | `2026-MM-DD-alpha-diff-functions` | Molecular-diffusivity fractionation | 0 | Unit tests with exact expected values. **Deliverables include** `data/merlivat-1978.csv`, `data/schoenemann-2014.csv` (molecular-diffusivity coefficients per isotopologue). |
+| 8 | `2026-MM-DD-net-fractionation` | Net fractionation (Brutsaert + Craig-Gordon, Stewart 1975, Ciais-Jouzel 1994) | 0 | Unit tests. CMake-selectable. **In scope: partial-equilibration kinetics for falling hydrometeors**, mirroring CAM `wtrc_equil_time` (`references/CAM/CAM/src/physics/cam/water_tracers.F90:5636`). Separate from the macrostep evaporation closure. |
 | 9 | `2026-MM-DD-wtrc-ratio-utility` | `wtrc_ratio` utility + `check_isotope_balance.py` deliverable | 0 | Used by everything in group 3. Blocking. |
+| 9a | `2026-MM-DD-wiso-namelist` | YAML / runtime config for the ~10 wiso flags (`trace_water`, `wisotope`, `wtrc_lh2oadj`, `wtrc_lzmlin`, `wtrc_warn_only`, `wtrc_add_cvprecip`, `wtrc_add_stprecip`, `wtrc_alpha_kinetic`, `wtrc_check_total_h2o`, `wtrc_detrain_in_macrop`, `wtrc_use_ice_supsat`) currently sitting as `inline bool` defaults in `water_tracers.hpp:20-31` | 1 | Mirrors CAM `wtrc_readnl`. Blocking for group-3 hooks that read these flags. |
+| 9b | `2026-MM-DD-wtrc-mass-fixer` | Wiso-aware negative-mass / mass-conservation fixer | 1 | Mirrors CAM `wtrc_mass_fixer` (`water_tracers.F90:4233`) + `qneg_module` wiso entries. Required before production science runs — small concentrations + roundoff produce negative isotope masses that break sum-of-species closure. Hooks into EAMxx's existing `qneg`-style mechanism along the species dim. |
 
 ### Group 3 — parameterization hooks (PRs 10-14)
 
@@ -162,6 +165,7 @@ required. Group boundary triggers Tier-2.
 | PR | Spec id | Title | Tier |
 |---|---|---|---|
 | 10 | `2026-MM-DD-ocean-evap-hook` | Ocean evaporation isotope partitioning | 1 |
+| 10b | `2026-MM-DD-surface-flux-inputs` | Coupler-side delivery of wiso surface fluxes (land transpiration from ELM, sea-ice sublimation, ocean from data file in F-compsets). Mirrors CAM `camsrfexch.F90` + `atm_import_export.F90` wiso paths. | 1 |
 | 11 | `2026-MM-DD-shoc-hook` | SHOC phase-change hooks | 1 |
 | 12 | `2026-MM-DD-p3-hook` | P3 microphysics phase-change hooks | 1 |
 | 13 | `2026-MM-DD-zm-hook` | Zhang-McFarlane phase-change hooks | 1 |
@@ -172,10 +176,11 @@ Group 3 boundary: full-grid Tier-2 run with `tracer_count = 4` (H2O,
 HDO, H218O, H217O). Compare against group-2 boundary baseline (slice-0)
 and verify isotope-mass closure and sum-of-species closure.
 
-### Group 4 — auxiliary tracers and tagged tracers (PRs 15-20)
+### Group 4 — auxiliary tracers and tagged tracers (PRs 14c, 15-20)
 
 | PR | Spec id | Title | Tier |
 |---|---|---|---|
+| 14c | `2026-MM-DD-tritium-decay` | HTO radioactive decay using `WaterIsotopologues<Scalar>::hlhto` half-life constant. Mirrors CAM `wtrc_rad_decay` (`water_tracers.F90:6738`). Small standalone PR. | 0 |
 | 15 | `2026-MM-DD-ch4-oxidation-hdo` | CH4 + OH → HDO impact, CMake flag | 1 |
 | 16 | `2026-MM-DD-region-tagged-evap` | Region-tagged evaporation tracer (lat/lon box + shapefile) | 1 |
 | 17a | `2026-MM-DD-sh-decomp-prototype` | Spherical-harmonic decomp prototype (spec_type: analysis) | n/a |
@@ -186,6 +191,18 @@ and verify isotope-mass closure and sum-of-species closure.
 
 Step 17 split into 17a (prototype / analysis) + 17b (implementation) to
 avoid mixing research and implementation in a single PR.
+
+### Group 4.5 — production support (PRs 20a-20c)
+
+Required before production science runs but not blocking for the
+campaign's scientific build-out. Group 4.5 runs after group 4 closes
+and before the final user-guide pass. Group boundary triggers Tier-2.
+
+| PR | Spec id | Title | Tier | Notes |
+|---|---|---|---|---|
+| 20a | `2026-MM-DD-wiso-initial-conditions` | IC dataset + reader for wiso fields | 1 | Mirrors CAM `const_init.F90` wiso paths. Default IC = VSMOW ratios applied to bulk; optional file input for non-trivial spin-up state. Without this, every wiso run starts from arbitrary state → wasted spin-up. |
+| 20b | `2026-MM-DD-wiso-diagnostics` | δ-value derived diagnostics, R/Rvsmow conversions, column-integrated isotope quantities, history field registration | 0 | Mirrors CAM `cam_diagnostics.F90` wiso paths. Output convention: store mass mixing ratios in history; provide derived-field utilities and a Python helper for δ conversion in `python-analysis-conventions` style. |
+| 20c | `2026-MM-DD-wiso-restart` | Restart support for wiso fields | 1 | Required for any multi-segment run. Group 1 specs explicitly defer restart; this PR closes that gap. |
 
 ### Group 5 — comprehensive harness (PR 21, split)
 
@@ -206,7 +223,11 @@ on a PR cadence:
 - **Step 5 (phase-change enumeration)** — produced as
   `docs/wiso/phase_changes.md` via a single `spec_type: analysis` spec
   before group 3. Output is a markdown table grouped by phase-change type
-  and parameterization. Used as the input checklist for PRs 10-14.
+  and parameterization. Used as the input checklist for PRs 10-14. The
+  doc must include a CAM → EAMxx mapping section since EAMxx's SHOC
+  unifies what CAM splits across `clubb_intr.F90`, `macrop_driver.F90`,
+  `convect_shallow.F90`, `uwshcu.F90`, and `vertical_diffusion.F90`;
+  PR 11 (shoc-hook) must reference that mapping to confirm coverage.
 - **References folder population** — one-time setup; not a PR.
 - **Tier-2 baseline regeneration** — happens at group boundaries; the
   orchestrator runs it but it is not its own spec.
@@ -232,7 +253,7 @@ the manifest order.
 Specs in groups 1 and 4 enable `post_completion_review` with
 `performance-specialist` (adding array dims has perf risk in Kokkos
 kernels; tagged-tracer accounting can blow up memory). Specs in groups
-2 and 3 enable `code-reviewer` only.
+2, 3, and 4.5 enable `code-reviewer` only.
 
 ## Validator expectations
 
