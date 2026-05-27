@@ -1,0 +1,35 @@
+project_id: EAMxx-wiso
+host_source_path: /code/E3SM/EAMXX-wiso
+container_image: rfiorella/model-containers:e3sm-openmpi-dev-latest
+default_platform: docker-local
+
+# Full-grid Tier-2 target — placeholders, fill in via /init-project
+target_compset: TODO(init-project)
+target_resolution: TODO(init-project)
+
+# DP test harness — referenced by specs with model_specific.dp_proxy: true
+dp_compset: TODO(init-project)
+dp_resolution: TODO(init-project)
+
+# Where regression and Tier-2 baselines live (host paths; container mount
+# is /home/e3smuser/baselines per docker-local.md)
+baseline_root: /data/baselines
+
+# Spec lifecycle mode: mutable means specs are edited in-place; immutable
+# would freeze originals and require .revN.md files.
+spec_mode: mutable
+
+# Campaign defaults — overridable per-campaign in the manifest
+branch_prefix: wiso
+base_branch: wiso-dev
+remote: origin
+
+# Skills this project references (loaded on demand by agents)
+skills:
+  - spec-schema
+  - e3sm-build-and-test
+  - e3sm-platforms
+  - eamxx-cpp-conventions
+  - tracer-conservation
+  - regression-baseline
+  - scientific-modeling-conventions
