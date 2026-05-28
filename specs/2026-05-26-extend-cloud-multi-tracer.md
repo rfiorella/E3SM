@@ -1,6 +1,6 @@
 ---
 spec_id: 2026-05-26-extend-cloud-multi-tracer
-spec_type: model-e3sm
+spec_type: model-eamxx
 spec_version: 1
 title: "EAMxx: extend qc, qi to (COL, species, LEV)"
 created: 2026-05-26T00:00:00-06:00

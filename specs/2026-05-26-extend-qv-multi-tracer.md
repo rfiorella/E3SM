@@ -1,6 +1,6 @@
 ---
 spec_id: 2026-05-26-extend-qv-multi-tracer
-spec_type: model-e3sm
+spec_type: model-eamxx
 spec_version: 1
 title: "EAMxx: extend qv to (COL, species, LEV) via water_tracers helper"
 created: 2026-05-26T00:00:00-06:00
