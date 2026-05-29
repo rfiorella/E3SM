@@ -7,6 +7,8 @@ created: 2026-05-28T00:00:00-06:00
 author: rfiorella
 project: EAMxx-wiso
 
+dependencies: []
+
 inputs:
   source_files:
     - wiso_group1_campaign_revision.md
@@ -26,15 +28,17 @@ deliverables:
   - cmake/add_water_tracer.cmake
   - docs/wiso/tracer_data_model.md
   - tests/water_tracers/CMakeLists.txt
+  - tests/water_tracers/test_build_water_tracers.sh
 
 success_criteria:
   - id: compile-metadata-headers
     type: shell
-    cmd: "cd components/eamxx && cmake -S . -B build/pr1 -DCMAKE_BUILD_TYPE=Debug && cmake --build build/pr1 --target water_tracers -j"
+    cmd: "bash tests/water_tracers/test_build_water_tracers.sh"
     expect: exit_zero
     phase: implementation
     verifies:
       - deliverable: components/eamxx/src/physics/water_tracers/water_tracer_metadata.hpp
+      - claim: "WaterTracerMetadata and WaterTracerRegistry compile without errors"
 
   - id: cmake-add-tracer-valid
     type: shell
@@ -52,6 +56,7 @@ success_criteria:
     phase: implementation
     verifies:
       - deliverable: components/eamxx/src/physics/water_tracers/prototype/qv_extension_test.cpp
+      - claim: "Prototype code demonstrating qv(tracer,col,lev) extension compiles successfully"
 
   - id: prototype-bfb-gate
     type: shell
@@ -59,6 +64,8 @@ success_criteria:
     expect: exit_zero
     gate: blocking
     phase: testing
+    depends_on:
+      - prototype-compiles
     verifies:
       - claim: "SCREAM_NUM_TRACERS=1 produces BFB-identical results vs scalar baseline OR rtol < 1e-12"
     on_fail: halt_after_investigation
@@ -70,6 +77,8 @@ success_criteria:
     expect: exit_zero
     gate: blocking
     phase: testing
+    depends_on:
+      - prototype-compiles
     verifies:
       - claim: "Performance overhead < 2% for SCREAM_NUM_TRACERS=1 vs scalar"
     on_fail: halt_after_investigation
