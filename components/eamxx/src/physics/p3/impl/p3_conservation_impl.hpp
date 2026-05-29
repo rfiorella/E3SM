@@ -4,6 +4,12 @@
 #include "p3_functions.hpp"
 #include "share/physics/physics_constants.hpp"
 
+/*
+ * NOTE (Water Tracers): qv field now has tracer dimension (tracer, col, lev).
+ * Interface layer extracts slot-0 bulk water via get_tracer_bulk_subview(),
+ * so kernels here receive 2D views (col, lev) and require no changes.
+ */
+
 namespace scream {
 namespace p3 {
 

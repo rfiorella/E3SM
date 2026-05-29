@@ -22,3 +22,10 @@ EkatCreateUnitTest(test_qv_shoc
   LIBS scream_share
   THREADS 1
 )
+
+# Test 4: P3 qv field access with tracer dimension
+EkatCreateUnitTest(test_qv_p3
+  SOURCES test_qv_p3.cpp
+  LIBS scream_share
+  THREADS 1
+)
