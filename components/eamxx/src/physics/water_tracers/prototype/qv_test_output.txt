@@ -1,0 +1,18 @@
+QV Extension Prototype Test Results
+====================================
+
+Configuration:
+  ncols      = 384
+  nlevs      = 72
+  ntracers   = 1
+  iterations = 100
+
+BFB Check:
+  Max diff: 0.000000e+00
+  BFB: PASS
+
+Performance Check:
+  Scalar runtime: 1457 us
+  Tracer runtime: 1367 us
+  Overhead: -6.18%
+  Performance: PASS

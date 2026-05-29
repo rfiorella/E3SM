@@ -130,6 +130,22 @@ PointGrid::get_3d_tensor_layout (const FieldTag vtag,
   return fl.rename_dims(m_special_tag_names);
 }
 
+FieldLayout
+PointGrid::get_3d_tracer_layout (const int ntracers, const std::string& name) const
+{
+  using namespace ShortFieldTagsNames;
+
+  // Tracer layout is (tracer, col, lev) - tracer dimension comes first
+  // Use model levels (LEV) as the default vertical dimension
+  int nvl = this->get_num_vertical_levels();
+
+  FieldLayout fl({TRACER, COL, LEV}, {ntracers, get_num_local_dofs(), nvl});
+  if (!name.empty()) {
+    fl.rename_dim(0, name);
+  }
+  return fl.rename_dims(m_special_tag_names);
+}
+
 std::shared_ptr<AbstractGrid>
 PointGrid::clone (const std::string& clone_name,
                   const bool shallow) const

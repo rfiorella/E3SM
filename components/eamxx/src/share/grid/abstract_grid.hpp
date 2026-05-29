@@ -103,6 +103,11 @@ public:
   get_3d_tensor_layout(const FieldTag vtag, const std::vector<int> &cmp_dims,
                        const std::vector<std::string> &cmp_dims_names) const = 0;
 
+  // Tracer-dimension layout: (tracer, col, lev)
+  // Used for water species extended to support isotope tracers
+  virtual FieldLayout get_3d_tracer_layout(const int ntracers,
+                                           const std::string& name = "") const = 0;
+
   // Some shortcut versions of the above ones, where the name of the vector/tensor
   // components are all equal to e2str(CMP)
   FieldLayout get_2d_vector_layout(const int vector_dim) const;

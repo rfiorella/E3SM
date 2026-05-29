@@ -130,6 +130,22 @@ SEGrid::get_3d_tensor_layout (const FieldTag vtag,
   return fl.rename_dims(m_special_tag_names);
 }
 
+FieldLayout
+SEGrid::get_3d_tracer_layout (const int ntracers, const std::string& name) const
+{
+  using namespace ShortFieldTagsNames;
+
+  // For SE grid, tracer layout is (tracer, elem, gp, gp, lev)
+  // Tracer dimension comes first to match physics grid pattern
+  int nvl = this->get_num_vertical_levels();
+
+  FieldLayout fl({TRACER, EL, GP, GP, LEV}, {ntracers, m_num_local_elem, m_num_gp, m_num_gp, nvl});
+  if (!name.empty()) {
+    fl.rename_dim(0, name);
+  }
+  return fl.rename_dims(m_special_tag_names);
+}
+
 std::shared_ptr<AbstractGrid> SEGrid::clone (const std::string& clone_name, const bool shallow) const
 {
   auto grid = std::make_shared<SEGrid>(clone_name,m_num_local_elem,m_num_gp,get_num_vertical_levels(),get_comm());

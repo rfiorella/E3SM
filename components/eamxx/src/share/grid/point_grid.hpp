@@ -56,6 +56,9 @@ public:
                                     const std::vector<int>& cmp_dims,
                                     const std::vector<std::string>& cmp_names) const override;
 
+  FieldLayout get_3d_tracer_layout (const int ntracers,
+                                    const std::string& name = "") const override;
+
   FieldTag get_partitioned_dim_tag () const override {
     return FieldTag::Column;
   }

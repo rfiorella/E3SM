@@ -90,6 +90,9 @@ if (NOT DEFINED ENV{SCREAM_FAKE_ONLY})
   if (NOT EKAT_ENABLE_COMPUTE_SANITIZER)
     add_subdirectory(multi-process)
   endif()
+
+  # Water tracer infrastructure tests
+  add_subdirectory(water_tracers)
   
   if (EAMXX_ENABLE_PYSCREAM)
     add_subdirectory(python)

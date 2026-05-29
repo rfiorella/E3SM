@@ -1,0 +1,2 @@
+{"ts":"2026-05-29T00:00:00Z","campaign_id":"2026-05-29-wiso-group1-revised","type":"campaign_started","base_branch":"eamxx-wiso-dev","remote":"origin","total_specs":8}
+{"ts":"2026-05-29T22:07:36Z","campaign_id":"2026-05-29-wiso-group1-revised","type":"spec_dispatched","spec_id":"2026-05-28-extend-qv-tracer-2a-infrastructure","position":2,"total":8,"branch":"wiso-02-extend-qv-tracer-2a-infrastructure","base_ref":"wiso/01-water-tracer-metadata-and-gate"}
