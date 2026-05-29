@@ -142,21 +142,21 @@ void RRTMGPRadiation::create_requests() {
   add_field<Required>("p_mid" , scalar3d_mid, Pa, grid_name);
   add_field<Required>("p_int", scalar3d_int, Pa, grid_name);
   add_field<Required>("pseudo_density", scalar3d_mid, Pa, grid_name);
-  add_field<Required>("sfc_alb_dir_vis", scalar2d, none, grid_name);
   add_field<Required>("sfc_alb_dir_nir", scalar2d, none, grid_name);
   add_field<Required>("sfc_alb_dif_vis", scalar2d, none, grid_name);
   add_field<Required>("sfc_alb_dif_nir", scalar2d, none, grid_name);
-  add_field<Required>("qc", scalar3d_mid, kg/kg, grid_name);
+
+  // qv, qc, qi now use tracer-aware layout (tracer, col, lev)
+  // SCREAM_NUM_TRACERS is defined by CMake build system
+  auto tracer_layout = m_grid->get_3d_tracer_layout(SCREAM_NUM_TRACERS);
+  add_field<Required>("qv", tracer_layout, kg/kg, grid_name);
+  add_field<Required>("qc", tracer_layout, kg/kg, grid_name);
+  add_field<Required>("qi", tracer_layout, kg/kg, grid_name);
+
   add_field<Required>("nc", scalar3d_mid, 1/kg, grid_name);
-  add_field<Required>("qi", scalar3d_mid, kg/kg, grid_name);
   add_field<Required>("cldfrac_tot", scalar3d_mid, none, grid_name);
   add_field<Required>("eff_radius_qc", scalar3d_mid, micron, grid_name);
   add_field<Required>("eff_radius_qi", scalar3d_mid, micron, grid_name);
-
-  // qv now uses tracer-aware layout (tracer, col, lev)
-  // SCREAM_NUM_TRACERS is defined by CMake build system
-  auto qv_layout = m_grid->get_3d_tracer_layout(SCREAM_NUM_TRACERS);
-  add_field<Required>("qv", qv_layout, kg/kg, grid_name);
 
   add_field<Required>("surf_lw_flux_up",scalar2d,W/(m*m),grid_name);
   // Set of required gas concentration fields
@@ -561,13 +561,15 @@ void RRTMGPRadiation::run_impl (const double dt) {
   auto d_sfc_alb_dif_vis = get_field_in("sfc_alb_dif_vis").get_view<const Real*>();
   auto d_sfc_alb_dif_nir = get_field_in("sfc_alb_dif_nir").get_view<const Real*>();
 
-  // qv has tracer dimension (tracer, col, lev) - extract slot-0 bulk water via subview
+  // qv, qc, qi have tracer dimension (tracer, col, lev) - extract slot-0 bulk water via subview
   auto d_qv_3d = get_field_in("qv").get_view<const Real***>();
   auto d_qv = get_tracer_bulk_subview(d_qv_3d);
+  auto d_qc_3d = get_field_in("qc").get_view<const Real***>();
+  auto d_qc = get_tracer_bulk_subview(d_qc_3d);
+  auto d_qi_3d = get_field_in("qi").get_view<const Real***>();
+  auto d_qi = get_tracer_bulk_subview(d_qi_3d);
 
-  auto d_qc = get_field_in("qc").get_view<const Real**>();
   auto d_nc = get_field_in("nc").get_view<const Real**>();
-  auto d_qi = get_field_in("qi").get_view<const Real**>();
   auto d_cldfrac_tot = get_field_in("cldfrac_tot").get_view<const Real**>();
   auto d_rel = get_field_in("eff_radius_qc").get_view<const Real**>();
   auto d_rei = get_field_in("eff_radius_qi").get_view<const Real**>();

@@ -76,14 +76,14 @@ void P3Microphysics::create_requests()
   add_field<Updated> ("T_mid",       scalar3d_layout_mid, K,      grid_name, ps);  // T_mid is the only one of these variables that is also updated.
 
   // Prognostic State:  (all fields are both input and output)
-  // qv now uses tracer-aware layout (tracer, col, lev)
+  // qv, qc, qi, qm now use tracer-aware layout (tracer, col, lev)
   // SCREAM_NUM_TRACERS is defined by CMake build system
-  auto qv_layout = m_grid->get_3d_tracer_layout(SCREAM_NUM_TRACERS);
-  add_field<Updated>("qv", qv_layout, kg/kg, grid_name, ps);
-  add_tracer<Updated>("qc", m_grid, kg/kg, ps);
+  auto tracer_layout = m_grid->get_3d_tracer_layout(SCREAM_NUM_TRACERS);
+  add_field<Updated>("qv", tracer_layout, kg/kg, grid_name, ps);
+  add_field<Updated>("qc", tracer_layout, kg/kg, grid_name, ps);
+  add_field<Updated>("qi", tracer_layout, kg/kg, grid_name, ps);
+  add_field<Updated>("qm", tracer_layout, kg/kg, grid_name, ps);
   add_tracer<Updated>("qr", m_grid, kg/kg, ps);
-  add_tracer<Updated>("qi", m_grid, kg/kg, ps);
-  add_tracer<Updated>("qm", m_grid, kg/kg, ps);
   add_tracer<Updated>("nc", m_grid, 1/kg,  ps);
   add_tracer<Updated>("nr", m_grid, 1/kg,  ps);
   add_tracer<Updated>("ni", m_grid, 1/kg,  ps);
@@ -314,15 +314,18 @@ void P3Microphysics::initialize_impl (const RunType /* run_type */)
     cld_frac_l_in = get_field_in("cldfrac_liq").get_view<const Pack **>();
     cld_frac_i_in = get_field_in("cldfrac_ice").get_view<const Pack **>();
   }
-  // qv now has tracer dimension (tracer, col, lev) - extract slot-0 bulk water via subview
+  // qv, qc, qi, qm now have tracer dimension (tracer, col, lev) - extract slot-0 bulk water via subview
   const  auto& qv_3d          = get_field_out("qv").get_view<Pack***>();
   const  auto& qv             = get_tracer_bulk_subview(qv_3d);
-  const  auto& qc             = get_field_out("qc").get_view<Pack**>();
+  const  auto& qc_3d          = get_field_out("qc").get_view<Pack***>();
+  const  auto& qc             = get_tracer_bulk_subview(qc_3d);
+  const  auto& qi_3d          = get_field_out("qi").get_view<Pack***>();
+  const  auto& qi             = get_tracer_bulk_subview(qi_3d);
+  const  auto& qm_3d          = get_field_out("qm").get_view<Pack***>();
+  const  auto& qm             = get_tracer_bulk_subview(qm_3d);
   const  auto& nc             = get_field_out("nc").get_view<Pack**>();
   const  auto& qr             = get_field_out("qr").get_view<Pack**>();
   const  auto& nr             = get_field_out("nr").get_view<Pack**>();
-  const  auto& qi             = get_field_out("qi").get_view<Pack**>();
-  const  auto& qm             = get_field_out("qm").get_view<Pack**>();
   const  auto& ni             = get_field_out("ni").get_view<Pack**>();
   const  auto& bm             = get_field_out("bm").get_view<Pack**>();
   auto qv_prev                = get_field_out("qv_prev_micro_step").get_view<Pack**>();

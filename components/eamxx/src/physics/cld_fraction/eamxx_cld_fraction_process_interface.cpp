@@ -1,5 +1,6 @@
 #include "eamxx_cld_fraction_process_interface.hpp"
 #include "share/property_checks/field_within_interval_check.hpp"
+#include "share/field/field_tracer_access.hpp"
 #include "physics/cld_fraction/cld_fraction_functions.hpp"
 
 #ifdef EAMXX_HAS_PYTHON
@@ -36,9 +37,13 @@ void CldFraction::create_requests()
   // Layout for 3D (2d horiz X 1d vertical) variable defined at mid-level and interfaces
   auto scalar3d_layout_mid = m_grid->get_3d_scalar_layout(LEV);
 
+  // qi now uses tracer-aware layout (tracer, col, lev)
+  // SCREAM_NUM_TRACERS is defined by CMake build system
+  auto tracer_layout = m_grid->get_3d_tracer_layout(SCREAM_NUM_TRACERS);
+
   // Set of fields used strictly as input
   constexpr int ps = Pack::n;
-  add_tracer<Required>("qi", m_grid, kg/kg, ps);
+  add_field<Required>("qi", tracer_layout, kg/kg, grid_name, ps);
   add_field<Required>("cldfrac_liq", scalar3d_layout_mid, none, grid_name,ps);
 
   // Set of fields used strictly as output
@@ -83,7 +88,8 @@ void CldFraction::run_impl (const double /* dt */)
 {
   // Calculate ice cloud fraction and total cloud fraction given the liquid cloud fraction
   // and the ice mass mixing ratio.
-  auto qi   = get_field_in("qi");
+  // qi now has tracer dimension (tracer, col, lev) - extract slot-0 bulk water via subview
+  auto qi_3d = get_field_in("qi");
   auto liq_cld_frac = get_field_in("cldfrac_liq");
   auto ice_cld_frac = get_field_out("cldfrac_ice");
   auto tot_cld_frac = get_field_out("cldfrac_tot");
@@ -92,6 +98,8 @@ void CldFraction::run_impl (const double /* dt */)
 
 #ifdef EAMXX_HAS_PYTHON
   if (has_py_module()) {
+    // NOTE: Python interface receives 3D qi array (tracer, col, lev).
+    // Python code may need updating to extract slot-0 if it expects 2D.
     pybind11::array py_qi,
                     py_liq_cld_frac,
                     py_ice_cld_frac,
@@ -107,7 +115,7 @@ void CldFraction::run_impl (const double /* dt */)
       py_ice_cld_frac_4out = get_py_field_dev("cldfrac_ice_for_analysis");
       py_tot_cld_frac_4out = get_py_field_dev("cldfrac_tot_for_analysis");
     } else {
-      qi.sync_to_host();
+      qi_3d.sync_to_host();
       liq_cld_frac.sync_to_host();
       py_qi                = get_py_field_host("qi");
       py_liq_cld_frac      = get_py_field_host("cldfrac_liq");
@@ -139,7 +147,9 @@ void CldFraction::run_impl (const double /* dt */)
   using CldFractionFunc = cld_fraction::CldFractionFunctions<Real, DefaultDevice>;
   using Pack = CldFractionFunc::Pack;
 
-  auto qi_v                = qi.get_view<const Pack**>();
+  // qi has tracer dimension - extract slot-0 bulk water via subview
+  auto qi_3d_v             = qi_3d.get_view<const Pack***>();
+  auto qi_v                = get_tracer_bulk_subview(qi_3d_v);
   auto liq_cld_frac_v      = liq_cld_frac.get_view<const Pack**>();
   auto ice_cld_frac_v      = ice_cld_frac.get_view<Pack**>();
   auto tot_cld_frac_v      = tot_cld_frac.get_view<Pack**>();

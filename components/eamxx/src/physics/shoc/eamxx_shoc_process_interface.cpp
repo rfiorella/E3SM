@@ -64,10 +64,10 @@ void SHOCMacrophysics::create_requests()
   add_field<Updated>("surf_evap",       scalar2d    , kg/(m2*s), grid_name);
   add_field<Updated> ("T_mid",          scalar3d_mid, K,         grid_name, ps);
 
-  // qv now uses tracer-aware layout (tracer, col, lev)
+  // qv, qc now use tracer-aware layout (tracer, col, lev)
   // SCREAM_NUM_TRACERS is defined by CMake build system
-  auto qv_layout = m_grid->get_3d_tracer_layout(SCREAM_NUM_TRACERS);
-  add_field<Updated>("qv", qv_layout, kg/kg, grid_name, ps);
+  auto tracer_layout = m_grid->get_3d_tracer_layout(SCREAM_NUM_TRACERS);
+  add_field<Updated>("qv", tracer_layout, kg/kg, grid_name, ps);
 
   // If TMS is a process, add surface drag coefficient to required fields
   if (m_params.get<bool>("apply_tms", false)) {
@@ -86,7 +86,7 @@ void SHOCMacrophysics::create_requests()
   add_field<Updated>("eddy_diff_mom", scalar3d_mid, m2/s,    grid_name, ps);
   add_field<Updated>("cldfrac_liq",   scalar3d_mid, none,    grid_name, ps);
   add_tracer<Updated>("tke", m_grid, m2/s2, ps);
-  add_tracer<Updated>("qc",  m_grid, kg/kg, ps);
+  add_field<Updated>("qc", tracer_layout, kg/kg, grid_name, ps);
 
   // Output variables
   add_field<Computed>("pbl_height",       scalar2d    , m,            grid_name);
@@ -288,11 +288,12 @@ void SHOCMacrophysics::initialize_impl (const RunType run_type)
   const auto& surf_evap           = get_field_in("surf_evap").get_view<const Real*>();
   const auto& surf_mom_flux       = get_field_in("surf_mom_flux").get_view<const Real**>();
   const auto& qtracers            = get_group_out("turbulence_advected_tracers").m_monolithic_field->get_strided_view<Pack***>();
-  const auto& qc                  = get_field_out("qc").get_view<Pack**>();
 
-  // qv now has tracer dimension (tracer, col, lev) - extract slot-0 bulk water via subview
+  // qv, qc now have tracer dimension (tracer, col, lev) - extract slot-0 bulk water via subview
   const auto& qv_3d               = get_field_out("qv").get_view<Pack***>();
   const auto& qv                  = get_tracer_bulk_subview(qv_3d);
+  const auto& qc_3d               = get_field_out("qc").get_view<Pack***>();
+  const auto& qc                  = get_tracer_bulk_subview(qc_3d);
 
   const auto& tke                 = get_field_out("tke").get_view<Pack**>();
   const auto& cldfrac_liq         = get_field_out("cldfrac_liq").get_view<Pack**>();

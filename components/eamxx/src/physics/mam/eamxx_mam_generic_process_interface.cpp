@@ -1,6 +1,7 @@
 #include <physics/mam/eamxx_mam_generic_process_interface.hpp>
 #include <physics/mam/physical_limits.hpp>
 #include <share/property_checks/field_within_interval_check.hpp>
+#include <share/field/field_tracer_access.hpp>
 
 #include <ekat_team_policy_utils.hpp>
 
@@ -329,10 +330,15 @@ void MAMGenericInterface::populate_interstitial_wet_aero(
 void MAMGenericInterface::populate_wet_atm(
     mam_coupling::WetAtmosphere &wet_atm) {
   // store fields only to be converted to dry mmrs in wet_atm_
-  wet_atm.qv = get_field_in("qv").get_view<const Real **>();
-  wet_atm.qc = get_field_in("qc").get_view<const Real **>();
+  // qv, qc, qi have tracer dimension (tracer, col, lev) - extract slot-0 bulk water via subview
+  auto qv_3d = get_field_in("qv").get_view<const Real ***>();
+  wet_atm.qv = get_tracer_bulk_subview(qv_3d);
+  auto qc_3d = get_field_in("qc").get_view<const Real ***>();
+  wet_atm.qc = get_tracer_bulk_subview(qc_3d);
+  auto qi_3d = get_field_in("qi").get_view<const Real ***>();
+  wet_atm.qi = get_tracer_bulk_subview(qi_3d);
+
   wet_atm.nc = get_field_in("nc").get_view<const Real **>();
-  wet_atm.qi = get_field_in("qi").get_view<const Real **>();
   wet_atm.ni = get_field_in("ni").get_view<const Real **>();
 }
 void MAMGenericInterface::populate_dry_atm(mam_coupling::DryAtmosphere &dry_atm,
@@ -380,15 +386,20 @@ void MAMGenericInterface::add_tracers_wet_atm() {
   constexpr auto q_unit = kg / kg;  // units of mass mixing ratios of tracers
   constexpr auto n_unit = 1 / kg;   // units of number mixing ratios of tracers
 
+  // qv, qc, qi now use tracer-aware layout (tracer, col, lev)
+  // SCREAM_NUM_TRACERS is defined by CMake build system
+  auto tracer_layout = grid_->get_3d_tracer_layout(SCREAM_NUM_TRACERS);
+  const auto &grid_name = grid_->name();
+
   // atmospheric quantities
   // specific humidity [kg/kg]
-  add_tracer<Required>("qv", grid_, q_unit);
+  add_field<Required>("qv", tracer_layout, q_unit, grid_name);
 
   // cloud liquid mass mixing ratio [kg/kg]
-  add_tracer<Required>("qc", grid_, q_unit);
+  add_field<Required>("qc", tracer_layout, q_unit, grid_name);
 
   // cloud ice mass mixing ratio [kg/kg]
-  add_tracer<Required>("qi", grid_, q_unit);
+  add_field<Required>("qi", tracer_layout, q_unit, grid_name);
 
   // cloud ice number mixing ratio [1/kg]
   add_tracer<Required>("ni", grid_, n_unit);

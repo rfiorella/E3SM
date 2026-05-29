@@ -28,7 +28,17 @@ add_executable(test_qv_surface test_qv_surface.cpp)
 target_link_libraries(test_qv_surface scream_share Catch2::Catch2 Kokkos::kokkos)
 add_test(NAME test_qv_surface COMMAND test_qv_surface)
 
+# Unit tests for cloud tracer (qc, qi, qm) access (PR 3)
+# These tests validate that processes correctly access cloud tracer slot-0 from tracer-aware fields
+
+add_executable(test_cloud_tracer_access test_cloud_tracer_access.cpp)
+target_link_libraries(test_cloud_tracer_access scream_share Catch2::Catch2 Kokkos::kokkos)
+add_test(NAME test_cloud_tracer_access COMMAND test_cloud_tracer_access)
+
+add_executable(test_cloud_transport test_cloud_transport.cpp)
+target_link_libraries(test_cloud_transport scream_share Catch2::Catch2 Kokkos::kokkos)
+add_test(NAME test_cloud_transport COMMAND test_cloud_transport)
+
 # Future tests will be added here:
-# - CMake add_water_tracer function test
-# - Prototype qv_extension_test
+# - Precipitation tracer tests (PR 4)
 # - Tracer ratio validation test (PR 5)
