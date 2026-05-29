@@ -5,8 +5,8 @@ created: 2026-05-28
 author: rfiorella
 project: EAMxx-wiso
 
-repo_path: /code/E3SM/EAMXX-wiso
-base_branch: wiso-dev
+repo_path: /vast/home/rfiorella/E3SM
+base_branch: eamxx-wiso-dev
 remote: origin
 
 branch_prefix: wiso
