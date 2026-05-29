@@ -1,0 +1,23 @@
+#ifndef WATER_TRACER_CONFIG_HPP
+#define WATER_TRACER_CONFIG_HPP
+
+namespace scream {
+namespace water_tracers {
+
+// Total number of tracer slots, including bulk water in slot 0
+constexpr int NUM_TRACERS = @SCREAM_NUM_TRACERS@;
+
+// Tracer names array (generated at configure time)
+constexpr const char* TRACER_NAMES[@SCREAM_NUM_TRACERS@] = {
+  @TRACER_NAME_LIST@
+};
+
+// Tracer longnames array (generated at configure time)
+constexpr const char* TRACER_LONGNAMES[@SCREAM_NUM_TRACERS@] = {
+  @TRACER_LONGNAME_LIST@
+};
+
+} // namespace water_tracers
+} // namespace scream
+
+#endif // WATER_TRACER_CONFIG_HPP
