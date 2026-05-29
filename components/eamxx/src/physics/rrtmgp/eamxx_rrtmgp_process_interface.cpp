@@ -9,6 +9,7 @@
 #include "share/property_checks/field_within_interval_check.hpp"
 #include "share/physics/eamxx_common_physics_functions.hpp"
 #include "share/util/eamxx_column_ops.hpp"
+#include "share/field/field_tracer_access.hpp"
 
 #include <ekat_team_policy_utils.hpp>
 #include <ekat_assert.hpp>
@@ -151,7 +152,12 @@ void RRTMGPRadiation::create_requests() {
   add_field<Required>("cldfrac_tot", scalar3d_mid, none, grid_name);
   add_field<Required>("eff_radius_qc", scalar3d_mid, micron, grid_name);
   add_field<Required>("eff_radius_qi", scalar3d_mid, micron, grid_name);
-  add_field<Required>("qv",scalar3d_mid,kg/kg,grid_name);
+
+  // qv now uses tracer-aware layout (tracer, col, lev)
+  // SCREAM_NUM_TRACERS is defined by CMake build system
+  auto qv_layout = m_grid->get_3d_tracer_layout(SCREAM_NUM_TRACERS);
+  add_field<Required>("qv", qv_layout, kg/kg, grid_name);
+
   add_field<Required>("surf_lw_flux_up",scalar2d,W/(m*m),grid_name);
   // Set of required gas concentration fields
   for (auto& it : m_gas_names) {
@@ -554,7 +560,11 @@ void RRTMGPRadiation::run_impl (const double dt) {
   auto d_sfc_alb_dir_nir = get_field_in("sfc_alb_dir_nir").get_view<const Real*>();
   auto d_sfc_alb_dif_vis = get_field_in("sfc_alb_dif_vis").get_view<const Real*>();
   auto d_sfc_alb_dif_nir = get_field_in("sfc_alb_dif_nir").get_view<const Real*>();
-  auto d_qv = get_field_in("qv").get_view<const Real**>();
+
+  // qv has tracer dimension (tracer, col, lev) - extract slot-0 bulk water via subview
+  auto d_qv_3d = get_field_in("qv").get_view<const Real***>();
+  auto d_qv = get_tracer_bulk_subview(d_qv_3d);
+
   auto d_qc = get_field_in("qc").get_view<const Real**>();
   auto d_nc = get_field_in("nc").get_view<const Real**>();
   auto d_qi = get_field_in("qi").get_view<const Real**>();

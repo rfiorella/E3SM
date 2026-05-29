@@ -3,6 +3,7 @@
 
 #include "eamxx_zm_process_interface.hpp"
 #include "share/physics/physics_constants.hpp"
+#include "share/field/field_tracer_access.hpp"
 
 #include "zm_eamxx_bridge.hpp"
 
@@ -67,7 +68,12 @@ void ZMDeepConvection::create_requests ()
 
   // Input/Output variables
   add_field <Updated>("T_mid",                scalar3d_mid, K,      grid_name, pack_size);
-  add_tracer<Updated>("qv",                   m_grid,       kg/kg,             pack_size);
+
+  // qv now uses tracer-aware layout (tracer, col, lev)
+  // SCREAM_NUM_TRACERS is defined by CMake build system
+  auto qv_layout = m_grid->get_3d_tracer_layout(SCREAM_NUM_TRACERS);
+  add_field<Updated>("qv", qv_layout, kg/kg, grid_name, pack_size);
+
   add_field <Updated>("horiz_winds",          vector3d_mid, m/s,    grid_name, pack_size);
 
   // Output variables
@@ -165,7 +171,11 @@ void ZMDeepConvection::run_impl (const double dt)
 
   // variables updated by ZM
   const auto& T_mid       = get_field_out("T_mid")        .get_view<Pack**>();
-  const auto& qv          = get_field_out("qv")           .get_view<Pack**>();
+
+  // qv has tracer dimension (tracer, col, lev) - extract slot-0 bulk water via subview
+  const auto& qv_3d       = get_field_out("qv")           .get_view<Pack***>();
+  const auto& qv          = get_tracer_bulk_subview(qv_3d);
+
   const auto& hwinds_fld  = get_field_out("horiz_winds");
   const auto& uwind       = hwinds_fld.get_component(0)   .get_view<Pack**>();
   const auto& vwind       = hwinds_fld.get_component(1)   .get_view<Pack**>();

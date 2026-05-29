@@ -32,6 +32,7 @@
 #include "share/physics/eamxx_common_physics_functions.hpp"
 #include "share/util/eamxx_column_ops.hpp"
 #include "share/property_checks/field_lower_bound_check.hpp"
+#include "share/field/field_tracer_access.hpp"
 
 // Ekat includes
 #include <ekat_assert.hpp>
@@ -179,7 +180,11 @@ void HommeDynamics::create_requests ()
   add_field<Required>("eddy_diff_heat",     pg_scalar3d_mid, m2/s,  pgn,N);
   add_field<Required>("eddy_diff_mom",      pg_scalar3d_mid, m2/s,  pgn,N);
 
-  add_tracer<Updated >("qv", m_phys_grid, kg/kg, N);
+  // qv now uses tracer-aware layout (tracer, col, lev)
+  // SCREAM_NUM_TRACERS is defined by CMake build system
+  auto qv_layout = m_phys_grid->get_3d_tracer_layout(SCREAM_NUM_TRACERS);
+  add_field<Updated>("qv", qv_layout, kg/kg, pgn, N);
+
   add_group<Updated>("tracers",pgn,N, MonolithicAlloc::Required);
 
   if (fv_phys_active()) {
@@ -1342,7 +1347,10 @@ void HommeDynamics::update_pressure(const std::shared_ptr<const AbstractGrid>& g
   const auto p_int_view = get_field_out("p_int",gn).get_view<Pack**>();
   const auto p_mid_view = get_field_out("p_mid",gn).get_view<Pack**>();
 
-  const auto qv_view        = get_field_in("qv",gn).get_view<const Pack**>();
+  // qv has tracer dimension (tracer, col, lev) - extract slot-0 bulk water via subview
+  const auto qv_view_3d     = get_field_in("qv",gn).get_view<const Pack***>();
+  const auto qv_view        = get_tracer_bulk_subview(qv_view_3d);
+
   const auto dp_dry_view    = get_field_out("pseudo_density_dry").get_view<Pack**>();
   const auto p_dry_int_view = get_field_out("p_dry_int").get_view<Pack**>();
   const auto p_dry_mid_view = get_field_out("p_dry_mid").get_view<Pack**>();

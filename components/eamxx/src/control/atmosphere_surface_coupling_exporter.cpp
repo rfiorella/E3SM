@@ -1,5 +1,6 @@
 #include "atmosphere_surface_coupling_exporter.hpp"
 #include "share/physics/eamxx_common_physics_functions.hpp"
+#include "share/field/field_tracer_access.hpp"
 
 #include <ekat_team_policy_utils.hpp>
 #include <ekat_assert.hpp>
@@ -46,7 +47,12 @@ void SurfaceCouplingExporter::create_requests()
   add_field<Required>("phis",                 scalar2d_layout,      m2/s2,  grid_name);
   add_field<Required>("p_mid",                scalar3d_layout_mid,  Pa,     grid_name, ps);
   add_field<Required>("T_mid",                scalar3d_layout_mid,  K,      grid_name, ps);
-  add_tracer<Required>("qv", m_grid,  kg/kg, ps);
+
+  // qv now uses tracer-aware layout (tracer, col, lev)
+  // SCREAM_NUM_TRACERS is defined by CMake build system
+  auto qv_layout = m_grid->get_3d_tracer_layout(SCREAM_NUM_TRACERS);
+  add_field<Required>("qv", qv_layout, kg/kg, grid_name, ps);
+
   // TODO: Switch horiz_winds to using U and V, note right now there is an issue with when the subfields are created, so can't switch yet.
   add_field<Required>("horiz_winds",          vector3d_layout,      m/s,    grid_name);
   add_field<Required>("sfc_flux_dir_nir",     scalar2d_layout,      W/m2,   grid_name);
@@ -370,7 +376,11 @@ void SurfaceCouplingExporter::compute_eamxx_exports(const double dt, const bool 
 
   const auto& p_int                = get_field_in("p_int").get_view<const Real**>();
   const auto& pseudo_density       = get_field_in("pseudo_density").get_view<const Pack**>();
-  const auto& qv                   = get_field_in("qv").get_view<const Pack**>();
+
+  // qv has tracer dimension (tracer, col, lev) - extract slot-0 bulk water via subview
+  const auto& qv_3d                = get_field_in("qv").get_view<const Pack***>();
+  const auto& qv                   = get_tracer_bulk_subview(qv_3d);
+
   const auto& T_mid                = get_field_in("T_mid").get_view<const Pack**>();
   // TODO: This will need to change if we ever switch from horiz_winds to U and V
   const auto& horiz_winds          = get_field_in("horiz_winds").get_view<const Real***>();
