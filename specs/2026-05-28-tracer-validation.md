@@ -7,6 +7,9 @@ created: 2026-05-28T00:00:00-06:00
 author: rfiorella
 project: EAMxx-wiso
 
+depends_on:
+  - specs/2026-05-28-extend-precip-tracer.md
+
 inputs:
   source_files:
     - wiso_group1_campaign_revision.md
@@ -33,6 +36,8 @@ success_criteria:
     phase: implementation
     verifies:
       - deliverable: components/eamxx/src/physics/water_tracers/water_tracer_ratio.hpp
+      - deliverable: components/eamxx/src/physics/water_tracers/water_tracer_ratio.cpp
+      - claim: "Water tracer ratio utility compiles without errors"
 
   - id: unit-test-ratio-function
     type: shell
@@ -72,12 +77,21 @@ success_criteria:
     on_fail: halt_after_investigation
     resolution_notes: "If validation fails: ratio errors >1e-12 indicate bug in tracer handling. Bisect to find which process breaks ratio preservation. Common issues: missing tracer loops, hardcoded slot-0, incorrect subview. See planning doc section 'Action on tracer ratio failure' for debugging steps."
 
+  - id: performance-baseline-n1
+    type: shell
+    cmd: "cd components/eamxx && ./scripts/benchmark-eamxx.sh --tracers 1 > bench_n1.txt"
+    expect: exit_zero
+    phase: testing
+    verifies:
+      - claim: "Baseline performance benchmark with SCREAM_NUM_TRACERS=1 completes"
+
   - id: performance-scream-num-tracers-2
     type: shell
     cmd: "cd components/eamxx && ./scripts/benchmark-eamxx.sh --tracers 2 > bench_n2.txt && python3 scripts/compare_benchmarks.py bench_n1.txt bench_n2.txt --max-overhead 0.05"
     expect: exit_zero
     gate: advisory
     phase: testing
+    depends_on: [performance-baseline-n1]
     verifies:
       - claim: "SCREAM_NUM_TRACERS=2 overhead < 5% vs SCREAM_NUM_TRACERS=1"
 
