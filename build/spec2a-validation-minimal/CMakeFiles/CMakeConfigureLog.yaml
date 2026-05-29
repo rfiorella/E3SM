@@ -1,0 +1,270 @@
+
+---
+events:
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/vast/projects/opt/rhel8/x86_64/cmake/3.26.3/share/cmake-3.26/Modules/CMakeDetermineSystem.cmake:204 (message)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      The system is: Linux - 4.18.0-553.124.1.el8_10.x86_64 - x86_64
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/vast/projects/opt/rhel8/x86_64/cmake/3.26.3/share/cmake-3.26/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "/vast/projects/opt/rhel8/x86_64/cmake/3.26.3/share/cmake-3.26/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "/vast/projects/opt/rhel8/x86_64/cmake/3.26.3/share/cmake-3.26/Modules/CMakeDetermineCXXCompiler.cmake:126 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" succeeded.
+      Compiler: /projects/opt/centos8/x86_64/gcc/9.4.0/bin/g++ 
+      Build flags: 
+      Id flags:  
+      
+      The output was:
+      0
+      
+      
+      Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "a.out"
+      
+      The CXX compiler identification is GNU, found in:
+        /vast/home/rfiorella/E3SM/build/spec2a-validation-minimal/CMakeFiles/3.26.3/CompilerIdCXX/a.out
+      
+  -
+    kind: "try_compile-v1"
+    backtrace:
+      - "/vast/projects/opt/rhel8/x86_64/cmake/3.26.3/share/cmake-3.26/Modules/CMakeDetermineCompilerABI.cmake:57 (try_compile)"
+      - "/vast/projects/opt/rhel8/x86_64/cmake/3.26.3/share/cmake-3.26/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:2 (project)"
+    checks:
+      - "Detecting CXX compiler ABI info"
+    directories:
+      source: "/vast/home/rfiorella/E3SM/build/spec2a-validation-minimal/CMakeFiles/CMakeScratch/TryCompile-eydrNQ"
+      binary: "/vast/home/rfiorella/E3SM/build/spec2a-validation-minimal/CMakeFiles/CMakeScratch/TryCompile-eydrNQ"
+    cmakeVariables:
+      CMAKE_CXX_FLAGS: ""
+      CMAKE_CXX_FLAGS_DEBUG: "-g"
+      CMAKE_EXE_LINKER_FLAGS: ""
+    buildResult:
+      variable: "CMAKE_CXX_ABI_COMPILED"
+      cached: true
+      stdout: |
+        Change Dir: /vast/home/rfiorella/E3SM/build/spec2a-validation-minimal/CMakeFiles/CMakeScratch/TryCompile-eydrNQ
+        
+        Run Build Command(s):/vast/projects/opt/rhel8/x86_64/cmake/3.26.3/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_680af/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_680af.dir/build.make CMakeFiles/cmTC_680af.dir/build
+        gmake[1]: Entering directory '/vast/home/rfiorella/E3SM/build/spec2a-validation-minimal/CMakeFiles/CMakeScratch/TryCompile-eydrNQ'
+        Building CXX object CMakeFiles/cmTC_680af.dir/CMakeCXXCompilerABI.cpp.o
+        /projects/opt/centos8/x86_64/gcc/9.4.0/bin/g++   -v -o CMakeFiles/cmTC_680af.dir/CMakeCXXCompilerABI.cpp.o -c /vast/projects/opt/rhel8/x86_64/cmake/3.26.3/share/cmake-3.26/Modules/CMakeCXXCompilerABI.cpp
+        Using built-in specs.
+        COLLECT_GCC=/projects/opt/centos8/x86_64/gcc/9.4.0/bin/g++
+        Target: x86_64-pc-linux-gnu
+        Configured with: ../gcc-9.4.0/configure --disable-bootstrap --disable-multilib --enable-languages=c,c++,fortran,lto --prefix=/projects/opt/centos8/x86_64/gcc/9.4.0
+        Thread model: posix
+        gcc version 9.4.0 (GCC) 
+        COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_680af.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-shared-libgcc' '-mtune=generic' '-march=x86-64'
+         /vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../libexec/gcc/x86_64-pc-linux-gnu/9.4.0/cc1plus -quiet -v -iprefix /vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/ -D_GNU_SOURCE /vast/projects/opt/rhel8/x86_64/cmake/3.26.3/share/cmake-3.26/Modules/CMakeCXXCompilerABI.cpp -quiet -dumpbase CMakeCXXCompilerABI.cpp -mtune=generic -march=x86-64 -auxbase-strip CMakeFiles/cmTC_680af.dir/CMakeCXXCompilerABI.cpp.o -version -o /tmp/claude-37233/ccbZLDqn.s
+        GNU C++14 (GCC) version 9.4.0 (x86_64-pc-linux-gnu)
+        	compiled by GNU C version 8.3.1 20191121 (Red Hat 8.3.1-5), GMP version 6.1.0, MPFR version 3.1.4, MPC version 1.0.3, isl version isl-0.18-GMP
+        
+        GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072
+        ignoring nonexistent directory "/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../x86_64-pc-linux-gnu/include"
+        ignoring duplicate directory "/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/../../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../include/c++/9.4.0"
+        ignoring duplicate directory "/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/../../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../include/c++/9.4.0/x86_64-pc-linux-gnu"
+        ignoring duplicate directory "/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/../../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../include/c++/9.4.0/backward"
+        ignoring duplicate directory "/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/../../lib/gcc/x86_64-pc-linux-gnu/9.4.0/include"
+        ignoring duplicate directory "/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/../../lib/gcc/x86_64-pc-linux-gnu/9.4.0/include-fixed"
+        ignoring nonexistent directory "/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/../../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../x86_64-pc-linux-gnu/include"
+        #include "..." search starts here:
+        #include <...> search starts here:
+         /vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../include/c++/9.4.0
+         /vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../include/c++/9.4.0/x86_64-pc-linux-gnu
+         /vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../include/c++/9.4.0/backward
+         /vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/include
+         /vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/include-fixed
+         /usr/local/include
+         /vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/../../include
+         /usr/include
+        End of search list.
+        GNU C++14 (GCC) version 9.4.0 (x86_64-pc-linux-gnu)
+        	compiled by GNU C version 8.3.1 20191121 (Red Hat 8.3.1-5), GMP version 6.1.0, MPFR version 3.1.4, MPC version 1.0.3, isl version isl-0.18-GMP
+        
+        GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072
+        Compiler executable checksum: b52e54805940f79c31a0b9fe97d4eefa
+        COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_680af.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-shared-libgcc' '-mtune=generic' '-march=x86-64'
+         as -v --64 -o CMakeFiles/cmTC_680af.dir/CMakeCXXCompilerABI.cpp.o /tmp/claude-37233/ccbZLDqn.s
+        GNU assembler version 2.30 (x86_64-redhat-linux) using BFD version version 2.30-128.el8_10
+        COMPILER_PATH=/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../libexec/gcc/x86_64-pc-linux-gnu/9.4.0/:/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../libexec/gcc/
+        LIBRARY_PATH=/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/:/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/:/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../lib64/:/lib/../lib64/:/usr/lib/../lib64/:/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../:/lib/:/usr/lib/
+        COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_680af.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-shared-libgcc' '-mtune=generic' '-march=x86-64'
+        Linking CXX executable cmTC_680af
+        /vast/projects/opt/rhel8/x86_64/cmake/3.26.3/bin/cmake -E cmake_link_script CMakeFiles/cmTC_680af.dir/link.txt --verbose=1
+        /projects/opt/centos8/x86_64/gcc/9.4.0/bin/g++  -v CMakeFiles/cmTC_680af.dir/CMakeCXXCompilerABI.cpp.o -o cmTC_680af 
+        Using built-in specs.
+        COLLECT_GCC=/projects/opt/centos8/x86_64/gcc/9.4.0/bin/g++
+        COLLECT_LTO_WRAPPER=/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../libexec/gcc/x86_64-pc-linux-gnu/9.4.0/lto-wrapper
+        Target: x86_64-pc-linux-gnu
+        Configured with: ../gcc-9.4.0/configure --disable-bootstrap --disable-multilib --enable-languages=c,c++,fortran,lto --prefix=/projects/opt/centos8/x86_64/gcc/9.4.0
+        Thread model: posix
+        gcc version 9.4.0 (GCC) 
+        COMPILER_PATH=/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../libexec/gcc/x86_64-pc-linux-gnu/9.4.0/:/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../libexec/gcc/
+        LIBRARY_PATH=/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/:/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/:/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../lib64/:/lib/../lib64/:/usr/lib/../lib64/:/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../:/lib/:/usr/lib/
+        COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_680af' '-shared-libgcc' '-mtune=generic' '-march=x86-64'
+         /vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../libexec/gcc/x86_64-pc-linux-gnu/9.4.0/collect2 -plugin /vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../libexec/gcc/x86_64-pc-linux-gnu/9.4.0/liblto_plugin.so -plugin-opt=/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../libexec/gcc/x86_64-pc-linux-gnu/9.4.0/lto-wrapper -plugin-opt=-fresolution=/tmp/claude-37233/ccKekBS9.res -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc --eh-frame-hdr -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_680af /lib/../lib64/crt1.o /lib/../lib64/crti.o /vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/crtbegin.o -L/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0 -L/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc -L/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../.. CMakeFiles/cmTC_680af.dir/CMakeCXXCompilerABI.cpp.o -lstdc++ -lm -lgcc_s -lgcc -lc -lgcc_s -lgcc /vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/crtend.o /lib/../lib64/crtn.o
+        COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_680af' '-shared-libgcc' '-mtune=generic' '-march=x86-64'
+        gmake[1]: Leaving directory '/vast/home/rfiorella/E3SM/build/spec2a-validation-minimal/CMakeFiles/CMakeScratch/TryCompile-eydrNQ'
+        
+      exitCode: 0
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/vast/projects/opt/rhel8/x86_64/cmake/3.26.3/share/cmake-3.26/Modules/CMakeDetermineCompilerABI.cmake:127 (message)"
+      - "/vast/projects/opt/rhel8/x86_64/cmake/3.26.3/share/cmake-3.26/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Parsed CXX implicit include dir info: rv=done
+        found start of include info
+        found start of implicit include info
+          add: [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../include/c++/9.4.0]
+          add: [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../include/c++/9.4.0/x86_64-pc-linux-gnu]
+          add: [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../include/c++/9.4.0/backward]
+          add: [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/include]
+          add: [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/include-fixed]
+          add: [/usr/local/include]
+          add: [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/../../include]
+          add: [/usr/include]
+        end of search list found
+        collapse include dir [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../include/c++/9.4.0] ==> [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/include/c++/9.4.0]
+        collapse include dir [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../include/c++/9.4.0/x86_64-pc-linux-gnu] ==> [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/include/c++/9.4.0/x86_64-pc-linux-gnu]
+        collapse include dir [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../include/c++/9.4.0/backward] ==> [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/include/c++/9.4.0/backward]
+        collapse include dir [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/include] ==> [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/lib/gcc/x86_64-pc-linux-gnu/9.4.0/include]
+        collapse include dir [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/include-fixed] ==> [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/lib/gcc/x86_64-pc-linux-gnu/9.4.0/include-fixed]
+        collapse include dir [/usr/local/include] ==> [/usr/local/include]
+        collapse include dir [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/../../include] ==> [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/include]
+        collapse include dir [/usr/include] ==> [/usr/include]
+        implicit include dirs: [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/include/c++/9.4.0;/vast/projects/opt/centos8/x86_64/gcc/9.4.0/include/c++/9.4.0/x86_64-pc-linux-gnu;/vast/projects/opt/centos8/x86_64/gcc/9.4.0/include/c++/9.4.0/backward;/vast/projects/opt/centos8/x86_64/gcc/9.4.0/lib/gcc/x86_64-pc-linux-gnu/9.4.0/include;/vast/projects/opt/centos8/x86_64/gcc/9.4.0/lib/gcc/x86_64-pc-linux-gnu/9.4.0/include-fixed;/usr/local/include;/vast/projects/opt/centos8/x86_64/gcc/9.4.0/include;/usr/include]
+      
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "/vast/projects/opt/rhel8/x86_64/cmake/3.26.3/share/cmake-3.26/Modules/CMakeDetermineCompilerABI.cmake:152 (message)"
+      - "/vast/projects/opt/rhel8/x86_64/cmake/3.26.3/share/cmake-3.26/Modules/CMakeTestCXXCompiler.cmake:26 (CMAKE_DETERMINE_COMPILER_ABI)"
+      - "CMakeLists.txt:2 (project)"
+    message: |
+      Parsed CXX implicit link information:
+        link line regex: [^( *|.*[/\\])(ld|CMAKE_LINK_STARTFILE-NOTFOUND|([^/\\]+-)?ld|collect2)[^/\\]*( |$)]
+        ignore line: [Change Dir: /vast/home/rfiorella/E3SM/build/spec2a-validation-minimal/CMakeFiles/CMakeScratch/TryCompile-eydrNQ]
+        ignore line: []
+        ignore line: [Run Build Command(s):/vast/projects/opt/rhel8/x86_64/cmake/3.26.3/bin/cmake -E env VERBOSE=1 /usr/bin/gmake -f Makefile cmTC_680af/fast && /usr/bin/gmake  -f CMakeFiles/cmTC_680af.dir/build.make CMakeFiles/cmTC_680af.dir/build]
+        ignore line: [gmake[1]: Entering directory '/vast/home/rfiorella/E3SM/build/spec2a-validation-minimal/CMakeFiles/CMakeScratch/TryCompile-eydrNQ']
+        ignore line: [Building CXX object CMakeFiles/cmTC_680af.dir/CMakeCXXCompilerABI.cpp.o]
+        ignore line: [/projects/opt/centos8/x86_64/gcc/9.4.0/bin/g++   -v -o CMakeFiles/cmTC_680af.dir/CMakeCXXCompilerABI.cpp.o -c /vast/projects/opt/rhel8/x86_64/cmake/3.26.3/share/cmake-3.26/Modules/CMakeCXXCompilerABI.cpp]
+        ignore line: [Using built-in specs.]
+        ignore line: [COLLECT_GCC=/projects/opt/centos8/x86_64/gcc/9.4.0/bin/g++]
+        ignore line: [Target: x86_64-pc-linux-gnu]
+        ignore line: [Configured with: ../gcc-9.4.0/configure --disable-bootstrap --disable-multilib --enable-languages=c c++ fortran lto --prefix=/projects/opt/centos8/x86_64/gcc/9.4.0]
+        ignore line: [Thread model: posix]
+        ignore line: [gcc version 9.4.0 (GCC) ]
+        ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_680af.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-shared-libgcc' '-mtune=generic' '-march=x86-64']
+        ignore line: [ /vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../libexec/gcc/x86_64-pc-linux-gnu/9.4.0/cc1plus -quiet -v -iprefix /vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/ -D_GNU_SOURCE /vast/projects/opt/rhel8/x86_64/cmake/3.26.3/share/cmake-3.26/Modules/CMakeCXXCompilerABI.cpp -quiet -dumpbase CMakeCXXCompilerABI.cpp -mtune=generic -march=x86-64 -auxbase-strip CMakeFiles/cmTC_680af.dir/CMakeCXXCompilerABI.cpp.o -version -o /tmp/claude-37233/ccbZLDqn.s]
+        ignore line: [GNU C++14 (GCC) version 9.4.0 (x86_64-pc-linux-gnu)]
+        ignore line: [	compiled by GNU C version 8.3.1 20191121 (Red Hat 8.3.1-5)  GMP version 6.1.0  MPFR version 3.1.4  MPC version 1.0.3  isl version isl-0.18-GMP]
+        ignore line: []
+        ignore line: [GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072]
+        ignore line: [ignoring nonexistent directory "/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../x86_64-pc-linux-gnu/include"]
+        ignore line: [ignoring duplicate directory "/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/../../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../include/c++/9.4.0"]
+        ignore line: [ignoring duplicate directory "/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/../../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../include/c++/9.4.0/x86_64-pc-linux-gnu"]
+        ignore line: [ignoring duplicate directory "/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/../../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../include/c++/9.4.0/backward"]
+        ignore line: [ignoring duplicate directory "/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/../../lib/gcc/x86_64-pc-linux-gnu/9.4.0/include"]
+        ignore line: [ignoring duplicate directory "/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/../../lib/gcc/x86_64-pc-linux-gnu/9.4.0/include-fixed"]
+        ignore line: [ignoring nonexistent directory "/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/../../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../x86_64-pc-linux-gnu/include"]
+        ignore line: [#include "..." search starts here:]
+        ignore line: [#include <...> search starts here:]
+        ignore line: [ /vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../include/c++/9.4.0]
+        ignore line: [ /vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../include/c++/9.4.0/x86_64-pc-linux-gnu]
+        ignore line: [ /vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../include/c++/9.4.0/backward]
+        ignore line: [ /vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/include]
+        ignore line: [ /vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/include-fixed]
+        ignore line: [ /usr/local/include]
+        ignore line: [ /vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/../../include]
+        ignore line: [ /usr/include]
+        ignore line: [End of search list.]
+        ignore line: [GNU C++14 (GCC) version 9.4.0 (x86_64-pc-linux-gnu)]
+        ignore line: [	compiled by GNU C version 8.3.1 20191121 (Red Hat 8.3.1-5)  GMP version 6.1.0  MPFR version 3.1.4  MPC version 1.0.3  isl version isl-0.18-GMP]
+        ignore line: []
+        ignore line: [GGC heuristics: --param ggc-min-expand=100 --param ggc-min-heapsize=131072]
+        ignore line: [Compiler executable checksum: b52e54805940f79c31a0b9fe97d4eefa]
+        ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_680af.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-shared-libgcc' '-mtune=generic' '-march=x86-64']
+        ignore line: [ as -v --64 -o CMakeFiles/cmTC_680af.dir/CMakeCXXCompilerABI.cpp.o /tmp/claude-37233/ccbZLDqn.s]
+        ignore line: [GNU assembler version 2.30 (x86_64-redhat-linux) using BFD version version 2.30-128.el8_10]
+        ignore line: [COMPILER_PATH=/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../libexec/gcc/x86_64-pc-linux-gnu/9.4.0/:/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../libexec/gcc/]
+        ignore line: [LIBRARY_PATH=/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/:/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/:/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../lib64/:/lib/../lib64/:/usr/lib/../lib64/:/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../:/lib/:/usr/lib/]
+        ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'CMakeFiles/cmTC_680af.dir/CMakeCXXCompilerABI.cpp.o' '-c' '-shared-libgcc' '-mtune=generic' '-march=x86-64']
+        ignore line: [Linking CXX executable cmTC_680af]
+        ignore line: [/vast/projects/opt/rhel8/x86_64/cmake/3.26.3/bin/cmake -E cmake_link_script CMakeFiles/cmTC_680af.dir/link.txt --verbose=1]
+        ignore line: [/projects/opt/centos8/x86_64/gcc/9.4.0/bin/g++  -v CMakeFiles/cmTC_680af.dir/CMakeCXXCompilerABI.cpp.o -o cmTC_680af ]
+        ignore line: [Using built-in specs.]
+        ignore line: [COLLECT_GCC=/projects/opt/centos8/x86_64/gcc/9.4.0/bin/g++]
+        ignore line: [COLLECT_LTO_WRAPPER=/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../libexec/gcc/x86_64-pc-linux-gnu/9.4.0/lto-wrapper]
+        ignore line: [Target: x86_64-pc-linux-gnu]
+        ignore line: [Configured with: ../gcc-9.4.0/configure --disable-bootstrap --disable-multilib --enable-languages=c c++ fortran lto --prefix=/projects/opt/centos8/x86_64/gcc/9.4.0]
+        ignore line: [Thread model: posix]
+        ignore line: [gcc version 9.4.0 (GCC) ]
+        ignore line: [COMPILER_PATH=/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../libexec/gcc/x86_64-pc-linux-gnu/9.4.0/:/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../libexec/gcc/]
+        ignore line: [LIBRARY_PATH=/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/:/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/:/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../lib64/:/lib/../lib64/:/usr/lib/../lib64/:/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../:/lib/:/usr/lib/]
+        ignore line: [COLLECT_GCC_OPTIONS='-v' '-o' 'cmTC_680af' '-shared-libgcc' '-mtune=generic' '-march=x86-64']
+        link line: [ /vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../libexec/gcc/x86_64-pc-linux-gnu/9.4.0/collect2 -plugin /vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../libexec/gcc/x86_64-pc-linux-gnu/9.4.0/liblto_plugin.so -plugin-opt=/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../libexec/gcc/x86_64-pc-linux-gnu/9.4.0/lto-wrapper -plugin-opt=-fresolution=/tmp/claude-37233/ccKekBS9.res -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc -plugin-opt=-pass-through=-lc -plugin-opt=-pass-through=-lgcc_s -plugin-opt=-pass-through=-lgcc --eh-frame-hdr -m elf_x86_64 -dynamic-linker /lib64/ld-linux-x86-64.so.2 -o cmTC_680af /lib/../lib64/crt1.o /lib/../lib64/crti.o /vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/crtbegin.o -L/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0 -L/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc -L/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../lib64 -L/lib/../lib64 -L/usr/lib/../lib64 -L/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../.. CMakeFiles/cmTC_680af.dir/CMakeCXXCompilerABI.cpp.o -lstdc++ -lm -lgcc_s -lgcc -lc -lgcc_s -lgcc /vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/crtend.o /lib/../lib64/crtn.o]
+          arg [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../libexec/gcc/x86_64-pc-linux-gnu/9.4.0/collect2] ==> ignore
+          arg [-plugin] ==> ignore
+          arg [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../libexec/gcc/x86_64-pc-linux-gnu/9.4.0/liblto_plugin.so] ==> ignore
+          arg [-plugin-opt=/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../libexec/gcc/x86_64-pc-linux-gnu/9.4.0/lto-wrapper] ==> ignore
+          arg [-plugin-opt=-fresolution=/tmp/claude-37233/ccKekBS9.res] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc_s] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc] ==> ignore
+          arg [-plugin-opt=-pass-through=-lc] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc_s] ==> ignore
+          arg [-plugin-opt=-pass-through=-lgcc] ==> ignore
+          arg [--eh-frame-hdr] ==> ignore
+          arg [-m] ==> ignore
+          arg [elf_x86_64] ==> ignore
+          arg [-dynamic-linker] ==> ignore
+          arg [/lib64/ld-linux-x86-64.so.2] ==> ignore
+          arg [-o] ==> ignore
+          arg [cmTC_680af] ==> ignore
+          arg [/lib/../lib64/crt1.o] ==> obj [/lib/../lib64/crt1.o]
+          arg [/lib/../lib64/crti.o] ==> obj [/lib/../lib64/crti.o]
+          arg [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/crtbegin.o] ==> obj [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/crtbegin.o]
+          arg [-L/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0] ==> dir [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0]
+          arg [-L/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc] ==> dir [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc]
+          arg [-L/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../lib64] ==> dir [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../lib64]
+          arg [-L/lib/../lib64] ==> dir [/lib/../lib64]
+          arg [-L/usr/lib/../lib64] ==> dir [/usr/lib/../lib64]
+          arg [-L/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../..] ==> dir [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../..]
+          arg [CMakeFiles/cmTC_680af.dir/CMakeCXXCompilerABI.cpp.o] ==> ignore
+          arg [-lstdc++] ==> lib [stdc++]
+          arg [-lm] ==> lib [m]
+          arg [-lgcc_s] ==> lib [gcc_s]
+          arg [-lgcc] ==> lib [gcc]
+          arg [-lc] ==> lib [c]
+          arg [-lgcc_s] ==> lib [gcc_s]
+          arg [-lgcc] ==> lib [gcc]
+          arg [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/crtend.o] ==> obj [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/crtend.o]
+          arg [/lib/../lib64/crtn.o] ==> obj [/lib/../lib64/crtn.o]
+        collapse obj [/lib/../lib64/crt1.o] ==> [/lib64/crt1.o]
+        collapse obj [/lib/../lib64/crti.o] ==> [/lib64/crti.o]
+        collapse obj [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/crtbegin.o] ==> [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/lib/gcc/x86_64-pc-linux-gnu/9.4.0/crtbegin.o]
+        collapse obj [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/crtend.o] ==> [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/lib/gcc/x86_64-pc-linux-gnu/9.4.0/crtend.o]
+        collapse obj [/lib/../lib64/crtn.o] ==> [/lib64/crtn.o]
+        collapse library dir [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0] ==> [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/lib/gcc/x86_64-pc-linux-gnu/9.4.0]
+        collapse library dir [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc] ==> [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/lib/gcc]
+        collapse library dir [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../../../lib64] ==> [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/lib64]
+        collapse library dir [/lib/../lib64] ==> [/lib64]
+        collapse library dir [/usr/lib/../lib64] ==> [/usr/lib64]
+        collapse library dir [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/bin/../lib/gcc/x86_64-pc-linux-gnu/9.4.0/../../..] ==> [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/lib]
+        implicit libs: [stdc++;m;gcc_s;gcc;c;gcc_s;gcc]
+        implicit objs: [/lib64/crt1.o;/lib64/crti.o;/vast/projects/opt/centos8/x86_64/gcc/9.4.0/lib/gcc/x86_64-pc-linux-gnu/9.4.0/crtbegin.o;/vast/projects/opt/centos8/x86_64/gcc/9.4.0/lib/gcc/x86_64-pc-linux-gnu/9.4.0/crtend.o;/lib64/crtn.o]
+        implicit dirs: [/vast/projects/opt/centos8/x86_64/gcc/9.4.0/lib/gcc/x86_64-pc-linux-gnu/9.4.0;/vast/projects/opt/centos8/x86_64/gcc/9.4.0/lib/gcc;/vast/projects/opt/centos8/x86_64/gcc/9.4.0/lib64;/lib64;/usr/lib64;/vast/projects/opt/centos8/x86_64/gcc/9.4.0/lib]
+        implicit fwks: []
+      
+      
+...

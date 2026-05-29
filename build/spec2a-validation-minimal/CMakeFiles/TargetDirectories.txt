@@ -1,0 +1,5 @@
+/vast/home/rfiorella/E3SM/build/spec2a-validation-minimal/CMakeFiles/test_field_tag_compiles.dir
+/vast/home/rfiorella/E3SM/build/spec2a-validation-minimal/CMakeFiles/test_explicit_pattern.dir
+/vast/home/rfiorella/E3SM/build/spec2a-validation-minimal/CMakeFiles/test_subview_pattern.dir
+/vast/home/rfiorella/E3SM/build/spec2a-validation-minimal/CMakeFiles/edit_cache.dir
+/vast/home/rfiorella/E3SM/build/spec2a-validation-minimal/CMakeFiles/rebuild_cache.dir

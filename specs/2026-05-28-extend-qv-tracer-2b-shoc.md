@@ -32,7 +32,7 @@ deliverables:
 success_criteria:
   - id: compile-shoc-n1
     type: shell
-    cmd: "cd components/eamxx && cmake -S . -B build/pr2b-n1 -DCMAKE_BUILD_TYPE=Debug -DSCREAM_NUM_TRACERS=1 -DSCREAM_TRACER_ACCESS={{PATTERN}} && cmake --build build/pr2b-n1 --target shoc -j"
+    cmd: "cd components/eamxx && cmake -S . -B build/pr2b-n1 -DCMAKE_BUILD_TYPE=Debug -DSCREAM_NUM_TRACERS=1 -DSCREAM_TRACER_ACCESS=SUBVIEW && cmake --build build/pr2b-n1 --target shoc -j"
     expect: exit_zero
     phase: implementation
     verifies:
