@@ -10,6 +10,12 @@ namespace scream {
 namespace shoc {
 
 /*
+ * NOTE (Water Tracers): qv field now has tracer dimension (tracer, col, lev).
+ * Interface layer extracts slot-0 bulk water via get_tracer_bulk_subview(),
+ * so kernels here receive 2D views (col, lev) and require no changes.
+ */
+
+/*
 Add some functions to avoid cuda compilation warnings
 TODO: move this to ekat or something
 */

@@ -2,6 +2,7 @@
 
 #include "share/property_checks/field_lower_bound_check.hpp"
 #include "share/property_checks/field_within_interval_check.hpp"
+#include "share/field/field_tracer_access.hpp"
 
 #include <ekat_assert.hpp>
 #include <ekat_team_policy_utils.hpp>
@@ -62,7 +63,11 @@ void SHOCMacrophysics::create_requests()
 
   add_field<Updated>("surf_evap",       scalar2d    , kg/(m2*s), grid_name);
   add_field<Updated> ("T_mid",          scalar3d_mid, K,         grid_name, ps);
-  add_tracer<Updated>("qv", m_grid, kg/kg, ps);
+
+  // qv now uses tracer-aware layout (tracer, col, lev)
+  // SCREAM_NUM_TRACERS is defined by CMake build system
+  auto qv_layout = m_grid->get_3d_tracer_layout(SCREAM_NUM_TRACERS);
+  add_field<Updated>("qv", qv_layout, kg/kg, grid_name, ps);
 
   // If TMS is a process, add surface drag coefficient to required fields
   if (m_params.get<bool>("apply_tms", false)) {
@@ -284,7 +289,11 @@ void SHOCMacrophysics::initialize_impl (const RunType run_type)
   const auto& surf_mom_flux       = get_field_in("surf_mom_flux").get_view<const Real**>();
   const auto& qtracers            = get_group_out("turbulence_advected_tracers").m_monolithic_field->get_strided_view<Pack***>();
   const auto& qc                  = get_field_out("qc").get_view<Pack**>();
-  const auto& qv                  = get_field_out("qv").get_view<Pack**>();
+
+  // qv now has tracer dimension (tracer, col, lev) - extract slot-0 bulk water via subview
+  const auto& qv_3d               = get_field_out("qv").get_view<Pack***>();
+  const auto& qv                  = get_tracer_bulk_subview(qv_3d);
+
   const auto& tke                 = get_field_out("tke").get_view<Pack**>();
   const auto& cldfrac_liq         = get_field_out("cldfrac_liq").get_view<Pack**>();
   const auto& cldfrac_liq_prev    = get_field_out("cldfrac_liq_prev").get_view<Pack**>();
@@ -613,7 +622,10 @@ void SHOCMacrophysics::check_flux_state_consistency(const double dt)
 
   const auto& pseudo_density = get_field_in ("pseudo_density").get_view<const Pack**>();
   const auto& surf_evap      = get_field_out("surf_evap").get_view<Real*>();
-  const auto& qv             = get_field_out("qv").get_view<Pack**>();
+
+  // qv has tracer dimension - extract slot-0 bulk water via subview
+  const auto& qv_3d          = get_field_out("qv").get_view<Pack***>();
+  const auto& qv             = get_tracer_bulk_subview(qv_3d);
 
   const auto nlevs           = m_num_levs;
   const auto nlev_packs      = ekat::npack<Pack>(nlevs);

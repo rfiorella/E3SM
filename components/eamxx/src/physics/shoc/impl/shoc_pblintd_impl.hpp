@@ -9,6 +9,10 @@ namespace shoc {
 /*
  * Implementation of shoc pblintd. Clients should NOT
  * #include this file, but include shoc_functions.hpp instead.
+ *
+ * NOTE (Water Tracers): qv field now has tracer dimension (tracer, col, lev).
+ * Interface layer extracts slot-0 bulk water via get_tracer_bulk_subview(),
+ * so kernels here receive 2D views (col, lev) and require no changes.
  */
 
 //-----------------------------------------------------------------------
