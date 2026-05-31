@@ -36,3 +36,10 @@ EkatCreateUnitTest(test_precip_tracer_access
   LIBS scream_share
   THREADS 1
 )
+
+# Test 6: Tracer ratio utility tests
+EkatCreateUnitTest(test_tracer_scaling
+  SOURCES test_tracer_scaling.cpp
+  LIBS scream_share
+  THREADS 1
+)
