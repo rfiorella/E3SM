@@ -76,14 +76,14 @@ void P3Microphysics::create_requests()
   add_field<Updated> ("T_mid",       scalar3d_layout_mid, K,      grid_name, ps);  // T_mid is the only one of these variables that is also updated.
 
   // Prognostic State:  (all fields are both input and output)
-  // qv, qc, qi, qm now use tracer-aware layout (tracer, col, lev)
+  // qv, qc, qi, qm, qr now use tracer-aware layout (tracer, col, lev)
   // SCREAM_NUM_TRACERS is defined by CMake build system
   auto tracer_layout = m_grid->get_3d_tracer_layout(SCREAM_NUM_TRACERS);
   add_field<Updated>("qv", tracer_layout, kg/kg, grid_name, ps);
   add_field<Updated>("qc", tracer_layout, kg/kg, grid_name, ps);
   add_field<Updated>("qi", tracer_layout, kg/kg, grid_name, ps);
   add_field<Updated>("qm", tracer_layout, kg/kg, grid_name, ps);
-  add_tracer<Updated>("qr", m_grid, kg/kg, ps);
+  add_field<Updated>("qr", tracer_layout, kg/kg, grid_name, ps);
   add_tracer<Updated>("nc", m_grid, 1/kg,  ps);
   add_tracer<Updated>("nr", m_grid, 1/kg,  ps);
   add_tracer<Updated>("ni", m_grid, 1/kg,  ps);
@@ -121,8 +121,10 @@ void P3Microphysics::create_requests()
   }
 
   // Diagnostic Outputs: (all fields are just outputs w.r.t. P3)
-  add_field<Updated>("precip_liq_surf_mass",     scalar2d_layout,     kg/m2,     grid_name, "ACCUMULATED");
-  add_field<Updated>("precip_ice_surf_mass",     scalar2d_layout,     kg/m2,     grid_name, "ACCUMULATED");
+  // Surface precipitation fluxes now use tracer-aware layout (tracer, col)
+  auto precip_layout = m_grid->get_2d_tracer_layout(SCREAM_NUM_TRACERS);
+  add_field<Updated>("precip_liq_surf_mass",     precip_layout,     kg/m2,     grid_name, "ACCUMULATED");
+  add_field<Updated>("precip_ice_surf_mass",     precip_layout,     kg/m2,     grid_name, "ACCUMULATED");
   add_field<Computed>("eff_radius_qc",           scalar3d_layout_mid, micron,    grid_name, ps);
   add_field<Computed>("eff_radius_qi",           scalar3d_layout_mid, micron,    grid_name, ps);
   add_field<Computed>("eff_radius_qr",           scalar3d_layout_mid, micron,    grid_name, ps);
@@ -314,7 +316,7 @@ void P3Microphysics::initialize_impl (const RunType /* run_type */)
     cld_frac_l_in = get_field_in("cldfrac_liq").get_view<const Pack **>();
     cld_frac_i_in = get_field_in("cldfrac_ice").get_view<const Pack **>();
   }
-  // qv, qc, qi, qm now have tracer dimension (tracer, col, lev) - extract slot-0 bulk water via subview
+  // qv, qc, qi, qm, qr now have tracer dimension (tracer, col, lev) - extract slot-0 bulk water via subview
   const  auto& qv_3d          = get_field_out("qv").get_view<Pack***>();
   const  auto& qv             = get_tracer_bulk_subview(qv_3d);
   const  auto& qc_3d          = get_field_out("qc").get_view<Pack***>();
@@ -323,14 +325,18 @@ void P3Microphysics::initialize_impl (const RunType /* run_type */)
   const  auto& qi             = get_tracer_bulk_subview(qi_3d);
   const  auto& qm_3d          = get_field_out("qm").get_view<Pack***>();
   const  auto& qm             = get_tracer_bulk_subview(qm_3d);
+  const  auto& qr_3d          = get_field_out("qr").get_view<Pack***>();
+  const  auto& qr             = get_tracer_bulk_subview(qr_3d);
   const  auto& nc             = get_field_out("nc").get_view<Pack**>();
-  const  auto& qr             = get_field_out("qr").get_view<Pack**>();
   const  auto& nr             = get_field_out("nr").get_view<Pack**>();
   const  auto& ni             = get_field_out("ni").get_view<Pack**>();
   const  auto& bm             = get_field_out("bm").get_view<Pack**>();
   auto qv_prev                = get_field_out("qv_prev_micro_step").get_view<Pack**>();
-  const auto& precip_liq_surf_mass = get_field_out("precip_liq_surf_mass").get_view<Real*>();
-  const auto& precip_ice_surf_mass = get_field_out("precip_ice_surf_mass").get_view<Real*>();
+  // Surface precipitation fluxes now have tracer dimension (tracer, col) - extract slot-0
+  const auto& precip_liq_surf_mass_2d = get_field_out("precip_liq_surf_mass").get_view<Real**>();
+  const auto precip_liq_surf_mass = Kokkos::subview(precip_liq_surf_mass_2d, 0, Kokkos::ALL());
+  const auto& precip_ice_surf_mass_2d = get_field_out("precip_ice_surf_mass").get_view<Real**>();
+  const auto precip_ice_surf_mass = Kokkos::subview(precip_ice_surf_mass_2d, 0, Kokkos::ALL());
   auto cld_frac_r             = get_field_out("rainfrac").get_view<Pack**>();
 
   // Alias local variables from temporary buffer

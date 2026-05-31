@@ -29,3 +29,10 @@ EkatCreateUnitTest(test_qv_p3
   LIBS scream_share
   THREADS 1
 )
+
+# Test 5: P3 precipitation field access with tracer dimension
+EkatCreateUnitTest(test_precip_tracer_access
+  SOURCES test_precip_tracer_access.cpp
+  LIBS scream_share
+  THREADS 1
+)

@@ -15,9 +15,11 @@ namespace p3 {
  * Implementation of p3 main function. Clients should NOT #include
  * this file, #include p3_functions.hpp instead.
  *
- * NOTE (Water Tracers): qv, qc, qi, qm fields now have tracer dimension (tracer, col, lev).
+ * NOTE (Water Tracers): qv, qc, qi, qm, qr fields now have tracer dimension (tracer, col, lev).
  * Interface layer extracts slot-0 bulk water via get_tracer_bulk_subview(),
  * so kernels here receive 2D views (col, lev) and require no changes.
+ * Surface precipitation accumulators (precip_liq_surf_mass, precip_ice_surf_mass) extended
+ * to (tracer, col) - interface extracts slot 0 before passing to kernels.
  */
 
 template <typename S, typename D>
