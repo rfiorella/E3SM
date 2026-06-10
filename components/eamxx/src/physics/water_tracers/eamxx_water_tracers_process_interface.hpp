@@ -2,9 +2,12 @@
 #define SCREAM_WATER_TRACERS_HPP
 
 #include "share/atm_process/atmosphere_process.hpp"
+#include "share/field/field_group.hpp"
 #include "ekat/ekat_parameter_list.hpp"
 
 #include <string>
+#include <vector>
+#include <array>
 
 namespace scream
 {
@@ -44,12 +47,28 @@ protected:
   void run_impl        (const double dt);
   void finalize_impl   ();
 
+  // Helper functions for field registration
+  void register_tracer_fields(const int tracer_count,
+                              const std::shared_ptr<const AbstractGrid>& grid,
+                              const int pack_size);
+  void attach_tracer_metadata();
+  void retrieve_tracer_groups();
+
   // Keep track of field dimensions
   int m_num_cols;
   int m_num_levs;
 
   // Number of tracers to track (from parameter list)
   int m_tracer_count;
+
+  // Tracer names: m_tracer_names[component_idx] = {qv_iso_k, qc_iso_k, qi_iso_k, qr_iso_k}
+  std::vector<std::array<std::string, 4>> m_tracer_names;
+
+  // Field groups for multi-component access
+  FieldGroup m_qv_iso_group;
+  FieldGroup m_qc_iso_group;
+  FieldGroup m_qi_iso_group;
+  FieldGroup m_qr_iso_group;
 
   std::shared_ptr<const AbstractGrid> m_grid;
 

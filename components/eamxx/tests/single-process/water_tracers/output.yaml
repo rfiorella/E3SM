@@ -1,0 +1,13 @@
+%YAML 1.1
+---
+filename_prefix: water_tracers_standalone_output
+averaging_type: instant
+field_names:
+  - qv_iso_0
+  - qc_iso_0
+  - qi_iso_0
+  - qr_iso_0
+output_control:
+  frequency: 1
+  frequency_units: nsteps
+...

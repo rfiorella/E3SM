@@ -1,6 +1,7 @@
 set(WATER_TRACERS_SRCS
   eamxx_water_tracers_process_interface.cpp
   eamxx_water_isotopes_process_interface.cpp
+  field_registry.cpp
 )
 
 add_library(water_tracers ${WATER_TRACERS_SRCS})
