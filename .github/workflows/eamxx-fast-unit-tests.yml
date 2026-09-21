@@ -61,9 +61,12 @@ jobs:
         run: |
           source /entrypoint.sh
           source "${HOME}/.venv/bin/activate"
-          # entrypoint.sh only adds this when ${PWD}/.git already exists,
-          # but checkout hasn't happened yet at this point in the job.
-          git config --global --add safe.directory '*'
+          # --system (not --global): entrypoint.sh exports HOME=/root, but
+          # GitHub Actions runs every step with HOME=/github/home, so a
+          # --global entry here would land in a .gitconfig later steps never
+          # read. --system writes to /etc/gitconfig instead, sidestepping
+          # the HOME mismatch.
+          git config --system --add safe.directory '*'
           {
             echo "PATH=${PATH}"
             echo "PKG_CONFIG_PATH=${PKG_CONFIG_PATH}"
