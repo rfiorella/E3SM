@@ -51,6 +51,13 @@ jobs:
       - name: Configure container environment
         env:
           SKIP_ENTRYPOINT: "true"
+          # entrypoint.sh has a latent bug in its CI-gated .cime-copy block
+          # (compares unset $SRC/$DST under `set -u`); that block only runs
+          # when CI=true, which GitHub Actions always sets. It's a no-op for
+          # us anyway since HOME already matches the image's baked-in
+          # /root/.cime, so disable it for this step rather than patching the
+          # shared entrypoint.sh.
+          CI: "false"
         run: |
           source /entrypoint.sh
           source "${HOME}/.venv/bin/activate"
