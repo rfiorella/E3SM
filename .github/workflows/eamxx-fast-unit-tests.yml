@@ -61,6 +61,9 @@ jobs:
         run: |
           source /entrypoint.sh
           source "${HOME}/.venv/bin/activate"
+          # entrypoint.sh only adds this when ${PWD}/.git already exists,
+          # but checkout hasn't happened yet at this point in the job.
+          git config --global --add safe.directory '*'
           {
             echo "PATH=${PATH}"
             echo "PKG_CONFIG_PATH=${PKG_CONFIG_PATH}"
