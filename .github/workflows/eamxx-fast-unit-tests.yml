@@ -43,6 +43,25 @@ jobs:
         build_type: [dbg, sp, fpe, opt]
     name: fast-unit-tests / ${{ matrix.os }} / ${{ matrix.build_type }}
     steps:
+      # GitHub Actions container jobs never run the image's ENTRYPOINT (it
+      # keeps the container alive and execs each step directly), so the
+      # PATH/env setup that /entrypoint.sh normally performs (pixi toolchain,
+      # venv with python3) never happens. Replicate it here instead of
+      # patching the shared cime/docker/entrypoint.sh used by other images.
+      - name: Configure container environment
+        env:
+          SKIP_ENTRYPOINT: "true"
+        run: |
+          source /entrypoint.sh
+          source "${HOME}/.venv/bin/activate"
+          {
+            echo "PATH=${PATH}"
+            echo "PKG_CONFIG_PATH=${PKG_CONFIG_PATH}"
+            echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
+            echo "ESMFMKFILE=${ESMFMKFILE}"
+            echo "UCX_TLS=${UCX_TLS}"
+            echo "VIRTUAL_ENV=${VIRTUAL_ENV}"
+          } >> "$GITHUB_ENV"
       - name: Check out the repository
         uses: actions/checkout@v7
         with:
