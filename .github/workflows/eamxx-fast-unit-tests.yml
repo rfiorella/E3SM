@@ -1,0 +1,71 @@
+name: eamxx-fast-unit-tests
+
+on:
+  # Runs on PRs against master
+  pull_request:
+    branches: [ master ]
+    types: [opened, synchronize, ready_for_review, reopened]
+    paths:
+      - '.github/workflows/eamxx-fast-unit-tests.yml'
+      - 'components/eamxx/CMakeLists.txt'
+      - 'components/eamxx/src/**'
+      - 'externals/ekat'
+      - 'externals/mam4xx'
+      - 'externals/haero'
+
+  # Manual run, e.g. to test a runner label change
+  workflow_dispatch:
+
+concurrency:
+  # Two runs are in the same group if they are testing the same git ref
+  #  - if trigger=pull_request, the ref is refs/pull/<PR_NUMBER>/merge
+  #  - for other triggers, the ref is the branch tested
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash -leo pipefail {0}
+
+jobs:
+  fast-unit-tests:
+    runs-on: ${{ matrix.os }}
+    container:
+      image: rfiorella/cime:latest
+    env:
+      CIME_MODEL: e3sm
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
+        build_type: [dbg, sp, fpe, opt]
+    name: fast-unit-tests / ${{ matrix.os }} / ${{ matrix.build_type }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          show-progress: false
+          submodules: recursive
+      - name: Run fast unit tests
+        working-directory: components/eamxx
+        run: |
+          # Only build src/*/tests (fast unit tests, no input-data downloads).
+          # tests/single-process and tests/multi-process are skipped via
+          # SCREAM_ENABLE_DRIVER_TESTS=OFF. EAMXX_ENABLE_WATER_ISOTOPES=ON is
+          # forward-compatible: it's a no-op today for testing purposes since
+          # water_isotopes has no tests wired into the build yet on master,
+          # but it will start being exercised automatically once that lands.
+          ./scripts/test-all-eamxx -m copilot-testing -t ${{ matrix.build_type }} \
+            -c SCREAM_ENABLE_DRIVER_TESTS=OFF \
+            -c EAMXX_ENABLE_WATER_ISOTOPES=ON \
+            -x
+      - name: Upload ctest logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: log-files-${{ matrix.os }}-${{ matrix.build_type }}
+          path: |
+            components/eamxx/ctest-build/**/ctest_resource_file.json
+            components/eamxx/ctest-build/**/CMakeCache.txt
+            components/eamxx/ctest-build/**/Testing/**
