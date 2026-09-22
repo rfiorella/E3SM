@@ -81,22 +81,17 @@ jobs:
           persist-credentials: false
           show-progress: false
           submodules: recursive
-      - name: Restore EAMxx input-data cache
-        uses: actions/cache@v4
-        with:
-          path: /github/home/e3sm-inputdata
-          key: eamxx-inputdata-v1
-
       - name: Run unit tests
         working-directory: components/eamxx
         env:
-          SCREAM_INPUT_ROOT: /github/home/e3sm-inputdata
+          # Baked into rfiorella/cime:latest, so GetInputFile()'s EXISTS
+          # check succeeds without needing network access to LCRC/UCAR.
+          SCREAM_INPUT_ROOT: /inputdata
         run: |
           # EAMXX_ENABLE_WATER_ISOTOPES=ON is forward-compatible: it's a no-op
           # today since water_isotopes has no tests wired into the build yet
           # on master, but it will start being exercised automatically once
           # that lands.
-          mkdir -p "$SCREAM_INPUT_ROOT"
           ./scripts/test-all-eamxx -m copilot-testing -t ${{ matrix.build_type }} \
             -c EAMXX_ENABLE_WATER_ISOTOPES=ON \
             -x
