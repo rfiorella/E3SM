@@ -6,17 +6,20 @@ include (${EKAT_MACH_FILES_PATH}/kokkos/openmp.cmake)
 # No resource manager in CI/container environments
 set (EKAT_TEST_LAUNCHER_MANAGE_RESOURCES True CACHE BOOL "")
 
-# -fallow-argument-mismatch is needed for gfortran >= 10 to compile legacy Fortran code.
-# Older versions do not recognise this flag.
-if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU"
-    AND CMAKE_Fortran_COMPILER_VERSION VERSION_GREATER_EQUAL 10)
-  if (CMAKE_Fortran_FLAGS)
-    set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -fallow-argument-mismatch"
-        CACHE STRING "Fortran compiler flags" FORCE)
-  else()
-    set(CMAKE_Fortran_FLAGS "-fallow-argument-mismatch"
-        CACHE STRING "Fortran compiler flags" FORCE)
-  endif()
+# -fallow-argument-mismatch is needed for gfortran >= 10 to compile legacy
+# Fortran code (e.g. HOMME's bndry_mod.F90, which calls MPI_Isend/Irecv with
+# inconsistent argument types across call sites). CMAKE_Fortran_COMPILER_ID
+# can't be used to guard this: this file is preloaded via ctest's `-C`
+# option, which runs before project()/enable_language(), so that variable is
+# still unset here. Detect gfortran directly via `mpifort --version` instead.
+execute_process(
+  COMMAND mpifort --version
+  OUTPUT_VARIABLE _mpifort_version_output
+  ERROR_VARIABLE _mpifort_version_output
+)
+if (_mpifort_version_output MATCHES "GNU Fortran")
+  set(CMAKE_Fortran_FLAGS "-fallow-argument-mismatch"
+      CACHE STRING "Fortran compiler flags" FORCE)
 endif()
 
 # Input data directory (set by setup-copilot-env.sh or agent)
