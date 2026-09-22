@@ -48,8 +48,19 @@ endif()
 set(EKAT_MPIRUN_EXE "mpirun" CACHE STRING "")
 set(EKAT_MPI_NP_FLAG "-n" CACHE STRING "")
 
-# Allow running MPI as root (common in containers/CI)
-set(EKAT_MPI_EXTRA_ARGS "--allow-run-as-root --oversubscribe" CACHE STRING "Extra args for mpirun")
+# Open MPI refuses to run as root and warns about oversubscription unless
+# told otherwise; MPICH's mpiexec has neither restriction and errors out on
+# these unrecognized flags. Detect which one is present instead of assuming.
+execute_process(
+  COMMAND mpirun --version
+  OUTPUT_VARIABLE _mpirun_version_output
+  ERROR_VARIABLE _mpirun_version_output
+)
+if (_mpirun_version_output MATCHES "Open MPI")
+  set(EKAT_MPI_EXTRA_ARGS "--allow-run-as-root --oversubscribe" CACHE STRING "Extra args for mpirun")
+else()
+  set(EKAT_MPI_EXTRA_ARGS "" CACHE STRING "Extra args for mpirun")
+endif()
 
 # Disable use of deprecated Kokkos 4 APIs
 option(Kokkos_ENABLE_DEPRECATED_CODE_4 "" OFF)
