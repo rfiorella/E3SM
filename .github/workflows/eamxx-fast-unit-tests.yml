@@ -1,0 +1,111 @@
+name: eamxx-fast-unit-tests
+
+on:
+  # Runs on PRs against master
+  pull_request:
+    branches: [ master ]
+    types: [opened, synchronize, ready_for_review, reopened]
+    paths:
+      - '.github/workflows/eamxx-fast-unit-tests.yml'
+      - 'components/eamxx/CMakeLists.txt'
+      - 'components/eamxx/cmake/**'
+      - 'components/eamxx/src/**'
+      - 'components/eamxx/tests/**'
+      - 'externals/ekat'
+      - 'externals/mam4xx'
+      - 'externals/haero'
+
+  # Manual run, e.g. to test a runner label change
+  workflow_dispatch:
+
+concurrency:
+  # Two runs are in the same group if they are testing the same git ref
+  #  - if trigger=pull_request, the ref is refs/pull/<PR_NUMBER>/merge
+  #  - for other triggers, the ref is the branch tested
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash -leo pipefail {0}
+
+jobs:
+  fast-unit-tests:
+    runs-on: ${{ matrix.os }}
+    container:
+      image: rfiorella/cime:latest
+    env:
+      CIME_MODEL: e3sm
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm]
+        build_type: [dbg, opt]
+    name: fast-unit-tests / ${{ matrix.os }} / ${{ matrix.build_type }}
+    steps:
+      # GitHub Actions container jobs never run the image's ENTRYPOINT (it
+      # keeps the container alive and execs each step directly), so the
+      # PATH/env setup that /entrypoint.sh normally performs (pixi toolchain,
+      # venv with python3) never happens. Replicate it here instead of
+      # patching the shared cime/docker/entrypoint.sh used by other images.
+      - name: Configure container environment
+        env:
+          SKIP_ENTRYPOINT: "true"
+          # entrypoint.sh has a latent bug in its CI-gated .cime-copy block
+          # (compares unset $SRC/$DST under `set -u`); that block only runs
+          # when CI=true, which GitHub Actions always sets. It's a no-op for
+          # us anyway since HOME already matches the image's baked-in
+          # /root/.cime, so disable it for this step rather than patching the
+          # shared entrypoint.sh.
+          CI: "false"
+        run: |
+          source /entrypoint.sh
+          source "${HOME}/.venv/bin/activate"
+          # --system (not --global): entrypoint.sh exports HOME=/root, but
+          # GitHub Actions runs every step with HOME=/github/home, so a
+          # --global entry here would land in a .gitconfig later steps never
+          # read. --system writes to /etc/gitconfig instead, sidestepping
+          # the HOME mismatch.
+          git config --system --add safe.directory '*'
+          {
+            echo "PATH=${PATH}"
+            echo "PKG_CONFIG_PATH=${PKG_CONFIG_PATH}"
+            echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH}"
+            echo "ESMFMKFILE=${ESMFMKFILE}"
+            echo "UCX_TLS=${UCX_TLS}"
+            echo "VIRTUAL_ENV=${VIRTUAL_ENV}"
+          } >> "$GITHUB_ENV"
+      - name: Check out the repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          show-progress: false
+          submodules: recursive
+      - name: Run unit tests
+        working-directory: components/eamxx
+        env:
+          # Baked into rfiorella/cime:latest, so GetInputFile()'s EXISTS
+          # check succeeds without needing network access to LCRC/UCAR.
+          SCREAM_INPUT_ROOT: /inputdata
+        run: |
+          # EAMXX_ENABLE_WATER_ISOTOPES=ON is forward-compatible: it's a no-op
+          # today since water_isotopes has no tests wired into the build yet
+          # on master, but it will start being exercised automatically once
+          # that lands.
+          # -x/--extra-verbose is intentionally omitted: it sets
+          # EKAT_TEST_LAUNCHER_BUFFER=True, which makes test-launcher run
+          # tests via subprocess.Popen() instead of os.system(). Popen's
+          # default close_fds=True closes the fd MPICH's Hydra process
+          # manager uses for PMI, breaking every MPI test with
+          # "PMI_Init failed" under this container's MPICH.
+          ./scripts/test-all-eamxx -m copilot-testing -t ${{ matrix.build_type }} \
+            -c EAMXX_ENABLE_WATER_ISOTOPES=ON
+      - name: Upload ctest logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: log-files-${{ matrix.os }}-${{ matrix.build_type }}
+          path: |
+            components/eamxx/ctest-build/**/ctest_resource_file.json
+            components/eamxx/ctest-build/**/CMakeCache.txt
+            components/eamxx/ctest-build/**/Testing/**

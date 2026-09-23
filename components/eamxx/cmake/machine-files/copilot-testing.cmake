@@ -6,17 +6,20 @@ include (${EKAT_MACH_FILES_PATH}/kokkos/openmp.cmake)
 # No resource manager in CI/container environments
 set (EKAT_TEST_LAUNCHER_MANAGE_RESOURCES True CACHE BOOL "")
 
-# -fallow-argument-mismatch is needed for gfortran >= 10 to compile legacy Fortran code.
-# Older versions do not recognise this flag.
-if (CMAKE_Fortran_COMPILER_ID STREQUAL "GNU"
-    AND CMAKE_Fortran_COMPILER_VERSION VERSION_GREATER_EQUAL 10)
-  if (CMAKE_Fortran_FLAGS)
-    set(CMAKE_Fortran_FLAGS "${CMAKE_Fortran_FLAGS} -fallow-argument-mismatch"
-        CACHE STRING "Fortran compiler flags" FORCE)
-  else()
-    set(CMAKE_Fortran_FLAGS "-fallow-argument-mismatch"
-        CACHE STRING "Fortran compiler flags" FORCE)
-  endif()
+# -fallow-argument-mismatch is needed for gfortran >= 10 to compile legacy
+# Fortran code (e.g. HOMME's bndry_mod.F90, which calls MPI_Isend/Irecv with
+# inconsistent argument types across call sites). CMAKE_Fortran_COMPILER_ID
+# can't be used to guard this: this file is preloaded via ctest's `-C`
+# option, which runs before project()/enable_language(), so that variable is
+# still unset here. Detect gfortran directly via `mpifort --version` instead.
+execute_process(
+  COMMAND mpifort --version
+  OUTPUT_VARIABLE _mpifort_version_output
+  ERROR_VARIABLE _mpifort_version_output
+)
+if (_mpifort_version_output MATCHES "GNU Fortran")
+  set(CMAKE_Fortran_FLAGS "-fallow-argument-mismatch"
+      CACHE STRING "Fortran compiler flags" FORCE)
 endif()
 
 # Input data directory (set by setup-copilot-env.sh or agent)
@@ -48,8 +51,19 @@ endif()
 set(EKAT_MPIRUN_EXE "mpirun" CACHE STRING "")
 set(EKAT_MPI_NP_FLAG "-n" CACHE STRING "")
 
-# Allow running MPI as root (common in containers/CI)
-set(EKAT_MPI_EXTRA_ARGS "--allow-run-as-root --oversubscribe" CACHE STRING "Extra args for mpirun")
+# Open MPI refuses to run as root and warns about oversubscription unless
+# told otherwise; MPICH's mpiexec has neither restriction and errors out on
+# these unrecognized flags. Detect which one is present instead of assuming.
+execute_process(
+  COMMAND mpirun --version
+  OUTPUT_VARIABLE _mpirun_version_output
+  ERROR_VARIABLE _mpirun_version_output
+)
+if (_mpirun_version_output MATCHES "Open MPI")
+  set(EKAT_MPI_EXTRA_ARGS "--allow-run-as-root --oversubscribe" CACHE STRING "Extra args for mpirun")
+else()
+  set(EKAT_MPI_EXTRA_ARGS "" CACHE STRING "Extra args for mpirun")
+endif()
 
 # Disable use of deprecated Kokkos 4 APIs
 option(Kokkos_ENABLE_DEPRECATED_CODE_4 "" OFF)
