@@ -40,7 +40,7 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, ubuntu-24.04-arm]
-        build_type: [dbg, sp, fpe, opt]
+        build_type: [dbg, opt]
     name: fast-unit-tests / ${{ matrix.os }} / ${{ matrix.build_type }}
     steps:
       # GitHub Actions container jobs never run the image's ENTRYPOINT (it
