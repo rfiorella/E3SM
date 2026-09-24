@@ -66,49 +66,81 @@ TEST_CASE("runtime_formulation_selection") {
   }
 
   SECTION("liquid_vapor_fractionation") {
+    using wiso::CondensedPhase;
+    using wiso::IsoElement;
+
     // Test 1: Default (Horita & Wesolowski 1994)
     WaterIsotopeRuntimeOptions opts_horita;
     WaterIsotopeConstants<Real> constants_horita(opts_horita);
 
-    // Verify Horita & Wesolowski 1994 values for HDO coefficient A
-    REQUIRE(std::abs(constants_horita.AlphaLiqVap_CoefA(wiso::HDO) - Real(1158.8e-12)) < 1e-16);
-    REQUIRE(std::abs(constants_horita.AlphaLiqVap_CoefE(wiso::HDO) - Real(2.9992e6)) < 1e-1);
+    // Verify Horita & Wesolowski 1994 hydrogen coefficients. NOTE the per-mil
+    // convention: the table holds 10^3 * ln(alpha), so each value is 1000x the
+    // corresponding coefficient of ln(alpha).
+    const auto& horita_h = constants_horita.alpha_eq_coeffs(CondensedPhase::Liquid,
+                                                            IsoElement::Hydrogen);
+    REQUIRE(std::abs(horita_h.T3 - Real(1.1588e-6)) < 1e-12);
+    REQUIRE(std::abs(horita_h.T_3 - Real(2.9992e9)) < 1e2);
 
     // Test 2: Majoube 1971
     WaterIsotopeRuntimeOptions opts_majoube;
     opts_majoube.liquid_vapor = wiso::LiquidVaporFractionation::Majoube1971;
     WaterIsotopeConstants<Real> constants_majoube(opts_majoube);
 
-    // Verify Majoube 1971a values for HDO coefficient A
-    REQUIRE(std::abs(constants_majoube.AlphaLiqVap_CoefA(wiso::HDO) - Real(24.844e3)) < 1e-1);
-    // Majoube doesn't use E coefficient
-    REQUIRE(constants_majoube.AlphaLiqVap_CoefE(wiso::HDO) == Real(0.0));
+    const auto& majoube_h = constants_majoube.alpha_eq_coeffs(CondensedPhase::Liquid,
+                                                               IsoElement::Hydrogen);
+    REQUIRE(std::abs(majoube_h.T_2 - Real(2.4844e7)) < 1e0);
+    // Majoube is a pure function of 1/T: no ascending-power terms.
+    REQUIRE(majoube_h.T3 == Real(0.0));
+    REQUIRE(majoube_h.T2 == Real(0.0));
+    REQUIRE(majoube_h.T1 == Real(0.0));
 
     // Verify they differ significantly
-    REQUIRE(std::abs(constants_horita.AlphaLiqVap_CoefA(wiso::HDO) - constants_majoube.AlphaLiqVap_CoefA(wiso::HDO)) > 1e3);
+    REQUIRE(std::abs(horita_h.T_3 - majoube_h.T_3) > 1e6);
+
+    // Fitted ranges differ: Horita extends to 364 C, Majoube stops at 100 C.
+    REQUIRE(constants_horita.tbounds(CondensedPhase::Liquid, IsoElement::Hydrogen).Tmax >
+            constants_majoube.tbounds(CondensedPhase::Liquid, IsoElement::Hydrogen).Tmax);
   }
 
   SECTION("ice_vapor_fractionation") {
-    // Test 1: Default (Merlivat & Nief 1967)
+    using wiso::CondensedPhase;
+    using wiso::IsoElement;
+
+    // Test 1: Default (Merlivat & Nief 1967 for HDO, Majoube 1971 for H218O)
     WaterIsotopeRuntimeOptions opts_merlivat;
     WaterIsotopeConstants<Real> constants_merlivat(opts_merlivat);
 
-    // Verify Merlivat & Nief 1967 values for HDO coefficient A
-    REQUIRE(std::abs(constants_merlivat.AlphaIceVap_CoefA(wiso::HDO) - Real(16289.0)) < 1e-1);
-    REQUIRE(std::abs(constants_merlivat.AlphaIceVap_CoefC(wiso::HDO) - Real(-9.45e-2)) < 1e-4);
+    const auto& merlivat_h = constants_merlivat.alpha_eq_coeffs(CondensedPhase::Ice,
+                                                                 IsoElement::Hydrogen);
+    REQUIRE(std::abs(merlivat_h.T_2 - Real(1.6289e7)) < 1e0);
+    REQUIRE(std::abs(merlivat_h.T0 - Real(-9.45e1)) < 1e-1);
+
+    // The oxygen row comes from a different study, with a different fitted
+    // range: 1/T only, and starting at 239.75 K rather than 233.15 K.
+    const auto& majoube_o = constants_merlivat.alpha_eq_coeffs(CondensedPhase::Ice,
+                                                               IsoElement::Oxygen);
+    REQUIRE(std::abs(majoube_o.T_1 - Real(1.1839e4)) < 1e0);
+    REQUIRE(majoube_o.T_2 == Real(0.0));
+    REQUIRE(std::abs(constants_merlivat.tbounds(CondensedPhase::Ice, IsoElement::Oxygen).Tmin
+                     - Real(239.75)) < 1e-2);
 
     // Test 2: isoCAM3
     WaterIsotopeRuntimeOptions opts_isocam3;
     opts_isocam3.ice_vapor = wiso::IceVaporFractionation::IsoCAM3;
     WaterIsotopeConstants<Real> constants_isocam3(opts_isocam3);
 
-    // Verify isoCAM3 values for HDO coefficient A
-    REQUIRE(std::abs(constants_isocam3.AlphaIceVap_CoefA(wiso::HDO) - Real(16288.0)) < 1e-1);
-    REQUIRE(std::abs(constants_isocam3.AlphaIceVap_CoefC(wiso::HDO) - Real(-9.34e-2)) < 1e-4);
+    const auto& isocam3_h = constants_isocam3.alpha_eq_coeffs(CondensedPhase::Ice,
+                                                               IsoElement::Hydrogen);
+    REQUIRE(std::abs(isocam3_h.T_2 - Real(1.6288e7)) < 1e0);
+    REQUIRE(std::abs(isocam3_h.T0 - Real(-9.34e1)) < 1e-1);
 
     // Verify they differ (slightly, but measurably)
-    REQUIRE(constants_merlivat.AlphaIceVap_CoefA(wiso::HDO) != constants_isocam3.AlphaIceVap_CoefA(wiso::HDO));
-    REQUIRE(constants_merlivat.AlphaIceVap_CoefC(wiso::HDO) != constants_isocam3.AlphaIceVap_CoefC(wiso::HDO));
+    REQUIRE(merlivat_h.T_2 != isocam3_h.T_2);
+    REQUIRE(merlivat_h.T0 != isocam3_h.T0);
+
+    // isoCAM3 exists to extrapolate colder than the original fits.
+    REQUIRE(constants_isocam3.tbounds(CondensedPhase::Ice, IsoElement::Hydrogen).Tmin <
+            constants_merlivat.tbounds(CondensedPhase::Ice, IsoElement::Hydrogen).Tmin);
   }
 
   SECTION("combined_formulations") {
@@ -125,8 +157,10 @@ TEST_CASE("runtime_formulation_selection") {
     // Verify each setting was applied correctly
     REQUIRE(constants_alt.ratio_src(wiso::HDO) != constants_default.ratio_src(wiso::HDO));
     REQUIRE(constants_alt.ocean_src(wiso::HDO) != constants_default.ocean_src(wiso::HDO));
-    REQUIRE(constants_alt.AlphaLiqVap_CoefA(wiso::HDO) != constants_default.AlphaLiqVap_CoefA(wiso::HDO));
-    REQUIRE(constants_alt.AlphaIceVap_CoefA(wiso::HDO) != constants_default.AlphaIceVap_CoefA(wiso::HDO));
+    REQUIRE(constants_alt.alpha_eq_coeffs(wiso::CondensedPhase::Liquid, wiso::IsoElement::Hydrogen).T_3 !=
+            constants_default.alpha_eq_coeffs(wiso::CondensedPhase::Liquid, wiso::IsoElement::Hydrogen).T_3);
+    REQUIRE(constants_alt.alpha_eq_coeffs(wiso::CondensedPhase::Ice, wiso::IsoElement::Hydrogen).T_2 !=
+            constants_default.alpha_eq_coeffs(wiso::CondensedPhase::Ice, wiso::IsoElement::Hydrogen).T_2);
   }
 
   SECTION("fractionation_with_runtime_constants") {
@@ -156,21 +190,23 @@ TEST_CASE("runtime_formulation_selection") {
     REQUIRE(rel_diff > 1e-6);  // At least 0.0001% difference
   }
 
-  SECTION("backward_compatibility") {
-    // Test that 3-argument form still works and matches default formulation
-    const Real temp = Real(273.15);
+  SECTION("phase_wrappers_match_generic_form") {
+    // The phase-specific spellings must be exactly the generic evaluator with
+    // the phase pinned -- they add no logic, so they must not add any drift.
+    const Real temp = Real(263.15);
+    WaterIsotopeConstants<Real> constants;
 
-    // Call 3-argument form (backward compatible)
-    Real alpha_3arg = WaterIsotopeFractionation::alpha_liquid_vapor(
-      temp, wiso::HDO, wiso::CondensedOverVapor);
+    REQUIRE(WaterIsotopeFractionation::alpha_liquid_vapor(
+              temp, wiso::HDO, wiso::CondensedOverVapor, constants) ==
+            WaterIsotopeFractionation::alpha_equilibrium(
+              temp, wiso::HDO, wiso::CondensedPhase::Liquid,
+              wiso::CondensedOverVapor, constants));
 
-    // Call 4-argument form with default constants
-    WaterIsotopeConstants<Real> constants_default;
-    Real alpha_4arg = WaterIsotopeFractionation::alpha_liquid_vapor(
-      temp, wiso::HDO, wiso::CondensedOverVapor, constants_default);
-
-    // They should be identical
-    REQUIRE(alpha_3arg == alpha_4arg);
+    REQUIRE(WaterIsotopeFractionation::alpha_ice_vapor(
+              temp, wiso::H218O, wiso::CondensedOverVapor, constants) ==
+            WaterIsotopeFractionation::alpha_equilibrium(
+              temp, wiso::H218O, wiso::CondensedPhase::Ice,
+              wiso::CondensedOverVapor, constants));
   }
 }
 

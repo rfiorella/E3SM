@@ -95,7 +95,7 @@ constants);
     const ScalarT a_o18 = alpha_fn(t, wiso::H218O, wiso::CondensedOverVapor,
 constants);
 
-    //REQUIRE( relative_approx(a_hdo, ref_hdo(T_array[i]), tol) );
+    REQUIRE( relative_approx(a_hdo, ref_hdo(T_array[i]), tol) );
     REQUIRE( relative_approx(a_o18, ref_o18(T_array[i]), tol) );
     
     // H216O check
@@ -108,7 +108,7 @@ constants);
 constants);
     const ScalarT a_o18_inv = alpha_fn(t, wiso::H218O, wiso::VaporOverCondensed,
 constants);
-    //REQUIRE( relative_approx(a_hdo_inv, 1.0/ref_hdo(T_array[i]), tol) );
+    REQUIRE( relative_approx(a_hdo_inv, 1.0/ref_hdo(T_array[i]), tol) );
     REQUIRE( relative_approx(a_o18_inv, 1.0/ref_o18(T_array[i]), tol) );
     
     // Power law checks for H217O and HTO
@@ -117,12 +117,12 @@ constants);
     const ScalarT a_ht = alpha_fn(t, wiso::HTO, wiso::CondensedOverVapor,
 constants);
     REQUIRE( relative_approx(a_17, std::pow(ref_o18(T_array[i]), 0.529), tol) );
-    // REQUIRE( relative_approx(a_ht, std::pow(ref_hdo(T_array[i]), 2.0), tol) );
-    
+    REQUIRE( relative_approx(a_ht, std::pow(ref_hdo(T_array[i]), 2.0), tol) );
+
     // Monotonicity and >= 1 checks
     REQUIRE( a_hdo[0] >= RealT(1) );
     REQUIRE( a_o18[0] >= RealT(1) );
-    //REQUIRE( a_hdo[0] < prev_hdo );
+    REQUIRE( a_hdo[0] < prev_hdo );
     REQUIRE( a_o18[0] < prev_o18 );
     prev_hdo = a_hdo[0];
     prev_o18 = a_o18[0];
@@ -137,9 +137,12 @@ void run_on_device()
   using view_1d = typename KT::template view_1d<Real>;
 
   view_1d out("wiso_alpha_device", 2);
+  // Constructed inside the kernel to confirm the resolving constructor itself is
+  // device-callable, not just the evaluator.
   Kokkos::parallel_for("wiso_frac_device", 1, KOKKOS_LAMBDA(const int /*i*/) {
-    out(0) = WIF::alpha_liquid_vapor(Real(273.15), wiso::HDO,   wiso::CondensedOverVapor);
-    out(1) = WIF::alpha_ice_vapor  (Real(253.15), wiso::H218O, wiso::CondensedOverVapor);
+    wiso::WaterIsotopeConstants<Real> constants;
+    out(0) = WIF::alpha_liquid_vapor(Real(273.15), wiso::HDO,   wiso::CondensedOverVapor, constants);
+    out(1) = WIF::alpha_ice_vapor  (Real(253.15), wiso::H218O, wiso::CondensedOverVapor, constants);
   });
   Kokkos::fence();
 
@@ -160,7 +163,17 @@ void verify_formulation_differences()
   const Real t_warm = Real(293.15);  // 20°C (liquid)
   const Real t_cold = Real(243.15);  // -30°C (ice)
 
-  // Liquid-vapor: Horita vs Majoube should differ by several percent
+  /* Liquid-vapor: Horita & Wesolowski vs Majoube.
+
+     These are two independent laboratory regressions of the same physical
+     quantity, so at a temperature well inside both fitted ranges they must
+     agree closely -- but not exactly, or the runtime switch would be
+     meaningless. Bracketing the difference on both sides catches a silently
+     ignored formulation option (lower bound) and a transcription error in
+     either coefficient row (upper bound).
+
+     The 1e-2 lower bound this assertion previously carried was calibrated when
+     the Majoube path overflowed to +inf; it encoded the bug, not the physics. */
   {
     wiso::WaterIsotopeConstants<Real> const_horita;  // Default
     wiso::WaterIsotopeRuntimeOptions opts_maj;
@@ -174,9 +187,10 @@ void verify_formulation_differences()
 
     Real rel_diff = std::abs(alpha_horita - alpha_majoube) / alpha_horita;
 
-    // Should differ by at least 1% (observed ~3-5% in exploration)
-    REQUIRE( rel_diff > Real(0.01) );
-    // But both should still enrich heavy isotopes
+    // Observed 6.2e-4 at 20 C.
+    REQUIRE( rel_diff > Real(1e-5) );
+    REQUIRE( rel_diff < Real(0.01) );
+    // Both must still enrich the heavy isotope into the condensate.
     REQUIRE( alpha_horita > Real(1.0) );
     REQUIRE( alpha_majoube > Real(1.0) );
   }
@@ -219,28 +233,35 @@ void run_both_pack_sizes(
 TEST_CASE("water_isotopes_fractionation") {
     using Real = scream::Real;
 
+    /* Every sweep below compares against an independently transcribed reference,
+       so the tolerance only needs to absorb the difference between two
+       evaluation orders of the same polynomial (Horner here, expanded in the
+       reference), not any physics uncertainty. Observed worst case is ~1.4 ulp,
+       so this leaves ample margin in both precisions. */
+    const Real tight_tol = std::is_same<Real,double>::value ? Real(1e-12) : Real(1e-5);
+
     SECTION("default_formulations") {
       wiso::WaterIsotopeConstants<Real> constants;
       run_both_pack_sizes("liquid-vapor", T_liq, NLIQ, ref_alpl_hdo, ref_alpl_o18,
-        Real(1e-6), constants);
+        tight_tol, constants);
       run_both_pack_sizes("ice-vapor", T_ice, NICE, ref_alpi_hdo, ref_alpi_o18,
-        Real(1e-6), constants);
-    }   
-    
+        tight_tol, constants);
+    }
+
     SECTION("alternative_liquid_vapor") {
       wiso::WaterIsotopeRuntimeOptions opts;
       opts.liquid_vapor = wiso::LiquidVaporFractionation::Majoube1971;
       wiso::WaterIsotopeConstants<Real> constants(opts);
-      run_both_pack_sizes("liquid-vapor", T_liq, NLIQ, ref_alpl_hdo_majoube, 
-        ref_alpl_o18_majoube, Real(1e0), constants);
+      run_both_pack_sizes("liquid-vapor", T_liq, NLIQ, ref_alpl_hdo_majoube,
+        ref_alpl_o18_majoube, tight_tol, constants);
     }
     
     SECTION("alternative_ice_vapor") {
       wiso::WaterIsotopeRuntimeOptions opts;
       opts.ice_vapor = wiso::IceVaporFractionation::IsoCAM3;
       wiso::WaterIsotopeConstants<Real> constants(opts);
-      run_both_pack_sizes("ice-vapor", T_ice, NICE, ref_alpi_hdo_isocam3, 
-        ref_alpi_o18_isocam3, Real(1e-6), constants);
+      run_both_pack_sizes("ice-vapor", T_ice, NICE, ref_alpi_hdo_isocam3,
+        ref_alpi_o18_isocam3, tight_tol, constants);
     }
 
     SECTION("device execution") {
