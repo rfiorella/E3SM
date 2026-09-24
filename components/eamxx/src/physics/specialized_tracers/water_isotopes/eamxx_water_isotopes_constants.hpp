@@ -29,23 +29,79 @@ namespace wiso {
  *                       Merlivat & Nief 1967 + Majoube 1971 (ice/vapor)
  */
 
-// ============================================================================
-// Runtime configuration enums and struct
-// ============================================================================
+// Refactored version:
+/* Equilibrium fractionation coefficients in the literature are 
+polynomial fits with temperature. */
 
-// Liquid/vapor equilibrium fractionation formulation
+struct TemperatureBounds {
+  Real Tmin, Tmax;
+};
+
+struct PolynomialCoefficients {
+  Real T3, T2, T1, T0, T_1, T_2, T_3, T_4, T_6;
+};
+struct EquilibriumFractionationCoefficients {
+  const char* ref; // source of coefficients
+  const char* element; // hydrogen or oxygen
+  const char* condensed_phase; // ice or liquid
+  TemperatureBounds tbounds;
+  PolynomialCoefficients alpha_eq_coeffs;
+};
+
+// Liquid/vapor equilibrium fractionation formulation options
 enum class LiquidVaporFractionation {
   HoritaWesolowski1994 = 0,  // Default: Horita & Wesolowski (1994)
   Majoube1971 = 1,           // Alternative: Majoube (1971)
   FormulationCount
 };
 
-// Diffusivity ratio formulation
-enum class DiffusivityFormulation {
-  Merlivat1978 = 0,  // Default: Merlivat (1978)
-  Cappa2003 = 1,     // Alternative: Cappa et al. (2003)
+// Ice/vapor equilibrium fractionation formulation options
+enum class IceVaporFractionation {
+  MerlivatNief1967 = 0,  // Default: Merlivat & Nief (1967) HDO + Majoube (1971) O18
+  IsoCAM3 = 1,           // Alternative: isoCAM3 formulation
   FormulationCount
 };
+
+static constexpr std::array<EquilibriumFractionationCoefficients, 8> alpha_eq_table = {{
+  // liquid-vapor options in LiquidVaporFractionation enum
+  {"HoritaWesolowski1994","oxygen","liquid",
+    {273.15,637.15},
+    {0., 0., 0., -7.685, 6.7123e3, -1.6664e6, 3.5041e8, 0., 0.}
+  },
+  {"HoritaWesolowski1994","hydrogen","liquid",
+    {273.15,637.15},
+    {1.1588e-6, -1.6201e-3, 7.9484e-1, -1.6104e2, 0., 0., 2.9992e9, 0., 0.}
+  },
+  {"Majoube1971","oxygen","liquid",
+    {273.15,373.15},
+    {0., 0., 0., -2.067, -4.156e2, 1.137e6, 0., 0., 0.}
+  },
+  {"Majoube1971","hydrogen","liquid",
+    {273.15,373.15},
+    {0., 0., 0., 5.2612e1, -7.6248e4, 2.4844e7, 0., 0., 0.}
+  },
+  // ice-vapor options in IceVaporFractionation enum
+  {"MerlivatNief1967","oxygen","ice",
+    {233.15,273.15},
+    {0., 0., 0., -9.45e1, 0., 1.6289e7, 0., 0., 0.}
+  },
+  {"MerlivatNief1967","hydrogen","ice", // tricky, because this is actually majoube 1971...need to fix.
+    {239.75,273.15},
+    {0., 0., 0., -2.8224e1, 1.1839e4, 0., 0., 0., 0.}
+  },
+  {"IsoCAM3","hydrogen","ice",
+    {203.15,273.15},
+    {0., 0., 0., -2.8224e1, 1.1839e4, 0., 0., 0., 0.}
+  },
+  {"IsoCAM3","oxygen","ice",
+    {203.15,273.15},
+    {0., 0., 0., -9.34e1, 0., 1.6288e7, 0., 0., 0.}
+  }
+}};
+
+// ============================================================================
+// Runtime configuration enums and struct
+// ============================================================================
 
 // Standard isotope ratio formulation
 enum class StandardRatioFormulation {
@@ -61,17 +117,9 @@ enum class OceanEnrichmentFormulation {
   FormulationCount
 };
 
-// Ice/vapor equilibrium fractionation formulation
-enum class IceVaporFractionation {
-  MerlivatNief1967 = 0,  // Default: Merlivat & Nief (1967) HDO + Majoube (1971) O18
-  IsoCAM3 = 1,           // Alternative: isoCAM3 formulation
-  FormulationCount
-};
-
 // Runtime configuration struct - holds user's formulation choices
 struct WaterIsotopeRuntimeOptions {
   LiquidVaporFractionation liquid_vapor = LiquidVaporFractionation::HoritaWesolowski1994;
-  DiffusivityFormulation diffusivity = DiffusivityFormulation::Merlivat1978;
   StandardRatioFormulation standard_ratio = StandardRatioFormulation::Normalized;
   OceanEnrichmentFormulation ocean_enrichment = OceanEnrichmentFormulation::Modern;
   IceVaporFractionation ice_vapor = IceVaporFractionation::MerlivatNief1967;
@@ -89,12 +137,7 @@ struct WaterIsotopeConstants
   // Active constants (runtime-selected)
   // -----------------------------------------------------------------------
 
-  // Diffusivity ratios (D_isotope/D_H2O)
-  static constexpr Scalar IsotopologueDiffusivity_table
-      [etoi(DiffusivityFormulation::FormulationCount)][num_species] = {
-        { 1.0, 0.9757, 0.9727, 0.9727, 0.9757 }, // Merlivat 1978
-        { 1.0, 0.9839, 0.9691, 0.9691, 0.9839 } // Cappa et al 2003
-  };
+ 
 
   // Model standard isotope ratios
   static constexpr Scalar rstd_table
@@ -183,10 +226,7 @@ struct WaterIsotopeConstants
   // Accessors (select table row based on stored runtime options)
   // -----------------------------------------------------------------------
 
-  // Select diffusivity formulation
-  KOKKOS_INLINE_FUNCTION
-  Scalar diff_src(int s) const { return IsotopologueDiffusivity_table[int(opts_.diffusivity)][s]; }
-
+  
   // Select standard ratio formulation
   KOKKOS_INLINE_FUNCTION
   Scalar ratio_src(int s) const { return rstd_table[int(opts_.standard_ratio)][s]; }

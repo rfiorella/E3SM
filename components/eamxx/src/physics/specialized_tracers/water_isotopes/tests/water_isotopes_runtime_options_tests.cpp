@@ -17,31 +17,6 @@ using wiso::WaterIsotopeFractionation;
 TEST_CASE("runtime_formulation_selection") {
   using Real = scream::Real;
 
-  SECTION("diffusivity_formulations") {
-    // Test 1: Default (Merlivat 1978)
-    WaterIsotopeRuntimeOptions opts_default;
-    WaterIsotopeConstants<Real> constants_default(opts_default);
-
-    // Verify Merlivat 1978 values
-    REQUIRE(constants_default.diff_src(wiso::H216O) == Real(1.0));
-    REQUIRE(std::abs(constants_default.diff_src(wiso::HDO) - Real(0.9757)) < 1e-5);
-    REQUIRE(std::abs(constants_default.diff_src(wiso::H218O) - Real(0.9727)) < 1e-5);
-
-    // Test 2: Cappa 2003
-    WaterIsotopeRuntimeOptions opts_cappa;
-    opts_cappa.diffusivity = wiso::DiffusivityFormulation::Cappa2003;
-    WaterIsotopeConstants<Real> constants_cappa(opts_cappa);
-
-    // Verify Cappa 2003 values
-    REQUIRE(constants_cappa.diff_src(wiso::H216O) == Real(1.0));
-    REQUIRE(std::abs(constants_cappa.diff_src(wiso::HDO) - Real(0.9839)) < 1e-5);
-    REQUIRE(std::abs(constants_cappa.diff_src(wiso::H218O) - Real(0.9691)) < 1e-5);
-
-    // Verify they differ
-    REQUIRE(constants_default.diff_src(wiso::HDO) != constants_cappa.diff_src(wiso::HDO));
-    REQUIRE(constants_default.diff_src(wiso::H218O) != constants_cappa.diff_src(wiso::H218O));
-  }
-
   SECTION("standard_ratio_formulations") {
     // Test 1: Default (Normalized)
     WaterIsotopeRuntimeOptions opts_normalized;
@@ -140,7 +115,6 @@ TEST_CASE("runtime_formulation_selection") {
     // Test using all alternative formulations together
     WaterIsotopeRuntimeOptions opts_alt;
     opts_alt.liquid_vapor = wiso::LiquidVaporFractionation::Majoube1971;
-    opts_alt.diffusivity = wiso::DiffusivityFormulation::Cappa2003;
     opts_alt.standard_ratio = wiso::StandardRatioFormulation::NaturalAbundance;
     opts_alt.ocean_enrichment = wiso::OceanEnrichmentFormulation::LGM;
     opts_alt.ice_vapor = wiso::IceVaporFractionation::IsoCAM3;
@@ -149,7 +123,6 @@ TEST_CASE("runtime_formulation_selection") {
     WaterIsotopeConstants<Real> constants_default;  // All defaults
 
     // Verify each setting was applied correctly
-    REQUIRE(constants_alt.diff_src(wiso::HDO) != constants_default.diff_src(wiso::HDO));
     REQUIRE(constants_alt.ratio_src(wiso::HDO) != constants_default.ratio_src(wiso::HDO));
     REQUIRE(constants_alt.ocean_src(wiso::HDO) != constants_default.ocean_src(wiso::HDO));
     REQUIRE(constants_alt.AlphaLiqVap_CoefA(wiso::HDO) != constants_default.AlphaLiqVap_CoefA(wiso::HDO));
