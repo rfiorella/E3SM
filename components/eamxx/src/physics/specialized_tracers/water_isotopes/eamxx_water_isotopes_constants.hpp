@@ -14,7 +14,7 @@ namespace wiso {
  * These constants define isotopic fractionation behavior, molecular properties,
  * and reference ratios for water isotope tracers.
  *
- * All species-specific constants are arrays indexed by WisoSpecies enum:
+ * All species-specific constants are arrays indexed by WaterIsotopologues enum:
  *   H216O = 0 ("ordinary water," non-fractionating)
  *   HDO   = 1 (singly deuterated water, HD16O)
  *   H218O = 2 (oxygen-18 substituted water, H218O)
@@ -29,21 +29,15 @@ namespace wiso {
  *                       Merlivat & Nief 1967 + Majoube 1971 (ice/vapor)
  */
 
-// Water isotopologues. HDO and H218O are computed directly from the coefficient
-// tables; H217O and HTO are derived by mass-dependent power laws. H216O
-// (ordinary water) is non-fractionating (alpha == 1).
-enum WisoSpecies {
+// Define water isotopologue species
+enum class WaterIsotopologues {
   H216O = 0,  // ordinary water; alpha == 1
   HDO   = 1,  // HD16O (deuterium)
   H218O = 2,  // H218O (oxygen-18)
   H217O = 3,  // H217O; = alpha(H218O)^0.529 (Schoenemann et al. 2014)
-  HTO   = 4   // HT16O (tritiated water); = alpha(HDO)^2.0 (isoCAM3 assumption)
+  HTO   = 4,  // HT16O (tritiated water); = alpha(HDO)^2.0 (isoCAM3 assumption)
+  Count
 };
-
-/* Equilibrium fractionation coefficients in the literature are polynomial fits
-   with temperature. Only two coefficient sets are ever needed per formulation:
-   the fits are properties of the substituted *element* (hydrogen or oxygen),
-   and H217O/HTO are derived from the oxygen/hydrogen values by power laws. */
 
 // Substituted element. Indexes the coefficient tables below.
 enum class IsoElement { Hydrogen = 0, Oxygen = 1, Count };
@@ -51,22 +45,21 @@ enum class IsoElement { Hydrogen = 0, Oxygen = 1, Count };
 // Condensed phase of the vapor <-> condensate equilibrium.
 enum class CondensedPhase { Liquid = 0, Ice = 1, Count };
 
-struct TemperatureBounds {
-  Real Tmin, Tmax;  // [K] range of the published regression
-};
-
-/* Coefficients of the temperature polynomial. NOTE the units: the sum is
-   10^3 * ln(alpha) (per mil), NOT ln(alpha), which is the form the source
-   publications tabulate. The evaluator must scale by 1e-3 before exp().
+/* Coefficients of the temperature polynomial:
 
      10^3 * ln(alpha) = T3*T^3 + T2*T^2 + T1*T + T0
                         + T_1/T + T_2/T^2 + T_3/T^3 + T_4/T^4 + T_6/T^6
 
    Not every formulation uses every term; unused terms are 0. T_4 and T_6 are
-   currently zero in every formulation below, and are retained for coefficient
+   currently zero in every formulation below, but are used in coefficient
    sets to be added. */
 struct PolynomialCoefficients {
   Real T3, T2, T1, T0, T_1, T_2, T_3, T_4, T_6;
+};
+
+// set boundaries from polynomial regression
+struct TemperatureBounds {
+  Real Tmin, Tmax;  // [K] range of the published regression
 };
 
 struct EquilibriumFractionationCoefficients {
@@ -88,23 +81,7 @@ enum class IceVaporFractionation {
   FormulationCount
 };
 
-/* Coefficient tables, indexed [formulation][element].
- *
- * Two separate tables rather than one [phase][formulation][element] array: the
- * liquid and ice formulation enums are independent and may grow at different
- * rates, so a combined table sized to max(counts) would contain unused slots
- * that zero-fill to alpha == 1 (i.e. silently no fractionation).
- *
- * Plain C arrays, not std::array: these are read inside KOKKOS_INLINE_FUNCTION
- * device code, and a namespace-scope static constexpr std::array risks an
- * ODR-use/missing-__device__-symbol failure. (The previous version of this
- * table also used std::array without including <array>; it compiled only via a
- * transitive libstdc++ include.)
- *
- * Row order is Hydrogen then Oxygen, matching IsoElement. Rows are identified
- * by coefficient signature, not by position in the source publication: a
- * hydrogen/ice fit has T_2 ~ 1.6e7, an oxygen/ice fit has T_1 ~ 1.2e4.
- */
+// Coefficient tables, indexed [formulation][element]. 
 static constexpr EquilibriumFractionationCoefficients
 alpha_eq_liq_table[etoi(LiquidVaporFractionation::FormulationCount)]
                   [etoi(IsoElement::Count)] = {
@@ -172,13 +149,11 @@ struct WaterIsotopeConstants
   using Real = Scalar;
 
   // Number of isotope species
-  static constexpr int num_species = 5;
+  static constexpr int num_species = etoi(WaterIsotopologues::Count);
 
   // -----------------------------------------------------------------------
   // Active constants (runtime-selected)
   // -----------------------------------------------------------------------
-
- 
 
   // Model standard isotope ratios
   static constexpr Scalar rstd_table
@@ -201,17 +176,8 @@ struct WaterIsotopeConstants
   WaterIsotopeRuntimeOptions opts_;
 
 private:
-  /* Equilibrium fractionation coefficients for the *selected* formulations,
-     resolved once on construction and stored by value.
-
-     Why resolve-and-store rather than keep a row index and look the table up in
-     the accessor (as physics/p3 does with its flat P3Runtime POD): an accessor
-     returning a reference into a static constexpr table can ODR-use it from
-     device code, which fails to link without a __device__ definition. Copying
-     the four needed rows into a member sidesteps that entirely.
-
-     Cost: 4 entries * 11 Reals = 352 B (double) in the by-value kernel closure,
-     ~9% of CUDA's 4 KB kernel parameter limit. */
+  // Equilibrium fractionation coefficients for the *selected* formulations,
+  // resolved once on construction and stored by value.
   EquilibriumFractionationCoefficients
     eq_[etoi(CondensedPhase::Count)][etoi(IsoElement::Count)];
 
@@ -239,25 +205,21 @@ public:
   // Accessors (select table row based on stored runtime options)
   // -----------------------------------------------------------------------
 
-
   // Select standard ratio formulation
   KOKKOS_INLINE_FUNCTION
-  Scalar ratio_src(int s) const { return rstd_table[int(opts_.standard_ratio)][s]; }
+  Scalar ratio_src(WaterIsotopologues s) const { return rstd_table[int(opts_.standard_ratio)][etoi(s)]; }
 
   // Select ocean enrichment formulation
   KOKKOS_INLINE_FUNCTION
-  Scalar ocean_src(int s) const { return boce_table[int(opts_.ocean_enrichment)][s]; }
+  Scalar ocean_src(WaterIsotopologues s) const { return boce_table[int(opts_.ocean_enrichment)][etoi(s)]; }
 
-  // Which element's coefficient set a species uses. HDO and HTO are hydrogen
-  // substitutions; H218O and H217O are oxygen. (H216O never reaches here: it is
-  // non-fractionating and short-circuited by the caller.)
+  // Which element's coefficient set a species uses.
   KOKKOS_INLINE_FUNCTION
-  static IsoElement element_of(WisoSpecies s) {
-    return (s == HDO || s == HTO) ? IsoElement::Hydrogen : IsoElement::Oxygen;
+  static IsoElement element_of(WaterIsotopologues s) {
+    return (s == WaterIsotopologues::HDO || s == WaterIsotopologues::HTO) ? IsoElement::Hydrogen : IsoElement::Oxygen;
   }
 
-  // Equilibrium fractionation polynomial coefficients for the selected
-  // formulation. Units are 10^3 * ln(alpha); see PolynomialCoefficients.
+  // Equilibrium fractionation polynomial coefficients 
   KOKKOS_INLINE_FUNCTION
   const PolynomialCoefficients& alpha_eq_coeffs(CondensedPhase p, IsoElement e) const {
     return eq_[etoi(p)][etoi(e)].coeffs;
@@ -269,22 +231,6 @@ public:
   const TemperatureBounds& tbounds(CondensedPhase p, IsoElement e) const {
     return eq_[etoi(p)][etoi(e)].tbounds;
   }
-
-  // -----------------------------------------------------------------------
-  // Molecular properties (species-indexed arrays) - always same
-  // -----------------------------------------------------------------------
-
-  // Isotopic substitutions (mass-dependent factor)
-  // Ported from CAM6 water_isotopes.F90
-  // C++: expanded to 5 elements with H217O and HTO derived values
-  static constexpr Scalar fisub[num_species] = {
-    1.0,  // H216O (non-fractionating)
-    2.0,  // HDO (deuterium substitution)
-    1.0,  // H218O (oxygen substitution)
-    1.0,  // H217O (oxygen substitution, same as H218O)
-    2.0   // HTO (tritium substitution)
-  };
-
 
 };
 

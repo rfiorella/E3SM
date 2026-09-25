@@ -6,7 +6,9 @@
 
 #include <ekat_pack.hpp>
 #include <ekat_view_utils.hpp>
+#include <ekat_fpe.hpp>
 
+#include <cfenv>
 #include <cmath>
 
 namespace scream {
@@ -79,7 +81,7 @@ void run_sweep(
 
   // Choose the alpha function based on phase
   const bool use_liquid_vapor = (std::string(phase_name) == "liquid-vapor");
-  auto alpha_fn = [use_liquid_vapor](const ScalarT& t, wiso::WisoSpecies species,
+  auto alpha_fn = [use_liquid_vapor](const ScalarT& t, wiso::WaterIsotopologues species,
                                       wiso::WisoAlphaDir dir,
                                       const wiso::WaterIsotopeConstants<RealT>& constants) -> ScalarT {
     return use_liquid_vapor ? WIF::alpha_liquid_vapor<ScalarT>(t, species, dir, constants)
@@ -90,31 +92,31 @@ void run_sweep(
   for (int i = 0; i < N; ++i) {
     const ScalarT t(T_array[i]);
 
-    const ScalarT a_hdo = alpha_fn(t, wiso::HDO, wiso::CondensedOverVapor,
+    const ScalarT a_hdo = alpha_fn(t, wiso::WaterIsotopologues::HDO, wiso::CondensedOverVapor,
 constants);
-    const ScalarT a_o18 = alpha_fn(t, wiso::H218O, wiso::CondensedOverVapor,
+    const ScalarT a_o18 = alpha_fn(t, wiso::WaterIsotopologues::H218O, wiso::CondensedOverVapor,
 constants);
 
     REQUIRE( relative_approx(a_hdo, ref_hdo(T_array[i]), tol) );
     REQUIRE( relative_approx(a_o18, ref_o18(T_array[i]), tol) );
     
     // H216O check
-    const ScalarT a_16 = alpha_fn(t, wiso::H216O, wiso::CondensedOverVapor,
+    const ScalarT a_16 = alpha_fn(t, wiso::WaterIsotopologues::H216O, wiso::CondensedOverVapor,
 constants);
     REQUIRE( (a_16 == ScalarT(1)).all() );
     
     // Direction checks
-    const ScalarT a_hdo_inv = alpha_fn(t, wiso::HDO, wiso::VaporOverCondensed,
+    const ScalarT a_hdo_inv = alpha_fn(t, wiso::WaterIsotopologues::HDO, wiso::VaporOverCondensed,
 constants);
-    const ScalarT a_o18_inv = alpha_fn(t, wiso::H218O, wiso::VaporOverCondensed,
+    const ScalarT a_o18_inv = alpha_fn(t, wiso::WaterIsotopologues::H218O, wiso::VaporOverCondensed,
 constants);
     REQUIRE( relative_approx(a_hdo_inv, 1.0/ref_hdo(T_array[i]), tol) );
     REQUIRE( relative_approx(a_o18_inv, 1.0/ref_o18(T_array[i]), tol) );
     
     // Power law checks for H217O and HTO
-    const ScalarT a_17 = alpha_fn(t, wiso::H217O, wiso::CondensedOverVapor,
+    const ScalarT a_17 = alpha_fn(t, wiso::WaterIsotopologues::H217O, wiso::CondensedOverVapor,
 constants);
-    const ScalarT a_ht = alpha_fn(t, wiso::HTO, wiso::CondensedOverVapor,
+    const ScalarT a_ht = alpha_fn(t, wiso::WaterIsotopologues::HTO, wiso::CondensedOverVapor,
 constants);
     REQUIRE( relative_approx(a_17, std::pow(ref_o18(T_array[i]), 0.529), tol) );
     REQUIRE( relative_approx(a_ht, std::pow(ref_hdo(T_array[i]), 2.0), tol) );
@@ -141,8 +143,8 @@ void run_on_device()
   // device-callable, not just the evaluator.
   Kokkos::parallel_for("wiso_frac_device", 1, KOKKOS_LAMBDA(const int /*i*/) {
     wiso::WaterIsotopeConstants<Real> constants;
-    out(0) = WIF::alpha_liquid_vapor(Real(273.15), wiso::HDO,   wiso::CondensedOverVapor, constants);
-    out(1) = WIF::alpha_ice_vapor  (Real(253.15), wiso::H218O, wiso::CondensedOverVapor, constants);
+    out(0) = WIF::alpha_liquid_vapor(Real(273.15), wiso::WaterIsotopologues::HDO,   wiso::CondensedOverVapor, constants);
+    out(1) = WIF::alpha_ice_vapor  (Real(253.15), wiso::WaterIsotopologues::H218O, wiso::CondensedOverVapor, constants);
   });
   Kokkos::fence();
 
@@ -181,9 +183,9 @@ void verify_formulation_differences()
     wiso::WaterIsotopeConstants<Real> const_majoube(opts_maj);
 
     Real alpha_horita = wiso::WaterIsotopeFractionation::alpha_liquid_vapor(
-      t_warm, wiso::HDO, wiso::CondensedOverVapor, const_horita);
+      t_warm, wiso::WaterIsotopologues::HDO, wiso::CondensedOverVapor, const_horita);
     Real alpha_majoube = wiso::WaterIsotopeFractionation::alpha_liquid_vapor(
-      t_warm, wiso::HDO, wiso::CondensedOverVapor, const_majoube);
+      t_warm, wiso::WaterIsotopologues::HDO, wiso::CondensedOverVapor, const_majoube);
 
     Real rel_diff = std::abs(alpha_horita - alpha_majoube) / alpha_horita;
 
@@ -203,9 +205,9 @@ void verify_formulation_differences()
     wiso::WaterIsotopeConstants<Real> const_isocam3(opts_iso);
 
     Real alpha_merlivat = wiso::WaterIsotopeFractionation::alpha_ice_vapor(
-      t_cold, wiso::HDO, wiso::CondensedOverVapor, const_merlivat);
+      t_cold, wiso::WaterIsotopologues::HDO, wiso::CondensedOverVapor, const_merlivat);
     Real alpha_isocam3 = wiso::WaterIsotopeFractionation::alpha_ice_vapor(
-      t_cold, wiso::HDO, wiso::CondensedOverVapor, const_isocam3);
+      t_cold, wiso::WaterIsotopologues::HDO, wiso::CondensedOverVapor, const_isocam3);
 
     Real rel_diff = std::abs(alpha_merlivat - alpha_isocam3) / alpha_merlivat;
 
@@ -213,6 +215,49 @@ void verify_formulation_differences()
     REQUIRE( rel_diff > Real(1e-6) );
     REQUIRE( rel_diff < Real(0.01) );  // But not by more than 1%
   }
+}
+
+/* T_lane_fill/range_mask exist so that a Pack lane outside range_mask -- e.g.
+   padding left by upstream physics -- can never form a 1/T term from a
+   division-by-zero, which would otherwise abort an FPE-trapping build even
+   though no caller reads that lane's result. Enable trapping locally (rather
+   than requiring the separate SCREAM_FPE build) to prove the guard actually
+   works, not just that the masked lane's numeric result looks fine. */
+void verify_dead_lane_fpe_safety()
+{
+  using Real = scream::Real;
+  using WIF  = wiso::WaterIsotopeFractionation;
+
+  if (SCREAM_PACK_SIZE < 2) {
+    return;  // no padding lane to poison
+  }
+
+  using PackN = ekat::Pack<Real, SCREAM_PACK_SIZE>;
+  using MaskN = ekat::Mask<SCREAM_PACK_SIZE>;
+
+  const int saved_fpes = ekat::get_enabled_fpes();
+  ekat::disable_all_fpes();
+  ekat::enable_fpes(FE_DIVBYZERO | FE_INVALID);
+
+  wiso::WaterIsotopeConstants<Real> constants;
+
+  PackN t(Real(273.15));
+  MaskN range_mask(true);
+  t[1] = Real(0.0);          // dead lane: would force 1/T = 1/0 if not filled
+  range_mask.set(1, false);
+
+  const PackN alpha = WIF::alpha_liquid_vapor(
+      t, wiso::WaterIsotopologues::HDO, wiso::CondensedOverVapor, constants, range_mask);
+
+  ekat::disable_all_fpes();
+  ekat::enable_fpes(saved_fpes);
+
+  const PackN alpha_ref = WIF::alpha_liquid_vapor(
+      PackN(Real(273.15)), wiso::WaterIsotopologues::HDO, wiso::CondensedOverVapor, constants);
+
+  // Reaching this point at all (no FPE abort) is the primary check; the value
+  // check confirms the poisoned dead lane did not perturb the live one.
+  REQUIRE( alpha[0] == alpha_ref[0] );
 }
 
 template <typename RealT>
@@ -270,6 +315,10 @@ TEST_CASE("water_isotopes_fractionation") {
 
     SECTION("formulation_differences") {
       verify_formulation_differences();
+    }
+
+    SECTION("dead_lane_fpe_safety") {
+      verify_dead_lane_fpe_safety();
     }
 
   }

@@ -2,7 +2,7 @@
 #define EAMXX_WATER_ISOTOPES_FRACTIONATION_HPP
 
 #include "share/core/eamxx_types.hpp"  // for scream::Real and scream::sp()
-#include "eamxx_water_isotopes_constants.hpp"  // WisoSpecies, coefficient tables
+#include "eamxx_water_isotopes_constants.hpp"  // WaterIsotopologues, coefficient tables
 
 #include <ekat_pack.hpp>
 #include <ekat_pack_math.hpp>  // ekat::exp/ekat::pow overloads for ekat::Pack (found via ADL)
@@ -24,16 +24,15 @@ namespace wiso {
  * and pow() are called unqualified so ADL selects the ekat::Pack overloads for
  * packs and std for plain scalars (matching PhysicsFunctions::exner_function).
  *
- * Convention: the underlying tables return the vapor->condensed enrichment
+ * Convention: alpha *usually* constructed such that it is >=1, and 
+ * the follow this convention:
  *   alpha = R_condensed / R_vapor  (>= 1),
  * i.e. the heavy isotope is preferentially retained in the condensed phase.
- * The desired direction is chosen explicitly via WisoAlphaDir (required
- * argument) so every call site states its intent.
+ * However, there are cases in the literature where alpha is defined differently,
+ * and to avoid ambiguity adding a direction argument so that the source and
+ * destination phases are always declared
  *
- * Both phases share a single polynomial evaluator: the coefficient tables in
- * eamxx_water_isotopes_constants.hpp express every published fit as one
- * polynomial in T and 1/T, so liquid/vapor and ice/vapor differ only in which
- * coefficient row is read.
+ * Both phases and elements share a single polynomial evaluator.
  */
 
 // Which R-ratio the returned factor represents.
@@ -88,35 +87,28 @@ struct WaterIsotopeFractionation
 private:
   // Mass-dependent scaling exponents
   static constexpr double H217O_exponent = 0.529;  // Schoenemann et al. (2014)
-  static constexpr double HTO_exponent = 2.0;      // isoCAM3 assumption
+  static constexpr double HTO_exponent = 2.0;      // isoCAM3/5/6 assumption
 
-  /* Below this, a value cannot be an Earth-system temperature at all; it is
-     uninitialized memory or a corrupted field, not an extrapolation. Kept well
-     under the coldest published fit (203.15 K) so that widening a tbounds entry
-     never collides with it. */
+  // Specify an arbitrarily low, non-Earth-system temperature to 
+  // catch uninitialized memory or corrupted field.
   static constexpr double T_implausible = 50.0;  // [K]
 
   // In-range temperature substituted into dead lanes before the 1/T terms are
-  // formed. The value is irrelevant (those lanes are discarded downstream); it
-  // only has to be finite and nonzero.
+  // formed. 273.15K is valid for all alpha formulations.
   static constexpr double T_lane_fill = 273.15;  // [K]
 
   /* Temperature sanity, in two tiers.
 
      Tier 1 (always compiled in, including release): an implausible or NaN
-     temperature aborts. This is a hard bug upstream, and silently returning a
-     garbage alpha would contaminate every isotope tracer downstream.
+     temperature ends the run.
 
      Tier 2 (debug builds only): a plausible temperature outside the fitted
      range means the polynomial is being extrapolated rather than evaluated.
-     That is legitimate in places -- the isoCAM3 ice rows exist precisely to
-     extrapolate to -70 C -- so it warns and continues. Gated on NDEBUG because
+     This may be the best we can do in some cases. Gated on NDEBUG because
      it fires per pack per level per step, which would swamp a production log.
 
      Lanes outside range_mask are ignored by both tiers: they hold padding, not
-     data. Padding is NOT reliably zero -- upstream physics computes over the
-     full pack count and leaves NaN there -- so it must be masked out, not
-     detected by value. */
+     data. */
   template <typename ScalarT>
   KOKKOS_INLINE_FUNCTION
   static void check_temperature(
@@ -129,8 +121,7 @@ private:
     using LT    = impl::LaneTraits<ScalarT>;
 
     // isnan is tested separately: every comparison against NaN is false, so the
-    // bounds test alone would let NaN through. T_implausible > 0 subsumes the
-    // usual t <= 0 check.
+    // bounds test alone would let NaN through.
     const auto bad = (LT::is_nan(t) || t < RealT(T_implausible)) && range_mask;
     EKAT_KERNEL_REQUIRE_MSG(!LT::any(bad), caller);
 
@@ -145,14 +136,7 @@ private:
 #endif
   }
 
-  /* 10^3 * ln(alpha) for one coefficient row. Horner's method in T for the
-     ascending powers and in 1/T for the descending ones: 8 multiply-adds and
-     one division, versus 14 multiplies and 5 divisions for the expanded form,
-     and with tighter rounding because each partial sum is formed once.
-
-     Coefficients are cast to ScalarT's scalar type so that a mixed-precision
-     instantiation (Pack<float,N> against a double-valued table) does not rely
-     on a heterogeneous Pack/scalar operator existing. */
+  // calculate 10^3 * ln(alpha) given a coefficient set and tempearture
   template <typename ScalarT>
   KOKKOS_INLINE_FUNCTION
   static ScalarT ln_alpha_permil(const ScalarT& t, const PolynomialCoefficients& c)
@@ -162,18 +146,19 @@ private:
     const ScalarT it  = RealT(1) / t;
     const ScalarT it2 = it * it;
 
-    return ((RealT(c.T3)*t + RealT(c.T2))*t + RealT(c.T1))*t + RealT(c.T0)
+    return ((RealT(c.T3)*t + RealT(c.T2))*t + RealT(c.T1))*t 
+         + RealT(c.T0)
          + it*(RealT(c.T_1)
          + it*(RealT(c.T_2)
          + it*(RealT(c.T_3)
          + it*(RealT(c.T_4) + it2*RealT(c.T_6)))));
   }
 
-  // Common fractionation logic: derived species, direction handling
+  // Common fractionation logic given a species, temperature, direction
   template <typename ScalarT, typename BaseFunc>
   KOKKOS_INLINE_FUNCTION
   static ScalarT compute_alpha(const ScalarT& t,
-                                const WisoSpecies species,
+                                const WaterIsotopologues species,
                                 const WisoAlphaDir dir,
                                 BaseFunc base_alpha)
   {
@@ -182,21 +167,21 @@ private:
     ScalarT alpha(1);
 
     switch (species) {
-      case HDO:
-        alpha = base_alpha(t, HDO);
+      case WaterIsotopologues::HDO:
+        alpha = base_alpha(t, WaterIsotopologues::HDO);
         break;
-      case H218O:
-        alpha = base_alpha(t, H218O);
+      case WaterIsotopologues::H218O:
+        alpha = base_alpha(t, WaterIsotopologues::H218O);
         break;
-      case H217O:
+      case WaterIsotopologues::H217O:
         // Derived from H218O via mass-dependent fractionation
-        alpha = pow(base_alpha(t, H218O), RealT(H217O_exponent));
+        alpha = pow(base_alpha(t, WaterIsotopologues::H218O), RealT(H217O_exponent));
         break;
-      case HTO:
+      case WaterIsotopologues::HTO:
         // Derived from HDO via mass-dependent fractionation
-        alpha = pow(base_alpha(t, HDO), RealT(HTO_exponent));
+        alpha = pow(base_alpha(t, WaterIsotopologues::HDO), RealT(HTO_exponent));
         break;
-      case H216O:
+      case WaterIsotopologues::H216O:
       default:
         // Non-fractionating (alpha = 1)
         break;
@@ -226,7 +211,7 @@ public:
   KOKKOS_INLINE_FUNCTION
   static ScalarT alpha_equilibrium(
       const ScalarT& t,
-      const WisoSpecies species,
+      const WaterIsotopologues species,
       const CondensedPhase phase,
       const WisoAlphaDir dir,
       const WaterIsotopeConstants<typename ekat::ScalarTraits<ScalarT>::scalar_type>& constants,
@@ -238,7 +223,7 @@ public:
     using Constants = WaterIsotopeConstants<RealT>;
     using LT = impl::LaneTraits<ScalarT>;
 
-    auto base = [&](const ScalarT& temp, WisoSpecies sp) -> ScalarT {
+    auto base = [&](const ScalarT& temp, WaterIsotopologues sp) -> ScalarT {
       const IsoElement el = Constants::element_of(sp);
 
       // Bounds are per (phase, element): the default ice formulation draws its
@@ -262,7 +247,7 @@ public:
   KOKKOS_INLINE_FUNCTION
   static ScalarT alpha_liquid_vapor(
       const ScalarT& t,
-      const WisoSpecies species,
+      const WaterIsotopologues species,
       const WisoAlphaDir dir,
       const WaterIsotopeConstants<typename ekat::ScalarTraits<ScalarT>::scalar_type>& constants,
       const typename impl::LaneTraits<ScalarT>::mask_type& range_mask =
@@ -276,7 +261,7 @@ public:
   KOKKOS_INLINE_FUNCTION
   static ScalarT alpha_ice_vapor(
       const ScalarT& t,
-      const WisoSpecies species,
+      const WaterIsotopologues species,
       const WisoAlphaDir dir,
       const WaterIsotopeConstants<typename ekat::ScalarTraits<ScalarT>::scalar_type>& constants,
       const typename impl::LaneTraits<ScalarT>::mask_type& range_mask =
