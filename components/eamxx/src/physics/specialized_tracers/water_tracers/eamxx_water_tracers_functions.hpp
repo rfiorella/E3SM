@@ -163,19 +163,20 @@ ekat::Mask<ScalarT::n> is_evaporating (const ScalarT& f, const ScalarT& e_ocn)
 }
 
 // -----------------------------------------------------------------------
-// Ocean flux of a tracer with ocean ratio r_ocn and equilibrium fractionation
-// factor alpha (default 1, i.e. no fractionation):
+// Ocean flux of a tracer with ocean ratio r_ocn, equilibrium fractionation
+// factor alpha and kinetic fractionation factor alpkn (both default 1, i.e.
+// no fractionation):
 //
 //   not valid ocean (f <= 0):  0
 //   E_ocn > 0, BulkProportional: r_ocn * E_ocn
-//   E_ocn > 0, BulkFormula:      bulk_ocean_flux(f, rho, u, r, s*r_ocn/alpha, q_i)
+//   E_ocn > 0, BulkFormula:      alpkn * bulk_ocean_flux(f, rho, u, r, s*r_ocn/alpha, q_i)
 //   E_ocn <= 0 (dew):            tracer_ratio(q_i, q) * E_ocn
 //
-// alpha is used only in the BulkFormula evap branch; BulkProportional and dew
-// are unaffected by it, so a caller that omits alpha (every generic tracer,
-// and any isotope species or build where alpha == 1, e.g. H216O) gets exactly
-// today's BulkFormula result bit-for-bit. Dew removes the tracer at its
-// bottom-level ratio to qv.
+// alpha and alpkn are used only in the BulkFormula evap branch;
+// BulkProportional and dew are unaffected by them, so a caller that omits
+// them (every generic tracer, and any isotope species or build where
+// alpha == alpkn == 1, e.g. H216O) gets exactly today's BulkFormula result
+// bit-for-bit. Dew removes the tracer at its bottom-level ratio to qv.
 // -----------------------------------------------------------------------
 template <typename ScalarT>
 KOKKOS_INLINE_FUNCTION
@@ -184,7 +185,8 @@ ScalarT ocean_flux (const OceanFlux kind,
                     const ScalarT& f, const ScalarT& rho, const ScalarT& u,
                     const ScalarT& r, const ScalarT& s, const ScalarT& q,
                     const ScalarT& q_i, const ScalarT& e_ocn,
-                    const ScalarT& alpha = ScalarT(1))
+                    const ScalarT& alpha = ScalarT(1),
+                    const ScalarT& alpkn = ScalarT(1))
 {
   using RealT = typename ekat::ScalarTraits<ScalarT>::scalar_type;
 
@@ -197,7 +199,7 @@ ScalarT ocean_flux (const OceanFlux kind,
     if (kind == OceanFlux::BulkProportional) {
       flux.set(evap, r_ocn*e_ocn);
     } else {
-      flux.set(evap, bulk_ocean_flux(f, rho, u, r, s*r_ocn/alpha, q_i));
+      flux.set(evap, alpkn*bulk_ocean_flux(f, rho, u, r, s*r_ocn/alpha, q_i));
     }
   }
   if (dew.any()) {

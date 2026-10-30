@@ -82,11 +82,12 @@ protected:
   //  - m_sfc_ustar, m_sfc_re, m_sfc_ssq: ocn_ustar, ocn_re, ocn_ssq, set to
   //    0 where the ocean state is not valid (so they never hold fill values)
   //  - m_sfc_rho: bottom-level air density [kg/m3]
+  //  - m_sfc_zbot: bottom-level midpoint height 0.5*dz [m] (== Sa_z)
   //  - m_sfc_evap: E_ocn = bulk_ocean_flux(f,rho,u,r,s,q) [kg/m2/s], upward
   //    positive, exactly 0 where the ocean state is not valid
   // compute_tracer_fluxes reads qv and sst from their fields directly.
-  KT::view_1d<Real> m_sfc_f, m_sfc_rho, m_sfc_ustar, m_sfc_re, m_sfc_ssq,
-                    m_sfc_evap;
+  KT::view_1d<Real> m_sfc_f, m_sfc_rho, m_sfc_zbot, m_sfc_ustar, m_sfc_re,
+                    m_sfc_ssq, m_sfc_evap;
 
 private:
 

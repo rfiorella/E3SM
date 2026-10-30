@@ -88,6 +88,20 @@ void WaterIsotopes::configure (ekat::ParameterList& params)
         {"isocam3",            IceVaporFractionation::IsoCAM3}
       });
 
+  // Kinetic fractionation of ocean evaporation
+  m_runtime_options.kinetic_fractionation = parse_option<KineticFractionationFormulation>(
+      params, "kinetic_fractionation_formulation", "brutsaert_merlivat_jouzel_1979", {
+        {"brutsaert_merlivat_jouzel_1979", KineticFractionationFormulation::BrutsaertMerlivatJouzel1979},
+        {"none",                           KineticFractionationFormulation::None}
+      });
+
+  // Molecular diffusivity ratios used by the kinetic fractionation
+  m_runtime_options.diffusivity = parse_option<DiffusivityRatioFormulation>(
+      params, "diffusivity_formulation", "merlivat_1978", {
+        {"merlivat_1978", DiffusivityRatioFormulation::Merlivat1978},
+        {"cappa_2003",    DiffusivityRatioFormulation::Cappa2003}
+      });
+
   m_iso_params = WaterIsotopeParameters<Real>(m_runtime_options);
 }
 

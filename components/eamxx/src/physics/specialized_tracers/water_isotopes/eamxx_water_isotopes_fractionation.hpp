@@ -44,11 +44,11 @@ enum WisoAlphaDir {
 
 struct WaterIsotopeFractionation
 {
-private:
-  // Mass-dependent scaling exponents
+  // Mass-dependent scaling exponents (also used by WaterIsotopeKinetic)
   static constexpr double H217O_exponent = 0.529;  // Schoenemann et al. (2014)
   static constexpr double HTO_exponent = 2.0;      // isoCAM3/5/6 assumption
 
+private:
   // Specify an arbitrarily low, non-Earth-system temperature to 
   // catch uninitialized memory or corrupted field.
   static constexpr double T_implausible = 50.0;  // [K]
