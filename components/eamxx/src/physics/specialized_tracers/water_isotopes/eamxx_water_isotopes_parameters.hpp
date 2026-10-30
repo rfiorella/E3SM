@@ -142,12 +142,38 @@ enum class OceanEnrichmentFormulation {
   FormulationCount
 };
 
+// Kinetic fractionation of ocean evaporation (iCAM wiso_kmol)
+enum class KineticFractionationFormulation {
+  BrutsaertMerlivatJouzel1979 = 0, // Default: Brutsaert (1975) + Merlivat & Jouzel (1979)
+  None = 1,                        // alpkn = 1 for every species (equilibrium only)
+  FormulationCount
+};
+
+// Molecular diffusivity ratios D_i/D used by the kinetic fractionation
+enum class DiffusivityRatioFormulation {
+  Merlivat1978 = 0, // Default: Merlivat (1978), the active row in water_isotopes.F90
+  Cappa2003 = 1,    // Alternative: Cappa et al. (2003)
+  FormulationCount
+};
+
+// Diffusivity ratio D_i/D, indexed [formulation][element]
+static constexpr Real
+DiffusivityRatio_table[etoi(DiffusivityRatioFormulation::FormulationCount)]
+                      [etoi(IsoElement::Count)] = {
+  // Hydrogen (HDO), Oxygen (H218O)
+  { 0.9757, 0.9727 }, // Merlivat (1978)
+  { 0.9839, 0.9691 }  // Cappa et al. (2003)
+};
+
 // Runtime configuration struct - holds user's formulation choices
 struct WaterIsotopeRuntimeOptions {
   LiquidVaporFractionation liquid_vapor = LiquidVaporFractionation::HoritaWesolowski1994;
   StandardRatioFormulation standard_ratio = StandardRatioFormulation::Normalized;
   OceanEnrichmentFormulation ocean_enrichment = OceanEnrichmentFormulation::Modern;
   IceVaporFractionation ice_vapor = IceVaporFractionation::MerlivatNief1967;
+  KineticFractionationFormulation kinetic_fractionation =
+      KineticFractionationFormulation::BrutsaertMerlivatJouzel1979;
+  DiffusivityRatioFormulation diffusivity = DiffusivityRatioFormulation::Merlivat1978;
 };
 
 template <typename Scalar>
@@ -185,6 +211,8 @@ private:
   // resolved once on construction and stored by value.
   EquilibriumFractionationCoefficients
     eq_[etoi(CondensedPhase::Count)][etoi(IsoElement::Count)];
+  // Diffusivity ratios D_i/D for the selected formulation, stored by value.
+  Scalar difrm_[etoi(IsoElement::Count)];
 
 public:
   // -----------------------------------------------------------------------
@@ -199,6 +227,7 @@ public:
           alpha_eq_liq_table[etoi(opts.liquid_vapor)][e];
       eq_[etoi(CondensedPhase::Ice)][e] =
           alpha_eq_ice_table[etoi(opts.ice_vapor)][e];
+      difrm_[e] = DiffusivityRatio_table[etoi(opts.diffusivity)][e];
     }
   }
 
@@ -236,6 +265,14 @@ public:
   const TemperatureBounds& tbounds(CondensedPhase p, IsoElement e) const {
     return eq_[etoi(p)][etoi(e)].tbounds;
   }
+
+  // Molecular diffusivity ratio D_i/D of the selected formulation.
+  KOKKOS_INLINE_FUNCTION
+  Scalar difrm(IsoElement e) const { return difrm_[etoi(e)]; }
+
+  // Selected kinetic fractionation formulation.
+  KOKKOS_INLINE_FUNCTION
+  KineticFractionationFormulation kinetic_formulation() const { return opts_.kinetic_fractionation; }
 
 };
 

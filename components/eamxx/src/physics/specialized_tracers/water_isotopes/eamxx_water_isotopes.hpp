@@ -18,7 +18,8 @@ namespace water_isotopes
  * Isotope-specific state and configuration composed into the water_tracers
  * process: which species names are valid in the tracers file, and the runtime
  * formulation options (liquid/vapor and ice/vapor fractionation, standard
- * ratio, ocean enrichment). Per-tracer data (name, species, R_ocn) lives only
+ * ratio, ocean enrichment, kinetic fractionation of ocean evaporation and its
+ * diffusivity ratios). Per-tracer data (name, species, R_ocn) lives only
  * in the water_tracers::TracerSpec entries, which resolve() completes.
  */
 class WaterIsotopes

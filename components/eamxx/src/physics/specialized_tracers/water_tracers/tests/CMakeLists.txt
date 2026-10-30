@@ -47,4 +47,18 @@ if (EAMXX_ENABLE_WATER_ISOTOPES)
     LIBS water_tracers
     LABELS water_tracers water_isotopes physics
   )
+
+  # Kinetic fractionation of ocean evaporation (alpha_kinetic), its use in
+  # water_tracers::ocean_flux, and the bottom-level height it reads.
+  CreateUnitTest(water_isotopes_kinetic
+    SOURCES ${CMAKE_CURRENT_SOURCE_DIR}/../../water_isotopes/tests/water_isotopes_kinetic_tests.cpp
+    LIBS water_tracers
+    LABELS water_tracers water_isotopes physics
+  )
+
+  # Prints alpha_kinetic for a CSV of cases, for comparison against the
+  # Fortran wiso_kmol. Not a ctest test.
+  add_executable(water_isotopes_kinetic_driver
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../water_isotopes/tests/water_isotopes_kinetic_driver.cpp)
+  target_link_libraries(water_isotopes_kinetic_driver water_tracers)
 endif()
