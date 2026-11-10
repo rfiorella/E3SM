@@ -4,9 +4,11 @@
 #include "eamxx_water_tracers_functions.hpp"  // OceanFlux
 
 #include "share/core/eamxx_types.hpp"
+#include "share/util/eamxx_utils.hpp"  // etoi
 
 #include <ekat_parameter_list.hpp>
 
+#include <iterator>
 #include <string>
 #include <vector>
 
@@ -26,8 +28,11 @@ namespace water_tracers {
  *     wtrc_bf:  {type: generic, ocean_flux: bulk_formula, r_ocn: 1.0, init: ratio}
  *     wtrc_hdo: {type: isotope, species: HDO}
  *
- * Tracer names must start with `wtrc_` (so they cannot alias any other
- * field) and must not end in `_surf_flux` (each tracer registers one).
+ * Each tracer follows all of the bulk water, one field per phase (see
+ * WaterPhase): tracer wtrc_hdo has fields wtrc_hdo_qv, wtrc_hdo_qc,
+ * wtrc_hdo_qr and wtrc_hdo_qi. Tracer names must start with `wtrc_` (so
+ * none of these can alias any other field) and must not end in
+ * `_surf_flux` (each tracer also registers <name>_surf_flux).
  *
  * Keys by type (anything else is an error, so a misspelled key cannot be
  * silently ignored):
@@ -52,10 +57,27 @@ struct RegistryOptions {
 
 enum class TracerType { Generic, Isotope };
 
+// The bulk water species a water tracer follows. Each tracer has one field
+// per phase, named <tracer name>_<bulk field name>, e.g. wtrc_hdo_qc.
+enum class WaterPhase { Vapor, CloudLiquid, Rain, Ice, Count };
+
+constexpr WaterPhase water_phases[] = {
+  WaterPhase::Vapor, WaterPhase::CloudLiquid, WaterPhase::Rain, WaterPhase::Ice
+};
+static_assert(std::size(water_phases) == static_cast<std::size_t>(etoi(WaterPhase::Count)),
+              "water_phases must list every WaterPhase.");
+
+// The bulk field a phase follows: qv, qc, qr or qi.
+std::string bulk_field_name (WaterPhase phase);
+
+// The field of tracer `name` for a phase, e.g. wtrc_hdo_qc.
+std::string phase_field_name (const std::string& name, WaterPhase phase);
+
 // How a tracer is initialized on an Initial run:
-//  - Ratio: q_i = r_init*qv.
-//  - Zero:  the tracer keeps the initial condition the driver gave it (buildnml
-//    sets initial_conditions::<name> to 0.0 unless the user sets it).
+//  - Ratio: every phase is r_init times its bulk phase (<name>_qv = r_init*qv,
+//    <name>_qc = r_init*qc, ...).
+//  - Zero:  the tracer keeps the initial conditions the driver gave it (buildnml
+//    sets initial_conditions::<name>_<phase> to 0.0 unless the user sets it).
 enum class InitType { Ratio, Zero };
 
 struct TracerSpec {

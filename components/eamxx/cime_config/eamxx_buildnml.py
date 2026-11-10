@@ -1494,22 +1494,35 @@ def check_water_tracers_init_order(eamxx_dict, physics_grid_type, has_ratio_init
             "    ./atmchange atm_procs_list=sc_import,water_tracers,homme,physics,sc_export")
 
 ###############################################################################
+def water_tracer_field_names(water_tracer_names):
+###############################################################################
+    """
+    Return the fields of the given water tracers: one per bulk water phase,
+    named <tracer>_<bulk field> (see WaterPhase in
+    eamxx_water_tracers_registry.hpp).
+
+    >>> water_tracer_field_names(['wtrc_a'])
+    ['wtrc_a_qv', 'wtrc_a_qc', 'wtrc_a_qr', 'wtrc_a_qi']
+    """
+    return [f"{name}_{phase}" for name in water_tracer_names for phase in ("qv", "qc", "qr", "qi")]
+
+###############################################################################
 def add_water_tracer_initial_conditions(ic_dict, water_tracer_names):
 ###############################################################################
     """
-    Initialize to 0 every tracer that has no initial_conditions entry yet, so the
-    driver does not look for it in the IC file. Water tracers with init: ratio are
-    then set by the tracer process itself on an initial run; restarts read
-    tracers from the restart file.
+    Initialize to 0 every tracer field that has no initial_conditions entry yet,
+    so the driver does not look for it in the IC file. Water tracers with
+    init: ratio are then set by the tracer process itself on an initial run;
+    restarts read tracers from the restart file.
 
-    >>> ic = {'filename': 'ic.nc', 'wtrc_a': 2.0}
-    >>> add_water_tracer_initial_conditions(ic, ['wtrc_a', 'wtrc_b'])
-    ['wtrc_b']
-    >>> ic['wtrc_a'], ic['wtrc_b']
+    >>> ic = {'filename': 'ic.nc', 'wtrc_a_qv': 2.0}
+    >>> add_water_tracer_initial_conditions(ic, ['wtrc_a']) # doctest: +NORMALIZE_WHITESPACE
+    ['wtrc_a_qc', 'wtrc_a_qr', 'wtrc_a_qi']
+    >>> ic['wtrc_a_qv'], ic['wtrc_a_qc']
     (2.0, 0.0)
     """
     added = []
-    for name in water_tracer_names:
+    for name in water_tracer_field_names(water_tracer_names):
         if name not in ic_dict:
             ic_dict[name] = 0.0
             added.append(name)
@@ -1520,8 +1533,8 @@ def copy_water_tracers_file(case, caseroot, scream_input):
 ###############################################################################
     """
     If water_tracers is active, copy its water_tracers_file to $RUNDIR/data, point
-    the scream_input dict at the copy, and add initial_conditions::<name>: 0.0
-    for each tracer without an IC entry.
+    the scream_input dict at the copy, and add initial_conditions::<name>_<phase>: 0.0
+    for each tracer field without an IC entry.
     """
     tracers_files = find_water_tracers_files(scream_input["eamxx"])
     if len(tracers_files)==0:

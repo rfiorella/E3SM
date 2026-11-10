@@ -23,9 +23,13 @@ grids_manager:
     number_of_vertical_levels:  72
 
 # Constant state with qv < ocn_ssq, so the ocean evaporates (E_ocn > 0).
-# Tracers start at 0; init: ratio tracers are then set by the process.
+# Tracers start at 0; init: ratio tracers are then set by the process, every
+# phase from its bulk phase (qc, qr and qi are nonzero to exercise that).
 initial_conditions:
   qv: 0.01
+  qc: 1.0e-4
+  qr: 2.0e-5
+  qi: 3.0e-6
   T_mid: 290.0
   p_mid: 95000.0
   pseudo_density: 1000.0
@@ -34,10 +38,22 @@ initial_conditions:
   ocn_ssq: 0.02
   ocn_re: 0.0015
   ocn_ustar: 0.3
-  wtrc_bp: 0.0
-  wtrc_bf: 0.0
-  wtrc_hdo: 0.0
-  wtrc_h218o: 0.0
+  wtrc_bp_qv: 0.0
+  wtrc_bp_qc: 0.0
+  wtrc_bp_qr: 0.0
+  wtrc_bp_qi: 0.0
+  wtrc_bf_qv: 0.0
+  wtrc_bf_qc: 0.0
+  wtrc_bf_qr: 0.0
+  wtrc_bf_qi: 0.0
+  wtrc_hdo_qv: 0.0
+  wtrc_hdo_qc: 0.0
+  wtrc_hdo_qr: 0.0
+  wtrc_hdo_qi: 0.0
+  wtrc_h218o_qv: 0.0
+  wtrc_h218o_qc: 0.0
+  wtrc_h218o_qr: 0.0
+  wtrc_h218o_qi: 0.0
 
 scorpio:
   output_yaml_files: [output_${POSTFIX}.yaml]
