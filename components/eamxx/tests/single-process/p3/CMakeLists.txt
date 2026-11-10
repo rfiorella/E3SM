@@ -88,3 +88,28 @@ if (SCREAM_ENABLE_BASELINE_TESTS)
       LABELS "p3;baseline_cmp")
   endif()
 endif()
+
+# export_water_transfers: P3 exports every bulk water transfer, which must
+# close the qv/qc/qr/qi budget of each P3 call (see check_water_transfers.py).
+# Bulk fields must be unchanged by the export: compare with the np1 run above.
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/input_water_transfers.yaml
+               ${CMAKE_CURRENT_BINARY_DIR}/input_water_transfers.yaml)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/output_water_transfers.yaml
+               ${CMAKE_CURRENT_BINARY_DIR}/output_water_transfers.yaml)
+CreateUnitTestFromExec(p3_standalone_water_transfers p3_standalone
+  EXE_ARGS "--args -ifile=input_water_transfers.yaml"
+  LABELS p3 physics
+  FIXTURES_SETUP p3_standalone_water_transfers)
+
+# output_water_transfers.yaml skips t0, so its file is stamped one step later
+math (EXPR WT_FIRST_OUTPUT_SECONDS "45000 + ${ATM_TIME_STEP}")
+set (WT_OUT_FILE p3_standalone_water_transfers_output.INSTANT.nsteps_x1.np1.2021-10-12-${WT_FIRST_OUTPUT_SECONDS}.nc)
+add_test (NAME p3_water_transfers_budget_check
+  COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/check_water_transfers.py
+    -f ${WT_OUT_FILE}
+    --header ${SCREAM_SRC_DIR}/physics/p3/p3_water_transfers.hpp
+    --dt ${ATM_TIME_STEP}
+  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+set_tests_properties (p3_water_transfers_budget_check PROPERTIES
+  LABELS "p3;physics"
+  FIXTURES_REQUIRED p3_standalone_water_transfers)

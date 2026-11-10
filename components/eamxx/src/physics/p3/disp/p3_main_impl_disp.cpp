@@ -273,7 +273,8 @@ Int Functions<Real,DefaultDevice>
     T_atm, rho, inv_rho, qv_sat_l, qv_sat_i, qv_supersat_i, rhofacr,
     rhofaci, acn, qv, th, qc, nc, qr, nr, qi, ni, qm,
     bm, qc_incld, qr_incld, qi_incld, qm_incld, nc_incld, nr_incld,
-    ni_incld, bm_incld, nucleationPossible, hydrometeorsPresent, runtime_options);
+    ni_incld, bm_incld, nucleationPossible, hydrometeorsPresent, runtime_options,
+    history_only.water_transfers);
 
   // ------------------------------------------------------------------------------------------
   // main k-loop (for processes):
@@ -292,7 +293,8 @@ Int Functions<Real,DefaultDevice>
     qr2qv_evap, qi2qv_sublim, qc2qr_accret, qc2qr_autoconv,
     qv2qi_vapdep, qc2qi_berg, qc2qr_ice_shed, qc2qi_collect,
     qr2qi_collect, qc2qi_hetero_freeze, qr2qi_immers_freeze, qi2qr_melt,
-    pratot, prctot, nucleationPossible, hydrometeorsPresent, runtime_options);
+    pratot, prctot, nucleationPossible, hydrometeorsPresent, runtime_options,
+    history_only.water_transfers);
 
   //NOTE: At this point, it is possible to have negative (but small) nc, nr, ni.  This is not
   //      a problem; those values get clipped to zero in the sedimentation section (if necessary).
@@ -310,7 +312,8 @@ Int Functions<Real,DefaultDevice>
     qc_incld, rho, inv_rho, cld_frac_l, acn, inv_dz, lookup_tables.dnu_table_vals, workspace_mgr,
     nj, nk, ktop, kbot, kdir, infrastructure.dt, inv_dt, infrastructure.predictNc,
     qc, nc, nc_incld, mu_c, lamc, qc_sed, ntend_ignore,
-    diagnostic_outputs.precip_liq_surf, nucleationPossible, hydrometeorsPresent);
+    diagnostic_outputs.precip_liq_surf, nucleationPossible, hydrometeorsPresent,
+    history_only.sed_mass);
 
 
   // Rain sedimentation:  (adaptive substepping)
@@ -318,20 +321,22 @@ Int Functions<Real,DefaultDevice>
     rho, inv_rho, rhofacr, cld_frac_r, inv_dz, qr_incld, workspace_mgr,
     lookup_tables.vn_table_vals, lookup_tables.vm_table_vals, nj, nk, ktop, kbot, kdir, infrastructure.dt, inv_dt, qr,
     nr, nr_incld, mu_r, lamr, precip_liq_flux, qr_sed, ntend_ignore,
-    diagnostic_outputs.precip_liq_surf, nucleationPossible, hydrometeorsPresent, runtime_options);
+    diagnostic_outputs.precip_liq_surf, nucleationPossible, hydrometeorsPresent, runtime_options,
+    history_only.sed_mass);
 
   // Ice sedimentation:  (adaptive substepping)
   ice_sedimentation_disp(
     rho, inv_rho, rhofaci, cld_frac_i, inv_dz, workspace_mgr, nj, nk, ktop, kbot,
     kdir, infrastructure.dt, inv_dt, qi, qi_incld, ni, ni_incld,
     qm, qm_incld, bm, bm_incld, qi_sed, ntend_ignore,
-    lookup_tables.ice_table_vals, diagnostic_outputs.precip_ice_surf, nucleationPossible, hydrometeorsPresent, runtime_options);
+    lookup_tables.ice_table_vals, diagnostic_outputs.precip_ice_surf, nucleationPossible, hydrometeorsPresent, runtime_options,
+    history_only.sed_mass);
 
   // homogeneous freezing f cloud and rain
   if(do_ice_production) {
     homogeneous_freezing_disp(T_atm, inv_exner, nj, nk, ktop, kbot, kdir, qc,
                               nc, qr, nr, qi, ni, qm, bm, th,
-                              nucleationPossible, hydrometeorsPresent);
+                              nucleationPossible, hydrometeorsPresent, history_only.water_transfers);
   }
 
   //
@@ -344,7 +349,7 @@ Int Functions<Real,DefaultDevice>
     qm, bm, mu_c, nu, lamc, mu_r, lamr,
     vap_liq_exchange, ze_rain, ze_ice, diag_vm_qi, diag_eff_radius_qi, diag_diam_qi,
     rho_qi, diag_equiv_reflectivity, diag_eff_radius_qc, diag_eff_radius_qr, nucleationPossible, hydrometeorsPresent,
-    runtime_options);
+    runtime_options, history_only.water_transfers);
 
   //
   // merge ice categories with similar properties

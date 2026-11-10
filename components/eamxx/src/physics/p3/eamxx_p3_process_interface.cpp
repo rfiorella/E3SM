@@ -152,6 +152,17 @@ void P3Microphysics::create_requests()
   add_field<Computed>("micro_vap_ice_exchange", scalar3d_layout_mid, kg/kg,  grid_name, ps);
   add_field<Computed>("rainfrac",               scalar3d_layout_mid, none,   grid_name, ps);
 
+  // Every bulk water transfer, for the water tracers (see p3_water_transfers.hpp).
+  // The water_tracer_transfers process turns this option on and reads them.
+  if (runtime_options.export_water_transfers) {
+    const auto transfers_layout = m_grid->get_3d_vector_layout(LEV, p3::WaterTransfer::Count, "p3_water_transfer");
+    const auto sed_layout       = m_grid->get_3d_vector_layout(LEV, p3::SedFlux::Count, "p3_sed_species");
+    const auto entry_layout     = m_grid->get_3d_vector_layout(LEV, p3::WaterEntry::Count, "p3_water_species");
+    add_field<Computed>("p3_water_transfers", transfers_layout, kg/kg/s, grid_name, ps);
+    add_field<Computed>("p3_sed_flux",        sed_layout,       kg/m2/s, grid_name, ps);
+    add_field<Computed>("p3_water_entry",     entry_layout,     kg/kg,   grid_name, ps);
+  }
+
   // Boundary flux fields for energy and mass conservation checks
   if (has_column_conservation_check()) {
     add_field<Computed>("vapor_flux", scalar2d_layout, kg/m2/s, grid_name);
@@ -454,6 +465,14 @@ void P3Microphysics::initialize_impl (const RunType /* run_type */)
     history_only.qr_sed = m_buffer.unused;
     history_only.qc_sed = m_buffer.unused;
     history_only.qi_sed = m_buffer.unused;
+  }
+  if (runtime_options.export_water_transfers) {
+    // p3_main accumulates masses into these; the postamble turns them into rates
+    history_only.water_transfers = get_field_out("p3_water_transfers").get_view<Pack***>();
+    history_only.sed_mass        = get_field_out("p3_sed_flux").get_view<Pack***>();
+    p3_preproc.water_entry       = get_field_out("p3_water_entry").get_view<Pack***>();
+    p3_postproc.water_transfers  = history_only.water_transfers;
+    p3_postproc.sed_flux         = history_only.sed_mass;
   }
 #ifdef SCREAM_P3_SMALL_KERNELS
   // Temporaries

@@ -2,6 +2,7 @@
 #define P3_MAIN_IMPL_HPP
 
 #include "p3_functions.hpp" // for ETI only but harmless for GPU
+#include "p3_water_transfers.hpp"
 #include "share/physics/physics_functions.hpp" // also for ETI not on GPUs
 #include "share/physics/physics_saturation_impl.hpp"
 
@@ -218,6 +219,11 @@ Int Functions<S,D>
     const auto oqr_sed             = ekat::subview(history_only.qr_sed, i);
     const auto oqc_sed             = ekat::subview(history_only.qc_sed, i);
     const auto oqi_sed             = ekat::subview(history_only.qi_sed, i);
+    // export_water_transfers (empty views otherwise)
+    const auto owater_transfers    = export_column(history_only.water_transfers, i);
+    const auto osed_mass_qc        = export_row(history_only.sed_mass, i, SedFlux::CloudLiquid);
+    const auto osed_mass_qr        = export_row(history_only.sed_mass, i, SedFlux::Rain);
+    const auto osed_mass_qi        = export_row(history_only.sed_mass, i, SedFlux::Ice);
     const auto oqv_prev            = ekat::subview(diagnostic_inputs.qv_prev, i);
     const auto ot_prev             = ekat::subview(diagnostic_inputs.t_prev, i);
 
@@ -256,7 +262,8 @@ Int Functions<S,D>
       T_atm, rho, inv_rho, qv_sat_l, qv_sat_i, qv_supersat_i, rhofacr,
       rhofaci, acn, oqv, oth, oqc, onc, oqr, onr, oqi, oni, oqm,
       obm, qc_incld, qr_incld, qi_incld, qm_incld, nc_incld, nr_incld,
-      ni_incld, bm_incld, nucleationPossible, hydrometeorsPresent, runtime_options);
+      ni_incld, bm_incld, nucleationPossible, hydrometeorsPresent, runtime_options,
+      owater_transfers);
 
     // There might not be any work to do for this team
     if (!(nucleationPossible || hydrometeorsPresent)) {
@@ -279,7 +286,7 @@ Int Functions<S,D>
       ovap_liq_exchange, ovap_ice_exchange, oliq_ice_exchange,
       oqr2qv_evap, oqi2qv_sublim, oqc2qr_accret, oqc2qr_autoconv, oqv2qi_vapdep,
       oqc2qi_berg, oqc2qr_ice_shed, oqc2qi_collect, oqr2qi_collect, oqc2qi_hetero_freeze, oqr2qi_immers_freeze, oqi2qr_melt,
-      pratot, prctot, hydrometeorsPresent, nk, runtime_options);
+      pratot, prctot, hydrometeorsPresent, nk, runtime_options, owater_transfers);
 
     //NOTE: At this point, it is possible to have negative (but small) nc, nr, ni.  This is not
     //      a problem; those values get clipped to zero in the sedimentation section (if necessary).
@@ -300,26 +307,26 @@ Int Functions<S,D>
       qc_incld, rho, inv_rho, ocld_frac_l, acn, inv_dz, lookup_tables.dnu_table_vals, team, workspace,
       nk, ktop, kbot, kdir, infrastructure.dt, inv_dt, infrastructure.predictNc,
       oqc, onc, nc_incld, mu_c, lamc, oqc_sed, ntend_ignore,
-      diagnostic_outputs.precip_liq_surf(i));
+      diagnostic_outputs.precip_liq_surf(i), osed_mass_qc);
 
     // Rain sedimentation:  (adaptive substepping)
     rain_sedimentation(
       rho, inv_rho, rhofacr, ocld_frac_r, inv_dz, qr_incld, team, workspace,
       lookup_tables.vn_table_vals, lookup_tables.vm_table_vals, nk, ktop, kbot, kdir, infrastructure.dt, inv_dt, oqr,
       onr, nr_incld, mu_r, lamr, oprecip_liq_flux, oqr_sed, ntend_ignore,
-      diagnostic_outputs.precip_liq_surf(i), runtime_options);
+      diagnostic_outputs.precip_liq_surf(i), runtime_options, osed_mass_qr);
 
     // Ice sedimentation:  (adaptive substepping)
     ice_sedimentation(
       rho, inv_rho, rhofaci, ocld_frac_i, inv_dz, team, workspace, nk, ktop, kbot,
       kdir, infrastructure.dt, inv_dt, oqi, qi_incld, oni, ni_incld,
       oqm, qm_incld, obm, bm_incld, oqi_sed, ntend_ignore,
-      lookup_tables.ice_table_vals, diagnostic_outputs.precip_ice_surf(i), runtime_options);
+      lookup_tables.ice_table_vals, diagnostic_outputs.precip_ice_surf(i), runtime_options, osed_mass_qi);
 
     // homogeneous freezing of cloud and rain
     if(do_ice_production) {
       homogeneous_freezing(T_atm, oinv_exner, team, nk, ktop, kbot, kdir, oqc,
-                           onc, oqr, onr, oqi, oni, oqm, obm, oth);
+                           onc, oqr, onr, oqi, oni, oqm, obm, oth, owater_transfers);
     }
 
     //
@@ -331,7 +338,8 @@ Int Functions<S,D>
       rho, inv_rho, rhofaci, oqv, oth, oqc, onc, oqr, onr, oqi, oni,
       oqm, obm, mu_c, nu, lamc, mu_r, lamr,
       ovap_liq_exchange, ze_rain, ze_ice, diag_vm_qi, odiag_eff_radius_qi, diag_diam_qi,
-      orho_qi, odiag_equiv_refl, odiag_eff_radius_qc, odiag_eff_radius_qr, runtime_options);
+      orho_qi, odiag_equiv_refl, odiag_eff_radius_qc, odiag_eff_radius_qr, runtime_options,
+      owater_transfers);
 
     //
     // merge ice categories with similar properties

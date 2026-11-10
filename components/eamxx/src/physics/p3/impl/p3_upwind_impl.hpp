@@ -181,6 +181,32 @@ void Functions<S,D>
       {&flux}, {&V_nonconst}, {&r});
 }
 
+template <typename S, typename D>
+KOKKOS_FUNCTION
+void Functions<S,D>
+::accumulate_sed_mass (
+  const MemberType& team,
+  const uview_1d<const Pack>& flux,
+  const Int& k_qxtop, const Int& k_qxbot, const Scalar& dt_sub,
+  const uview_1d<Pack>& sed_mass)
+{
+  // generalized_sedimentation only computes flux in the packs spanning
+  // [k_qxtop, k_qxbot] (the k_qxbot it returns); the rest are stale.
+  Int kmin, kmax;
+  ekat::impl::set_min_max(k_qxtop, k_qxbot, kmin, kmax, Pack::n);
+  const Int kmin_scalar = ekat::impl::min(k_qxtop, k_qxbot);
+  const Int kmax_scalar = ekat::impl::max(k_qxtop, k_qxbot);
+
+  Kokkos::parallel_for(
+    Kokkos::TeamVectorRange(team, kmax-kmin+1), [&] (Int pk_) {
+      const Int pk = kmin + pk_;
+      const auto range_pack = ekat::range<IntPack>(pk*Pack::n);
+      const auto in_range   = range_pack >= kmin_scalar && range_pack <= kmax_scalar;
+      sed_mass(pk).set(in_range, sed_mass(pk) + flux(pk)*dt_sub);
+  });
+  team.team_barrier();
+}
+
 } // namespace p3
 } // namespace scream
 

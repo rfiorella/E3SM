@@ -1,0 +1,26 @@
+%YAML 1.1
+---
+# Everything check_water_transfers.py needs to close P3's bulk water budget.
+# Every slice is after a P3 call (no t0 output), so slice t holds that
+# call's entry state, transfers and final state.
+filename_prefix: p3_standalone_water_transfers_output
+averaging_type: instant
+# The budget closes to roundoff in Real; the default single-precision output
+# would add ~1e-7 relative error to every term.
+floating_point_precision: real
+field_names:
+  - qv
+  - qc
+  - qr
+  - qi
+  - pseudo_density
+  - precip_liq_surf_mass
+  - precip_ice_surf_mass
+  - p3_water_entry
+  - p3_water_transfers
+  - p3_sed_flux
+output_control:
+  frequency: 1
+  frequency_units: nsteps
+  skip_t0_output: true
+...

@@ -97,6 +97,7 @@ template <typename ScalarT, typename DeviceT> struct Functions {
 
   template <typename S> using uview_1d = typename ekat::template Unmanaged<view_1d<S>>;
   template <typename S> using uview_2d = typename ekat::template Unmanaged<view_2d<S>>;
+  template <typename S> using view_3d = typename KT::template view_3d<S>;
 
   using MemberType = typename KT::MemberType;
 
@@ -133,6 +134,8 @@ template <typename ScalarT, typename DeviceT> struct Functions {
     bool use_hetfrz_classnuc                    = false;
     bool use_separate_ice_liq_frac              = false;
     bool extra_p3_diags                         = false;
+    // Export every bulk water transfer (p3_water_transfers.hpp), for water tracers
+    bool export_water_transfers                 = false;
 
     void
     load_runtime_options_from_file(ekat::ParameterList &params)
@@ -175,6 +178,7 @@ template <typename ScalarT, typename DeviceT> struct Functions {
       use_separate_ice_liq_frac =
           params.get<bool>("use_separate_ice_liq_frac", use_separate_ice_liq_frac);
       extra_p3_diags = params.get<bool>("extra_p3_diags", extra_p3_diags);
+      export_water_transfers = params.get<bool>("export_water_transfers", export_water_transfers);
     }
   };
 
@@ -313,7 +317,32 @@ template <typename ScalarT, typename DeviceT> struct Functions {
     view_2d<Pack> qr_sed;
     view_2d<Pack> qc_sed;
     view_2d<Pack> qi_sed;
+    // export_water_transfers (see p3_water_transfers.hpp); empty unless
+    // enabled. The caller must zero them before p3_main, which adds the mass
+    // each process moves during the call.
+    // (ncol, WaterTransfer::Count, nlev_packs): mass moved [kg/kg, dry basis]
+    view_3d<Pack> water_transfers;
+    // (ncol, SedFlux::Count, nlev_packs): mass that fell out of the bottom of
+    // each level [kg/m2]
+    view_3d<Pack> sed_mass;
   };
+
+  // Column i of a (ncol, ncmp, nlev_packs) export view, or an empty view if
+  // the export is off (v not allocated).
+  KOKKOS_INLINE_FUNCTION
+  static uview_2d<Pack> export_column(const view_3d<Pack> &v, const Int i)
+  {
+    return v.data() == nullptr ? uview_2d<Pack>()
+                               : uview_2d<Pack>(&v(i, 0, 0), v.extent(1), v.extent(2));
+  }
+
+  // Component icmp of column i of an export view, or an empty view if the
+  // export is off.
+  KOKKOS_INLINE_FUNCTION
+  static uview_1d<Pack> export_row(const view_3d<Pack> &v, const Int i, const Int icmp)
+  {
+    return v.data() == nullptr ? uview_1d<Pack>() : uview_1d<Pack>(&v(i, icmp, 0), v.extent(2));
+  }
 
   // This struct stores kokkos views for the lookup tables needed in p3_main()
   struct P3LookupTables {
@@ -514,6 +543,24 @@ template <typename ScalarT, typename DeviceT> struct Functions {
                             const view_1d_ptr_array<Pack, nfield> &Vs, // (behaviorally const)
                             const view_1d_ptr_array<Pack, nfield> &rs);
 
+  // export_water_transfers: adds the mass a sedimentation substep moved out of
+  // the bottom of each level in [k_qxtop, k_qxbot], flux*dt_sub [kg/m2], to
+  // sed_mass. Call right after generalized_sedimentation, with the k_qxbot it
+  // returned (its flux is only valid in that range) and the dt_sub it used,
+  // sed_substep_dt(Co_max, dt_left) evaluated before the call.
+  KOKKOS_FUNCTION
+  static void accumulate_sed_mass(const MemberType &team, const uview_1d<const Pack> &flux,
+                                  const Int &k_qxtop, const Int &k_qxbot, const Scalar &dt_sub,
+                                  const uview_1d<Pack> &sed_mass);
+
+  // The substep generalized_sedimentation takes for a given Co_max and dt_left
+  KOKKOS_INLINE_FUNCTION
+  static Scalar sed_substep_dt(const Scalar &Co_max, const Scalar &dt_left)
+  {
+    const Int tmpint1 = static_cast<int>(Co_max + 1);
+    return dt_left / tmpint1;
+  }
+
   // Cloud sedimentation
   KOKKOS_FUNCTION
   static void cloud_sedimentation(
@@ -524,7 +571,8 @@ template <typename ScalarT, typename DeviceT> struct Functions {
       const Int &ktop, const Int &kbot, const Int &kdir, const Scalar &dt, const Scalar &inv_dt,
       const bool &do_predict_nc, const uview_1d<Pack> &qc, const uview_1d<Pack> &nc,
       const uview_1d<Pack> &nc_incld, const uview_1d<Pack> &mu_c, const uview_1d<Pack> &lamc,
-      const uview_1d<Pack> &qc_tend, const uview_1d<Pack> &nc_tend, Scalar &precip_liq_surf);
+      const uview_1d<Pack> &qc_tend, const uview_1d<Pack> &nc_tend, Scalar &precip_liq_surf,
+      const uview_1d<Pack> &sed_mass = uview_1d<Pack>());
 
 #ifdef SCREAM_P3_SMALL_KERNELS
   static void cloud_sedimentation_disp(
@@ -537,7 +585,7 @@ template <typename ScalarT, typename DeviceT> struct Functions {
       const uview_2d<Pack> &nc, const uview_2d<Pack> &nc_incld, const uview_2d<Pack> &mu_c,
       const uview_2d<Pack> &lamc, const uview_2d<Pack> &qc_tend, const uview_2d<Pack> &nc_tend,
       const uview_1d<Scalar> &precip_liq_surf, const uview_1d<bool> &is_nucleat_possible,
-      const uview_1d<bool> &is_hydromet_present);
+      const uview_1d<bool> &is_hydromet_present, const view_3d<Pack> &sed_mass = view_3d<Pack>());
 #endif
 
   // TODO: comment
@@ -552,7 +600,7 @@ template <typename ScalarT, typename DeviceT> struct Functions {
       const uview_1d<Pack> &nr, const uview_1d<Pack> &nr_incld, const uview_1d<Pack> &mu_r,
       const uview_1d<Pack> &lamr, const uview_1d<Pack> &precip_liq_flux,
       const uview_1d<Pack> &qr_tend, const uview_1d<Pack> &nr_tend, Scalar &precip_liq_surf,
-      const P3Runtime &runtime_options);
+      const P3Runtime &runtime_options, const uview_1d<Pack> &sed_mass = uview_1d<Pack>());
 
 #ifdef SCREAM_P3_SMALL_KERNELS
   static void rain_sedimentation_disp(
@@ -567,7 +615,7 @@ template <typename ScalarT, typename DeviceT> struct Functions {
       const uview_2d<Pack> &precip_liq_flux, const uview_2d<Pack> &qr_tend,
       const uview_2d<Pack> &nr_tend, const uview_1d<Scalar> &precip_liq_surf,
       const uview_1d<bool> &is_nucleat_possible, const uview_1d<bool> &is_hydromet_present,
-      const P3Runtime &runtime_options);
+      const P3Runtime &runtime_options, const view_3d<Pack> &sed_mass = view_3d<Pack>());
 #endif
 
   // TODO: comment
@@ -582,7 +630,7 @@ template <typename ScalarT, typename DeviceT> struct Functions {
       const uview_1d<Pack> &qm_incld, const uview_1d<Pack> &bm, const uview_1d<Pack> &bm_incld,
       const uview_1d<Pack> &qi_tend, const uview_1d<Pack> &ni_tend,
       const view_ice_table &ice_table_vals, Scalar &precip_ice_surf,
-      const P3Runtime &runtime_options);
+      const P3Runtime &runtime_options, const uview_1d<Pack> &sed_mass = uview_1d<Pack>());
 
 #ifdef SCREAM_P3_SMALL_KERNELS
   static void ice_sedimentation_disp(
@@ -596,7 +644,7 @@ template <typename ScalarT, typename DeviceT> struct Functions {
       const uview_2d<Pack> &qi_tend, const uview_2d<Pack> &ni_tend,
       const view_ice_table &ice_table_vals, const uview_1d<Scalar> &precip_ice_surf,
       const uview_1d<bool> &is_nucleat_possible, const uview_1d<bool> &is_hydromet_present,
-      const P3Runtime &runtime_options);
+      const P3Runtime &runtime_options, const view_3d<Pack> &sed_mass = view_3d<Pack>());
 #endif
 
   // homogeneous freezing of cloud and rain
@@ -608,7 +656,8 @@ template <typename ScalarT, typename DeviceT> struct Functions {
                                    const uview_1d<Pack> &qr, const uview_1d<Pack> &nr,
                                    const uview_1d<Pack> &qi, const uview_1d<Pack> &ni,
                                    const uview_1d<Pack> &qm, const uview_1d<Pack> &bm,
-                                   const uview_1d<Pack> &th_atm);
+                                   const uview_1d<Pack> &th_atm,
+                                   const uview_2d<Pack> &water_transfers = uview_2d<Pack>());
 
 #ifdef SCREAM_P3_SMALL_KERNELS
   static void homogeneous_freezing_disp(
@@ -617,7 +666,8 @@ template <typename ScalarT, typename DeviceT> struct Functions {
       const uview_2d<Pack> &nc, const uview_2d<Pack> &qr, const uview_2d<Pack> &nr,
       const uview_2d<Pack> &qi, const uview_2d<Pack> &ni, const uview_2d<Pack> &qm,
       const uview_2d<Pack> &bm, const uview_2d<Pack> &th_atm,
-      const uview_1d<bool> &is_nucleat_possible, const uview_1d<bool> &is_hydromet_present);
+      const uview_1d<bool> &is_nucleat_possible, const uview_1d<bool> &is_hydromet_present,
+      const view_3d<Pack> &water_transfers = view_3d<Pack>());
 #endif
 
   // -- Find layers
@@ -999,7 +1049,8 @@ template <typename ScalarT, typename DeviceT> struct Functions {
       const uview_1d<Pack> &qi_incld, const uview_1d<Pack> &qm_incld,
       const uview_1d<Pack> &nc_incld, const uview_1d<Pack> &nr_incld,
       const uview_1d<Pack> &ni_incld, const uview_1d<Pack> &bm_incld, bool &is_nucleat_possible,
-      bool &is_hydromet_present, const P3Runtime &runtime_options);
+      bool &is_hydromet_present, const P3Runtime &runtime_options,
+      const uview_2d<Pack> &water_transfers = uview_2d<Pack>());
 
 #ifdef SCREAM_P3_SMALL_KERNELS
   static void p3_main_part1_disp(
@@ -1021,7 +1072,7 @@ template <typename ScalarT, typename DeviceT> struct Functions {
       const uview_2d<Pack> &nc_incld, const uview_2d<Pack> &nr_incld,
       const uview_2d<Pack> &ni_incld, const uview_2d<Pack> &bm_incld,
       const uview_1d<bool> &is_nucleat_possible, const uview_1d<bool> &is_hydromet_present,
-      const P3Runtime &runtime_options);
+      const P3Runtime &runtime_options, const view_3d<Pack> &water_transfers = view_3d<Pack>());
 #endif
 
   KOKKOS_FUNCTION
@@ -1065,7 +1116,7 @@ template <typename ScalarT, typename DeviceT> struct Functions {
       const uview_1d<Pack> &qc2qi_hetero_freeze, const uview_1d<Pack> &qr2qi_immers_freeze,
       const uview_1d<Pack> &qi2qr_melt, const uview_1d<Pack> &pratot,
       const uview_1d<Pack> &prctot, bool &is_hydromet_present, const Int &nk,
-      const P3Runtime &runtime_options);
+      const P3Runtime &runtime_options, const uview_2d<Pack> &water_transfers = uview_2d<Pack>());
 
 #ifdef SCREAM_P3_SMALL_KERNELS
   static void p3_main_part2_disp(
@@ -1108,7 +1159,8 @@ template <typename ScalarT, typename DeviceT> struct Functions {
       const uview_2d<Pack> &qc2qi_hetero_freeze, const uview_2d<Pack> &qr2qi_immers_freeze,
       const uview_2d<Pack> &qi2qr_melt, const uview_2d<Pack> &pratot,
       const uview_2d<Pack> &prctot, const uview_1d<bool> &is_nucleat_possible,
-      const uview_1d<bool> &is_hydromet_present, const P3Runtime &runtime_options);
+      const uview_1d<bool> &is_hydromet_present, const P3Runtime &runtime_options,
+      const view_3d<Pack> &water_transfers = view_3d<Pack>());
 #endif
 
   KOKKOS_FUNCTION
@@ -1129,7 +1181,8 @@ template <typename ScalarT, typename DeviceT> struct Functions {
                 const uview_1d<Pack> &diag_eff_radius_qi, const uview_1d<Pack> &diag_diam_qi,
                 const uview_1d<Pack> &rho_qi, const uview_1d<Pack> &diag_equiv_reflectivity,
                 const uview_1d<Pack> &diag_eff_radius_qc,
-                const uview_1d<Pack> &diag_eff_radius_qr, const P3Runtime &runtime_options);
+                const uview_1d<Pack> &diag_eff_radius_qr, const P3Runtime &runtime_options,
+                const uview_2d<Pack> &water_transfers = uview_2d<Pack>());
 
 #ifdef SCREAM_P3_SMALL_KERNELS
   static void p3_main_part3_disp(
@@ -1149,7 +1202,7 @@ template <typename ScalarT, typename DeviceT> struct Functions {
       const uview_2d<Pack> &rho_qi, const uview_2d<Pack> &diag_equiv_reflectivity,
       const uview_2d<Pack> &diag_eff_radius_qc, const uview_2d<Pack> &diag_eff_radius_qr,
       const uview_1d<bool> &is_nucleat_possible, const uview_1d<bool> &is_hydromet_present,
-      const P3Runtime &runtime_options);
+      const P3Runtime &runtime_options, const view_3d<Pack> &water_transfers = view_3d<Pack>());
 #endif
 
   // Return microseconds elapsed

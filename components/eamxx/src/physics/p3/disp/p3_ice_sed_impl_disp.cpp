@@ -1,4 +1,5 @@
 #include "p3_functions.hpp" // for ETI only but harmless for GPU
+#include "p3_water_transfers.hpp"
 
 #include <ekat_subview_utils.hpp>
 #include <ekat_team_policy_utils.hpp>
@@ -30,7 +31,8 @@ void Functions<Real,DefaultDevice>
   const uview_1d<Scalar>& precip_ice_surf,
   const uview_1d<bool>& nucleationPossible,
   const uview_1d<bool>& hydrometeorsPresent,
-  const P3Runtime& runtime_options)
+  const P3Runtime& runtime_options,
+  const view_3d<Pack>& sed_mass)
 {
   using ExeSpace = typename KT::ExeSpace;
   using TPF      = ekat::TeamPolicyFactory<ExeSpace>;
@@ -53,7 +55,8 @@ void Functions<Real,DefaultDevice>
       ekat::subview(inv_dz, i), team, workspace, nk, ktop, kbot, kdir, dt, inv_dt,
       ekat::subview(qi, i), ekat::subview(qi_incld, i), ekat::subview(ni, i), ekat::subview(ni_incld, i),
       ekat::subview(qm, i), ekat::subview(qm_incld, i), ekat::subview(bm, i), ekat::subview(bm_incld, i), ekat::subview(qi_tend, i), ekat::subview(ni_tend, i),
-      ice_table_vals, precip_ice_surf(i), runtime_options);
+      ice_table_vals, precip_ice_surf(i), runtime_options,
+      export_row(sed_mass, i, SedFlux::Ice));
 
  });
 }
@@ -74,7 +77,8 @@ void Functions<Real,DefaultDevice>
   const uview_2d<Pack>& bm,
   const uview_2d<Pack>& th_atm,
   const uview_1d<bool>& nucleationPossible,
-  const uview_1d<bool>& hydrometeorsPresent)
+  const uview_1d<bool>& hydrometeorsPresent,
+  const view_3d<Pack>& water_transfers)
 {
   using ExeSpace = typename KT::ExeSpace;
   using TPF      = ekat::TeamPolicyFactory<ExeSpace>;
@@ -95,7 +99,8 @@ void Functions<Real,DefaultDevice>
     homogeneous_freezing(
       ekat::subview(T_atm, i), ekat::subview(inv_exner, i), team, nk, ktop, kbot, kdir,
       ekat::subview(qc, i), ekat::subview(nc, i), ekat::subview(qr, i), ekat::subview(nr, i), ekat::subview(qi, i),
-      ekat::subview(ni, i), ekat::subview(qm, i), ekat::subview(bm, i), ekat::subview(th_atm, i));
+      ekat::subview(ni, i), ekat::subview(qm, i), ekat::subview(bm, i), ekat::subview(th_atm, i),
+      export_column(water_transfers, i));
 
   });
 }
