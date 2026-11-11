@@ -1,0 +1,19 @@
+%YAML 1.1
+---
+# What check_water_stages.py needs to check shoc_water_stages against the qv
+# and qc SHOC returns. Every slice is after a SHOC call (no t0 output); SHOC
+# is subcycled, so it holds the stages of the last subcycle.
+filename_prefix: shoc_standalone_water_transfers_output
+averaging_type: instant
+# The bookkeeping closes to roundoff in Real; the default single-precision
+# output would add ~1e-7 relative error to every term.
+floating_point_precision: real
+field_names:
+  - qv
+  - qc
+  - shoc_water_stages
+output_control:
+  frequency: 1
+  frequency_units: nsteps
+  skip_t0_output: true
+...

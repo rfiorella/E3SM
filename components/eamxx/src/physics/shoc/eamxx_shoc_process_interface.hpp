@@ -3,6 +3,7 @@
 
 #include "share/atm_process/atmosphere_process.hpp"
 #include "physics/shoc/shoc_functions.hpp"
+#include "physics/shoc/shoc_water_transfers.hpp"
 #include "share/physics/eamxx_common_physics_functions.hpp"
 #include "share/atm_process/ATMBufferManager.hpp"
 
@@ -314,6 +315,15 @@ public:
 
       const int nlev_packs = ekat::npack<Pack>(nlev);
       Kokkos::parallel_for(Kokkos::TeamVectorRange(team, nlev_packs), [&] (const Int& k) {
+        // export_water_transfers: bulk water after turbulent transport and after
+        // condensation [kg/kg, wet]. Must come before qc is overwritten below:
+        // until then, qc is still the tracer group member diffused by shoc_main.
+        if (water_stages.data() != nullptr) {
+          water_stages(i,shoc::WaterStage::VaporAfterTransport,k)     = qw(i,k) - qc(i,k);
+          water_stages(i,shoc::WaterStage::LiquidAfterTransport,k)    = qc(i,k);
+          water_stages(i,shoc::WaterStage::LiquidAfterCondensation,k) = qc_copy(i,k);
+        }
+
         // See comment in SHOCPreprocess::operator() about the necessity of *_copy views
         tke(i,k) = tke_copy(i,k);
         qc(i,k)  = qc_copy(i,k);
@@ -384,6 +394,8 @@ public:
     view_1d heat_flux;
     view_2d_const um_pert, vm_pert;
     view_2d um_pert_diff, vm_pert_diff;
+    // export_water_transfers only (empty otherwise)
+    view_3d water_stages;
 
     // Assigning local variables
     void set_variables(const int ncol_, const int nlev_,
@@ -557,6 +569,9 @@ protected:
   Int m_nadv;
   Int m_num_tracers;
   Int hdtime;
+
+  // Export shoc_water_stages for the water tracers (see shoc_water_transfers.hpp)
+  bool m_export_water_transfers = false;
 
   // Struct which contains local variables
   Buffer m_buffer;

@@ -1,0 +1,23 @@
+%YAML 1.1
+---
+# What check_water_stages.py --tracer needs. Slice 0 is the initial state
+# (t0 output), slice 1 follows the first SHOC call.
+filename_prefix: shoc_water_tracers_transport_output
+averaging_type: instant
+# Tracer and stages must agree to roundoff in Real; the default
+# single-precision output would add ~1e-7 relative error to every term.
+floating_point_precision: real
+field_names:
+  - qv
+  - qc
+  - qr
+  - qi
+  - wtrc_t_qv
+  - wtrc_t_qc
+  - wtrc_t_qr
+  - wtrc_t_qi
+  - shoc_water_stages
+output_control:
+  frequency: 1
+  frequency_units: nsteps
+...

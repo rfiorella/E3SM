@@ -127,6 +127,14 @@ void SHOCMacrophysics::create_requests()
 
   } // Extra SHOC output diagnostics
 
+  // Bulk water after each SHOC stage, for the water tracers (see shoc_water_transfers.hpp).
+  // The water_tracer_transfers process turns this option on and reads them.
+  m_export_water_transfers = m_params.get<bool>("export_water_transfers", false);
+  if (m_export_water_transfers) {
+    const auto stages_layout = m_grid->get_3d_vector_layout(LEV, shoc::WaterStage::Count, "shoc_water_stage");
+    add_field<Computed>("shoc_water_stages", stages_layout, kg/kg, grid_name, ps);
+  }
+
   // Tracer group
   add_group<Updated>("turbulence_advected_tracers", grid_name, ps, MonolithicAlloc::Required);
 
@@ -465,6 +473,9 @@ void SHOCMacrophysics::initialize_impl (const RunType run_type)
                                  T_mid, dse, z_mid, phis,
                                  surf_mom_flux, tau_est, um_pert, vm_pert,
                                  um_pert_diff, vm_pert_diff);
+  if (m_export_water_transfers) {
+    shoc_postprocess.water_stages = get_field_out("shoc_water_stages").get_view<Pack***>();
+  }
 
   if (has_column_conservation_check()) {
     const auto& vapor_flux = get_field_out("vapor_flux").get_view<Real*>();
@@ -572,6 +583,11 @@ void SHOCMacrophysics::run_impl (const double dt)
   // TODO: input parameter?
   hdtime = dt;
   m_nadv = std::max(static_cast<int>(round(hdtime/dt)),1);
+
+  // shoc_water_stages holds the stages of a single transport+condensation cycle
+  EKAT_REQUIRE_MSG (not m_export_water_transfers or m_nadv==1,
+      "Error! SHOC export_water_transfers requires one SHOC iteration per call (nadv=1).\n"
+      "  - nadv: " + std::to_string(m_nadv) + "\n");
 
   // Reset internal WSM variables.
   workspace_mgr.reset_internals();
