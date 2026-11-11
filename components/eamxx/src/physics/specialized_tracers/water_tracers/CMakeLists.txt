@@ -10,6 +10,7 @@
 
 add_library(water_tracers
   eamxx_water_tracers_process_interface.cpp
+  eamxx_water_tracer_transfers_process_interface.cpp
   eamxx_water_tracers_registry.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/../water_isotopes/eamxx_water_isotopes.cpp
 )

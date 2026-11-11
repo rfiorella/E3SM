@@ -17,3 +17,6 @@ endif()
 
 add_subdirectory (atm_proc_subcycling)
 add_subdirectory (shoc_p3_nudging)
+if (EAMXX_ENABLE_WATER_TRACERS)
+  add_subdirectory (shoc_water_tracer_transfers)
+endif()
