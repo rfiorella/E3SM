@@ -8,6 +8,7 @@ nav:
     - 'Model Configuration': 'user/model_configuration.md'
     - 'SHOC-HOMME 3D turbulence': 'user/shoc_homme_3d_turbulence.md'
     - 'Nudging': 'user/nudging.md'
+    - 'Water tracers': 'user/water_tracers.md'
     - 'Extra radiation calls': 'user/clean_clear_sky.md'
     - 'COSP': 'user/cosp.md'
     - 'Regionally Refined EAMxx': 'user/rrm_eamxx.md'

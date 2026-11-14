@@ -1494,6 +1494,30 @@ def check_water_tracers_init_order(eamxx_dict, physics_grid_type, has_ratio_init
             "    ./atmchange atm_procs_list=sc_import,water_tracers,homme,physics,sc_export")
 
 ###############################################################################
+def check_water_tracer_transfers_deps(eamxx_dict):
+###############################################################################
+    """
+    water_tracer_transfers replays SHOC/P3 water transfers on the tracers that
+    water_tracers registers, so it needs water_tracers in the atm process tree
+    (the AD checks the rest of the layout at run time).
+
+    >>> check_water_tracer_transfers_deps({'atm_procs_list': 'water_tracers,physics',
+    ...     'physics': {'atm_procs_list': 'shoc,p3,water_tracer_transfers'}})
+    >>> check_water_tracer_transfers_deps({'atm_procs_list': 'physics',
+    ...     'physics': {'atm_procs_list': 'shoc,p3'}})
+    >>> check_water_tracer_transfers_deps({'atm_procs_list': 'physics',
+    ...     'physics': {'atm_procs_list': 'shoc,p3,water_tracer_transfers'}}) # doctest: +ELLIPSIS
+    Traceback (most recent call last):
+    CIME.core.exceptions.CIMEError: ERROR: water_tracer_transfers is in atm_procs_list, but water_tracers is not.
+    ...
+    """
+    order = atm_procs_init_order(eamxx_dict)
+    expect ("water_tracer_transfers" not in order or "water_tracers" in order,
+            "water_tracer_transfers is in atm_procs_list, but water_tracers is not.\n"
+            "  Add water_tracers to the top-level list (before homme), e.g.\n"
+            "    ./atmchange atm_procs_list=sc_import,water_tracers,homme,physics,sc_export")
+
+###############################################################################
 def water_tracer_field_names(water_tracer_names):
 ###############################################################################
     """
@@ -1536,6 +1560,8 @@ def copy_water_tracers_file(case, caseroot, scream_input):
     the scream_input dict at the copy, and add initial_conditions::<name>_<phase>: 0.0
     for each tracer field without an IC entry.
     """
+    check_water_tracer_transfers_deps(scream_input["eamxx"])
+
     tracers_files = find_water_tracers_files(scream_input["eamxx"])
     if len(tracers_files)==0:
         return

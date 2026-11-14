@@ -108,6 +108,13 @@ public:
   // Propagate HOMME's parsed 3D turbulence flag to SHOC's internal runtime option.
   void setup_shoc_3d_turbulence_link();
 
+  // If the water_tracer_transfers process exists, check its position in the process
+  // tree and configure SHOC/P3 to export their bulk water transfers.
+  // The 'pre' part must run before set_grids (SHOC/P3 read their options in
+  // create_requests); the 'post' part needs the field requests, so it runs after.
+  void setup_water_tracer_transfer_links();
+  void check_water_tracer_transfer_requests() const;
+
   // Add column data to all pre/postcondition property checks
   // for use in output.
   void add_additional_column_data_to_property_checks ();
