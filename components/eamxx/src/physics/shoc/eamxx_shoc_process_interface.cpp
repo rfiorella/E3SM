@@ -140,6 +140,13 @@ void SHOCMacrophysics::create_requests()
   // Tracer group
   add_group<Updated>("turbulence_advected_tracers", grid_name, ps, MonolithicAlloc::Required);
 
+  // Surface fluxes of the tracers, if some process computes them and the driver asked us
+  // to apply them (see apply_tracer_surface_fluxes()). These are 2d fields, so no packs.
+  m_apply_tracer_surface_fluxes = m_params.get<bool>("apply_tracer_surface_fluxes", false);
+  if (m_apply_tracer_surface_fluxes) {
+    add_group<Required>("tracer_surface_fluxes", grid_name, MonolithicAlloc::NotRequired);
+  }
+
   // Boundary flux fields for energy and mass conservation checks
   if (has_column_conservation_check()) {
     add_field<Computed>("vapor_flux", scalar2d, kg/(m2*s), grid_name);
@@ -300,6 +307,12 @@ void SHOCMacrophysics::initialize_impl (const RunType run_type)
   runtime_options.shoc_1p5tke   = m_params.get<bool>("shoc_1p5tke");
   runtime_options.do_3d_turb    = m_params.get<bool>("do_3d_turbulence_shoc", false);
   runtime_options.extra_diags   = m_params.get<bool>("extra_shoc_diags");
+
+  // Pair each tracer surface flux with the row of its tracer in the tracer group
+  if (m_apply_tracer_surface_fluxes) {
+    setup_tracer_surface_fluxes();
+  }
+
   // Initialize all of the structures that are passed to shoc_main in run_impl.
   // Note: Some variables in the structures are not stored in the field manager.  For these
   //       variables a local view is constructed.
@@ -572,6 +585,10 @@ void SHOCMacrophysics::run_impl (const double dt)
   auto wtracer_sfc = shoc_preprocess.wtracer_sfc;
   Kokkos::deep_copy(wtracer_sfc, 0);
 
+  if (m_apply_tracer_surface_fluxes) {
+    apply_tracer_surface_fluxes();
+  }
+
   if (m_params.get<bool>("apply_tms", false)) {
     apply_turbulent_mountain_stress();
   }
@@ -689,6 +706,80 @@ void SHOCMacrophysics::apply_turbulent_mountain_stress()
     upwp_sfc(i) -= surf_drag_coeff_tms(i)*horiz_winds(i,0,nlev_v)[nlev_p]/rrho_i(i,nlevi_v)[nlevi_p];
     vpwp_sfc(i) -= surf_drag_coeff_tms(i)*horiz_winds(i,1,nlev_v)[nlev_p]/rrho_i(i,nlevi_v)[nlevi_p];
   });
+}
+// =========================================================================================
+void SHOCMacrophysics::setup_tracer_surface_fluxes()
+{
+  const std::string suffix = "_surf_flux";
+
+  const auto& tracers = get_group_out("turbulence_advected_tracers");
+  const auto& mono    = tracers.monolithic_field();
+  const auto& fluxes  = get_group_in("tracer_surface_fluxes").individual_fields();
+
+  // The tracers are subfields of a parent field (the "tracers" group) or of the
+  // monolithic field itself. Their slice index along the tracer dimension is
+  // relative to the parent, and the monolithic field starts at the slice m_beg of its
+  // parent (see FieldGroup::set_field). Note that the order of individual_fields()
+  // is by name, not the storage order, so the row must come from the slice index.
+  const bool mono_has_parent = mono.get_header().get_parent()!=nullptr;
+  const int  beg = mono_has_parent
+                 ? mono.get_header().get_alloc_properties().get_subview_info().slice_idx : 0;
+
+  m_tracer_flux_names.clear();
+  m_tracer_flux_rows.clear();
+  for (const auto& it : fluxes) {
+    const auto& fname = it.first;
+    const bool has_suffix = fname.size()>suffix.size() &&
+                            fname.compare(fname.size()-suffix.size(), suffix.size(), suffix)==0;
+    EKAT_REQUIRE_MSG (has_suffix,
+        "Error! Field '" + fname + "' in group 'tracer_surface_fluxes' is not named <tracer>" + suffix + ".\n");
+
+    const auto tname = fname.substr(0, fname.size()-suffix.size());
+    const auto tit = tracers.individual_fields().find(tname);
+    EKAT_REQUIRE_MSG (tit!=tracers.individual_fields().end(),
+        "Error! The tracer surface flux '" + fname + "' has no tracer '" + tname +
+        "' in group 'turbulence_advected_tracers'.\n"
+        "  The tracer must be advected by SHOC (TracerAdvection::DynamicsAndTurbulence).\n");
+
+    const auto& header = tit->second.get_header();
+    EKAT_REQUIRE_MSG (header.get_parent()!=nullptr,
+        "Error! Tracer '" + tname + "' is not a subfield of the tracers group.\n");
+    const int row = header.get_alloc_properties().get_subview_info().slice_idx - beg;
+    EKAT_REQUIRE_MSG (row>=0 && row<m_num_tracers,
+        "Error! Tracer '" + tname + "' has index " + std::to_string(row) +
+        " in the tracer group of " + std::to_string(m_num_tracers) + " tracers.\n");
+
+    m_tracer_flux_names.push_back(fname);
+    m_tracer_flux_rows.push_back(row);
+  }
+}
+// =========================================================================================
+void SHOCMacrophysics::apply_tracer_surface_fluxes()
+{
+  // Same conversion as wprtp_sfc in SHOCPreprocess, so a tracer with the same flux as
+  // surf_evap gets the same wtracer_sfc as the bulk water gets wqw_sfc:
+  // [kg/m2/s] / [kg/m3] = [kg/kg m/s].
+  // check_flux_state_consistency is not followed here: the driver forbids it when these
+  // fluxes are applied (it zeroes surf_evap, so later subcycles would differ).
+  const auto& fluxes = get_group_in("tracer_surface_fluxes").individual_fields();
+
+  auto rrho_i      = m_buffer.rrho_i;
+  auto wtracer_sfc = m_buffer.wtracer_sfc;
+
+  const int nlevi_v = m_num_levs/Pack::n;
+  const int nlevi_p = m_num_levs%Pack::n;
+
+  // One kernel per flux: they are few, and each fills its own row.
+  for (std::size_t n=0; n<m_tracer_flux_names.size(); ++n) {
+    const auto flux = fluxes.at(m_tracer_flux_names[n]).get_view<const Real*>();
+    const int  row_v = m_tracer_flux_rows[n]/Pack::n;
+    const int  row_p = m_tracer_flux_rows[n]%Pack::n;
+
+    Kokkos::parallel_for("apply_tracer_surface_flux", KT::RangePolicy(0, m_num_cols),
+                         KOKKOS_LAMBDA (const int i) {
+      wtracer_sfc(i,row_v)[row_p] = flux(i)/rrho_i(i,nlevi_v)[nlevi_p];
+    });
+  }
 }
 // =========================================================================================
 void SHOCMacrophysics::check_flux_state_consistency(const double dt)

@@ -137,17 +137,6 @@ ScalarT ocean_evaporation (ScalarT& f, ScalarT& u, ScalarT& r, ScalarT& s,
 }
 
 // -----------------------------------------------------------------------
-// Land and sea-ice tracer evaporation is out of scope for now. This hook is
-// added to every mass-tracer flux so a later change only needs to fill it in.
-// -----------------------------------------------------------------------
-template <typename ScalarT>
-KOKKOS_INLINE_FUNCTION
-ScalarT land_ice_tracer_flux ()
-{
-  return ScalarT(0);
-}
-
-// -----------------------------------------------------------------------
 // True where f marks a valid ocean point and e_ocn is evaporation (not dew).
 // Factored out so a caller that must compute something only on evaporating
 // lanes (e.g. an isotope's temperature-dependent fractionation factor) can
@@ -202,6 +191,69 @@ ScalarT ocean_flux (const OceanFlux kind,
   }
   if (dew.any()) {
     flux.set(dew, tracer_ratio(q_i, q)*e_ocn);
+  }
+  return flux;
+}
+
+// -----------------------------------------------------------------------
+// Total surface flux of a tracer, upward positive [kg/m2/s]: the ocean part
+// (ocean_flux) plus the land and sea-ice part, where
+//
+//   s_evap = merged ocean+land+ice surface evaporation of bulk water
+//            (the surf_evap field, upward positive), assumed finite
+//   e_ocn  = the ocean-only bulk evaporation (ocean_evaporation), exactly 0
+//            where the ocean state is not valid
+//   L      = s_evap - e_ocn, the non-ocean bulk evaporation
+//
+// L > 0 evaporates the tracer at the land ratio r_land; L < 0 (dew) removes it
+// at its bottom-level ratio tracer_ratio(q_i, q), like the ocean dew branch.
+//
+// Cases, for the sign of e_ocn (ocean) and L (land and ice), and the flux
+// formed for a BulkProportional tracer (rho_d = tracer_ratio(q_i, q)):
+//
+//   e_ocn >= 0, L >= 0  both evaporate: r_land*s_evap + (r_ocn - r_land)*e_ocn
+//                       (the same value as r_ocn*e_ocn + r_land*L, but with
+//                       r_ocn = r_land = 1 it is exactly s_evap, so a tracer
+//                       with R = 1 closes against bulk water to the bit)
+//   e_ocn >= 0, L <  0  ocean evaporates, land dews: r_ocn*e_ocn + rho_d*L
+//   e_ocn <  0, L >= 0  ocean dews, land evaporates: rho_d*e_ocn + r_land*L
+//   e_ocn <  0, L <  0  both dew: rho_d*e_ocn + rho_d*L
+//
+// (A column with no valid ocean has e_ocn = 0, so it is the first or second
+// row with r_land only.) A tracer with R = 1 everywhere closes to roundoff in
+// the dew cases, because rho_d = 1 there.
+//
+// BulkFormula tracers (and isotopes) form the ocean part with the ocean bulk
+// formula on the tracer's own bottom-level concentration q_i, so they do not
+// close exactly against s_evap: only the non-ocean part is proportional. The
+// ocean part and the non-ocean part are added as in the lower three rows.
+// -----------------------------------------------------------------------
+template <typename ScalarT>
+KOKKOS_INLINE_FUNCTION
+ScalarT surface_tracer_flux (const OceanFlux kind,
+                             const typename ekat::ScalarTraits<ScalarT>::scalar_type r_ocn,
+                             const typename ekat::ScalarTraits<ScalarT>::scalar_type r_land,
+                             const ScalarT& f, const ScalarT& rho, const ScalarT& u,
+                             const ScalarT& r, const ScalarT& s, const ScalarT& q,
+                             const ScalarT& q_i, const ScalarT& s_evap, const ScalarT& e_ocn,
+                             const ScalarT& alpha = ScalarT(1))
+{
+  using RealT = typename ekat::ScalarTraits<ScalarT>::scalar_type;
+
+  const ScalarT f_ocn = ocean_flux(kind, r_ocn, f, rho, u, r, s, q, q_i, e_ocn, alpha);
+
+  const ScalarT l_evap = s_evap - e_ocn;
+  const auto land_evap = l_evap > RealT(0);
+  const auto land_dew  = l_evap < RealT(0);
+
+  ScalarT flux = f_ocn;
+  flux.set(land_evap, f_ocn + r_land*l_evap);
+  if (land_dew.any()) {
+    flux.set(land_dew, f_ocn + tracer_ratio(q_i, q)*l_evap);
+  }
+  if (kind == OceanFlux::BulkProportional) {
+    const auto both_evap = !(e_ocn < RealT(0)) && !land_dew;
+    flux.set(both_evap, r_land*s_evap + (r_ocn - r_land)*e_ocn);
   }
   return flux;
 }

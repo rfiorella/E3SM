@@ -14,12 +14,13 @@ namespace {
 // alias a field registered by this or any other process (qv, sst, o3, ...).
 const std::string name_prefix = "wtrc_";
 
-// Each tracer also registers <name>_surf_flux, so no tracer name may end in
-// it (wtrc_a_surf_flux would collide with the flux field of wtrc_a).
+// Each tracer also registers the flux field <name>_qv_surf_flux, and SHOC finds
+// the tracer of a flux field by stripping this suffix. Reserve the suffix, so
+// that no tracer name can be mistaken for a flux field name.
 const std::string flux_suffix = "_surf_flux";
 
-const std::vector<std::string> generic_keys  = {"type", "ocean_flux", "r_ocn", "init", "r_init"};
-const std::vector<std::string> isotope_keys  = {"type", "species", "init", "r_init"};
+const std::vector<std::string> generic_keys  = {"type", "ocean_flux", "r_ocn", "r_land", "init", "r_init"};
+const std::vector<std::string> isotope_keys  = {"type", "species", "r_land", "init", "r_init"};
 
 bool ends_with (const std::string& s, const std::string& suffix) {
   return s.size()>=suffix.size() and
@@ -120,6 +121,9 @@ TracerSpec parse_entry (const std::string& path, const std::string& name,
   spec.r_init_given = get_real(entry, "r_init", spec.r_init, ctx);
   EKAT_REQUIRE_MSG(spec.r_init>=0, ctx + "r_init must be >= 0.\n");
 
+  spec.r_land_given = get_real(entry, "r_land", spec.r_land, ctx);
+  EKAT_REQUIRE_MSG(spec.r_land>=0, ctx + "r_land must be >= 0.\n");
+
   switch (spec.type) {
     case TracerType::Generic:
     {
@@ -127,6 +131,9 @@ TracerSpec parse_entry (const std::string& path, const std::string& name,
       EKAT_REQUIRE_MSG(spec.r_ocn>=0, ctx + "r_ocn must be >= 0.\n");
       if (not spec.r_init_given) {
         spec.r_init = spec.r_ocn;
+      }
+      if (not spec.r_land_given) {
+        spec.r_land = spec.r_ocn;
       }
 
       const auto flux = get_token(entry, "ocean_flux", ctx);
@@ -142,7 +149,7 @@ TracerSpec parse_entry (const std::string& path, const std::string& name,
     }
     case TracerType::Isotope:
     {
-      // r_ocn (and the default r_init) come from the isotope parameter
+      // r_ocn (and the default r_init and r_land) come from the isotope parameter
       // tables; the water_isotopes process sets them, and ocean_flux, after
       // parsing.
       spec.species = require_token(entry, "species", ctx, "the isotopologue");

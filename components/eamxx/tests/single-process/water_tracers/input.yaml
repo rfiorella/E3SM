@@ -22,7 +22,9 @@ grids_manager:
     number_of_global_columns:   32
     number_of_vertical_levels:  72
 
-# Constant state with qv < ocn_ssq, so the ocean evaporates (E_ocn > 0).
+# Constant state with qv < ocn_ssq, so the ocean evaporates (E_ocn > 0), over a half-ocean
+# column whose merged evaporation surf_evap (2e-5 kg/m2/s) exceeds E_ocn: the rest is
+# evaporation from land and sea ice.
 # Tracers start at 0; init: ratio tracers are then set by the process, every
 # phase from its bulk phase (qc, qr and qi are nonzero to exercise that).
 initial_conditions:
@@ -34,7 +36,8 @@ initial_conditions:
   p_mid: 95000.0
   pseudo_density: 1000.0
   sst: 300.0
-  ocnfrac: 1.0
+  ocnfrac: 0.5
+  surf_evap: 2.0e-5
   ocn_ssq: 0.02
   ocn_re: 0.0015
   ocn_ustar: 0.3
@@ -42,6 +45,14 @@ initial_conditions:
   wtrc_bp_qc: 0.0
   wtrc_bp_qr: 0.0
   wtrc_bp_qi: 0.0
+  wtrc_rp_qv: 0.0
+  wtrc_rp_qc: 0.0
+  wtrc_rp_qr: 0.0
+  wtrc_rp_qi: 0.0
+  wtrc_rl_qv: 0.0
+  wtrc_rl_qc: 0.0
+  wtrc_rl_qr: 0.0
+  wtrc_rl_qi: 0.0
   wtrc_bf_qv: 0.0
   wtrc_bf_qc: 0.0
   wtrc_bf_qr: 0.0

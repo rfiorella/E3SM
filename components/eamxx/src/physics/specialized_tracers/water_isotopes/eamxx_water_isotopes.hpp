@@ -33,7 +33,7 @@ public:
   // with no isotope tracers these options are just never read.
   void configure (ekat::ParameterList& params);
 
-  // Completes every Isotope spec: r_ocn (and the default r_init) from the
+  // Completes every Isotope spec: r_ocn (and the default r_init and r_land) from the
   // parameter tables, and ocean_flux = BulkFormula (the only form that takes
   // the fractionation factor; see water_tracers::ocean_flux).
   void resolve (std::vector<water_tracers::TracerSpec>& specs) const;

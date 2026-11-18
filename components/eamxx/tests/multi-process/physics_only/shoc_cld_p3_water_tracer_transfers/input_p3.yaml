@@ -36,9 +36,10 @@ grids_manager:
 initial_conditions:
   # The name of the file containing the initial conditions for this test.
   filename: ${SCREAM_DATA_DIR}/init/${EAMxx_tests_IC_FILE_72lev}
+  surf_evap: 0.0
   precip_liq_surf_mass: 0.0
   precip_ice_surf_mass: 0.0
-  # Ocean inputs of water_tracers (its fluxes are diagnostic only)
+  # Ocean inputs of water_tracers (it turns them into tracer surface fluxes, applied by SHOC)
   sst: 300.0
   ocnfrac: 1.0
   ocn_ssq: 0.02

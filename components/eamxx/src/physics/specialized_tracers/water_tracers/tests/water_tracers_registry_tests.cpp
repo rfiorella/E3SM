@@ -42,6 +42,8 @@ TEST_CASE("registry_valid") {
   REQUIRE(specs[0].ocean_flux == wt::OceanFlux::BulkFormula);
   REQUIRE(specs[0].r_ocn == Real(0.5));
   REQUIRE(specs[0].r_init == Real(0.5));  // default r_init = r_ocn
+  REQUIRE(specs[0].r_land == Real(0.5));  // default r_land = r_ocn
+  REQUIRE(not specs[0].r_land_given);
 
   REQUIRE(specs[1].r_ocn == 1);            // int in the file
   REQUIRE(specs[1].ocean_flux == wt::OceanFlux::BulkProportional);
@@ -50,12 +52,41 @@ TEST_CASE("registry_valid") {
   REQUIRE(specs[2].species == "HDO");
   REQUIRE(specs[2].init == wt::InitType::Ratio);
   REQUIRE(not specs[2].r_init_given);
+  REQUIRE(not specs[2].r_land_given);      // set to r_ocn by WaterIsotopes::resolve
 
   const auto bspecs = wt::parse_tracers_file(block, no_iso);
   REQUIRE(bspecs.size() == 1);
   REQUIRE(bspecs[0].name == "wtrc_bp");
   REQUIRE(bspecs[0].r_ocn == 1);           // default
   REQUIRE(bspecs[0].init == wt::InitType::Ratio);
+}
+
+TEST_CASE("registry_r_land") {
+  const auto f = write_file("wtrc_rland.yaml", tracers(
+    "  wtrc_a: {type: generic, r_ocn: 0.5, r_land: 2.0}\n"
+    "  wtrc_b: {type: generic, r_ocn: 0.5, r_land: 0}\n"
+    "  wtrc_c: {type: generic, r_land: 3}\n"
+    "  wtrc_d: {type: isotope, species: HDO, r_land: 0.9}\n"));
+  const auto specs = wt::parse_tracers_file(f, iso);
+  REQUIRE(specs.size() == 4);
+  REQUIRE(specs[0].r_land_given);
+  REQUIRE(specs[0].r_land == 2);
+  REQUIRE(specs[0].r_ocn == Real(0.5));   // independent of r_ocn
+  REQUIRE(specs[0].r_init == Real(0.5));  // r_init still defaults to r_ocn
+  REQUIRE(specs[1].r_land == 0);          // zero is valid
+  REQUIRE(specs[2].r_land == 3);          // int in the file
+  REQUIRE(specs[2].r_ocn == 1);
+  REQUIRE(specs[3].r_land_given);
+  REQUIRE(specs[3].r_land == Real(0.9));
+
+  auto fails = [](const std::string& tag, const std::string& entries, const std::string& msg,
+                  const wt::RegistryOptions& opts = no_iso) {
+    const auto g = write_file("wtrc_bad_rland_" + tag + ".yaml", tracers(entries));
+    REQUIRE_THROWS_WITH(wt::parse_tracers_file(g, opts), Contains(msg));
+  };
+  fails("neg",     "  wtrc_a: {type: generic, r_land: -0.1}\n", "r_land must be >= 0");
+  fails("neg_iso", "  wtrc_a: {type: isotope, species: HDO, r_land: -1}\n", "r_land must be >= 0", iso);
+  fails("str",     "  wtrc_a: {type: generic, r_land: abc}\n", "'r_land' must be a number");
 }
 
 TEST_CASE("registry_errors") {
@@ -79,6 +110,7 @@ TEST_CASE("registry_errors") {
   fails("pfx_iso", "  hdo: {type: isotope, species: HDO}\n", "must start with 'wtrc_'", iso);
   fails("pfx_bare", "  wtrc_: {type: generic}\n", "must start with 'wtrc_'");
   fails("sfx",     "  wtrc_a_surf_flux: {type: generic}\n", "cannot end in '_surf_flux'");
+  fails("sfx_iso", "  wtrc_a_surf_flux: {type: isotope, species: HDO}\n", "cannot end in '_surf_flux'", iso);
 
   const auto notracers = write_file("wtrc_bad_top.yaml", "%YAML 1.1\n---\nfoo: 1\n...\n");
   REQUIRE_THROWS_WITH(wt::parse_tracers_file(notracers, no_iso), Contains("top-level 'tracers'"));

@@ -2,9 +2,16 @@
 ---
 filename_prefix: water_tracers_standalone_output_${POSTFIX}
 averaging_type: instant
+# The surface fluxes are checked against surf_evap to roundoff
+floating_point_precision: real
 field_names:
-  - wtrc_bp_surf_flux
-  - wtrc_bf_surf_flux
+  - wtrc_bp_qv_surf_flux
+  - wtrc_bf_qv_surf_flux
+  - wtrc_rp_qv_surf_flux
+  - wtrc_rl_qv_surf_flux
+  - surf_evap
+  - T_mid
+  - p_mid
   - wtrc_bp_qv
   - wtrc_bf_qv
   - wtrc_bf_qc
