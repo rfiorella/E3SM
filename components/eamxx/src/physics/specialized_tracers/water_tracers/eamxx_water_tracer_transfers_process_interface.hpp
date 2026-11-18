@@ -14,8 +14,8 @@ namespace scream
 {
 /*
  * Water tracer transfers: moves the water tracers between phases the way
- * SHOC and P3 moved bulk water, by replaying the transfers they export with
- * export_water_transfers=true. Bulk water is only read.
+ * SHOC and P3 moved bulk water, by replaying the transfers they export (they
+ * always do in builds with EAMXX_ENABLE_WATER_TRACERS). Bulk water is only read.
  *
  * Each transfer moves the tracer at the ratio R = tracer/bulk of its donor
  * phase (no fractionation yet). The tracers are those of the water_tracers

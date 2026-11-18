@@ -327,9 +327,10 @@ void AtmosphereDriver::create_grids()
     setup_iop_data_manager ();
   }
 
-  // The water tracer replay needs SHOC/P3 to export their bulk water transfers, which they
-  // decide in create_requests (called by set_grids). Check the process tree and set the
-  // export flags now; check the field requests of the processes in between afterwards.
+  // The water tracer replay reads the bulk water transfers that SHOC and P3 export (they
+  // always do in builds with water tracers). Check the process tree and set up the tracers
+  // file now, since water_tracer_transfers reads it in create_requests (called by set_grids);
+  // check the field requests of the processes in between afterwards.
   const bool do_wtrc_transfers = m_atm_process_group->has_process("water_tracer_transfers");
   if (do_wtrc_transfers) {
     setup_water_tracer_transfer_links();
@@ -690,11 +691,6 @@ void AtmosphereDriver::setup_water_tracer_transfer_links ()
         "Error! 'shoc::check_flux_state_consistency' is true, but 'water_tracer_transfers' replays SHOC.\n"
         "  That fixer can change qv outside the exported SHOC stages. Set it to false, "
         "or set 'water_tracer_transfers::replay_shoc=false'.\n");
-  }
-
-  // Ask the sources to export their transfers (read in their create_requests)
-  for (const auto& src : sources) {
-    src.proc->get_params().set<bool>("export_water_transfers",true);
   }
 
   // The tracer file is the one of water_tracers, unless set explicitly (and consistently)

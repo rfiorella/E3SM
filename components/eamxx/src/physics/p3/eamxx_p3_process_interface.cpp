@@ -37,6 +37,12 @@ void P3Microphysics::create_requests()
   // Gather runtime options from file
   runtime_options.load_runtime_options_from_file(m_params);
 
+#ifdef EAMXX_HAS_WATER_TRACERS
+  // The water_tracer_transfers process replays what P3 does to bulk water, so
+  // builds with water tracers always export it (see p3_water_transfers.hpp)
+  runtime_options.export_water_transfers = true;
+#endif
+
   // --Infrastructure
   // dt is passed as an argument to run_impl
   infrastructure.it  = 0;
@@ -153,7 +159,7 @@ void P3Microphysics::create_requests()
   add_field<Computed>("rainfrac",               scalar3d_layout_mid, none,   grid_name, ps);
 
   // Every bulk water transfer, for the water tracers (see p3_water_transfers.hpp).
-  // The water_tracer_transfers process turns this option on and reads them.
+  // Only in builds with water tracers, where water_tracer_transfers reads them.
   if (runtime_options.export_water_transfers) {
     const auto transfers_layout = m_grid->get_3d_vector_layout(LEV, p3::WaterTransfer::Count, "p3_water_transfer");
     const auto sed_layout       = m_grid->get_3d_vector_layout(LEV, p3::SedFlux::Count, "p3_sed_species");

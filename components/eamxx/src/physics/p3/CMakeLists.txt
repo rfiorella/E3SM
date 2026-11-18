@@ -87,6 +87,11 @@ foreach (P3_LIB IN LISTS P3_LIBS)
     ${SCREAM_BASE_DIR}/../eam/src/physics/cam
   )
   target_link_libraries(${P3_LIB} eamxx_physics_share scream_share)
+  # With water tracers enabled, P3 exports its bulk water transfers (see
+  # p3_water_transfers.hpp). Only eamxx_p3_process_interface.cpp tests this.
+  if (EAMXX_ENABLE_WATER_TRACERS)
+    target_compile_definitions(${P3_LIB} PRIVATE EAMXX_HAS_WATER_TRACERS)
+  endif()
 endforeach()
 
 # Ensure tables are present in the data dir

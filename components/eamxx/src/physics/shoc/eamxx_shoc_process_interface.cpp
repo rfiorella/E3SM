@@ -128,8 +128,10 @@ void SHOCMacrophysics::create_requests()
   } // Extra SHOC output diagnostics
 
   // Bulk water after each SHOC stage, for the water tracers (see shoc_water_transfers.hpp).
-  // The water_tracer_transfers process turns this option on and reads them.
-  m_export_water_transfers = m_params.get<bool>("export_water_transfers", false);
+  // Only in builds with water tracers, where water_tracer_transfers reads them.
+#ifdef EAMXX_HAS_WATER_TRACERS
+  m_export_water_transfers = true;
+#endif
   if (m_export_water_transfers) {
     const auto stages_layout = m_grid->get_3d_vector_layout(LEV, shoc::WaterStage::Count, "shoc_water_stage");
     add_field<Computed>("shoc_water_stages", stages_layout, kg/kg, grid_name, ps);
@@ -586,7 +588,7 @@ void SHOCMacrophysics::run_impl (const double dt)
 
   // shoc_water_stages holds the stages of a single transport+condensation cycle
   EKAT_REQUIRE_MSG (not m_export_water_transfers or m_nadv==1,
-      "Error! SHOC export_water_transfers requires one SHOC iteration per call (nadv=1).\n"
+      "Error! In builds with water tracers, SHOC exports its water stages, which requires one SHOC iteration per call (nadv=1).\n"
       "  - nadv: " + std::to_string(m_nadv) + "\n");
 
   // Reset internal WSM variables.

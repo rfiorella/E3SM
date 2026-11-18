@@ -116,6 +116,11 @@ foreach (SHOC_LIB IN LISTS SHOC_LIBS)
     ${CMAKE_CURRENT_SOURCE_DIR}/impl
   )
   target_link_libraries(${SHOC_LIB} eamxx_physics_share scream_share)
+  # With water tracers enabled, SHOC exports its bulk water stages (see
+  # shoc_water_transfers.hpp). Only eamxx_shoc_process_interface.cpp tests this.
+  if (EAMXX_ENABLE_WATER_TRACERS)
+    target_compile_definitions(${SHOC_LIB} PRIVATE EAMXX_HAS_WATER_TRACERS)
+  endif()
 endforeach()
 
 if (NOT SCREAM_LIB_ONLY)

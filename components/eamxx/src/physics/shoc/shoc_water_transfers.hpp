@@ -5,8 +5,8 @@ namespace scream {
 namespace shoc {
 
 /*
- * Components of the shoc_water_stages field, written by SHOC when the runtime
- * option export_water_transfers is true.
+ * Components of the shoc_water_stages field, written by SHOC in builds with
+ * water tracers (EAMXX_ENABLE_WATER_TRACERS).
  *
  * SHOC changes bulk water in two stages. First, the implicit solve diffuses
  * total water qw = qv + qc and every member of turbulence_advected_tracers

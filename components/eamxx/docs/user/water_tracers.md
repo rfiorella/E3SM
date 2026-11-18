@@ -61,8 +61,10 @@ Neither process is in a default `atm_procs_list`. Put `water_tracers` before
 ./atmchange water_tracers::water_tracers_file=/path/to/tracers.yaml
 ```
 
-At startup the atmosphere driver then sets `export_water_transfers=true` on
-SHOC and P3, copies the tracers file to `water_tracer_transfers`, and checks
+Builds with `EAMXX_ENABLE_WATER_TRACERS=ON` make SHOC and P3 export the bulk
+water transfers that `water_tracer_transfers` replays (in every run of such a
+build, whether or not the tracer processes are used). At startup the
+atmosphere driver copies the tracers file to `water_tracer_transfers` and checks
 that:
 
 * `water_tracers` exists, and `shoc` and `p3` (when replayed) are in the same

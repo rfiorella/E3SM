@@ -134,7 +134,9 @@ template <typename ScalarT, typename DeviceT> struct Functions {
     bool use_hetfrz_classnuc                    = false;
     bool use_separate_ice_liq_frac              = false;
     bool extra_p3_diags                         = false;
-    // Export every bulk water transfer (p3_water_transfers.hpp), for water tracers
+    // Export every bulk water transfer (p3_water_transfers.hpp), for water
+    // tracers. Not read from the parameter list: the P3 interface turns it on in
+    // builds with water tracers (EAMXX_ENABLE_WATER_TRACERS)
     bool export_water_transfers                 = false;
 
     void
@@ -178,7 +180,6 @@ template <typename ScalarT, typename DeviceT> struct Functions {
       use_separate_ice_liq_frac =
           params.get<bool>("use_separate_ice_liq_frac", use_separate_ice_liq_frac);
       extra_p3_diags = params.get<bool>("extra_p3_diags", extra_p3_diags);
-      export_water_transfers = params.get<bool>("export_water_transfers", export_water_transfers);
     }
   };
 

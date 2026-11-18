@@ -8,7 +8,7 @@ time_stepping:
   run_t0: ${RUN_T0}  # YYYY-MM-DD-XXXXX
   number_of_steps: ${NUM_STEPS}
 
-# Negative test (a process in between updates tracers): the driver sets the export flags and copies water_tracers_file.
+# Negative test (a process in between updates tracers): the driver copies water_tracers_file.
 # water_tracer_transfers must run right after P3, in the same subcycle: the
 # SHOC and P3 exports only hold their last call.
 eamxx:

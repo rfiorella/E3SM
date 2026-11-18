@@ -570,7 +570,8 @@ protected:
   Int m_num_tracers;
   Int hdtime;
 
-  // Export shoc_water_stages for the water tracers (see shoc_water_transfers.hpp)
+  // Export shoc_water_stages for the water tracers (see shoc_water_transfers.hpp);
+  // on in builds with water tracers (EAMXX_ENABLE_WATER_TRACERS)
   bool m_export_water_transfers = false;
 
   // Struct which contains local variables

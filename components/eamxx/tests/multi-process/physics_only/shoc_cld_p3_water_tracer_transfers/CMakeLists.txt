@@ -8,8 +8,8 @@ include (ScreamUtils)
 #  - mac:      [water_tracers, mac], mac = [shoc, cld_fraction, p3,
 #              water_tracer_transfers] subcycled, both replays
 # and the driver link (AtmosphereDriver::setup_water_tracer_transfer_links):
-#  - link:     the mac run with no export flags and no water_tracers_file for the
-#              transfers; the link must set them. Same checks, same numbers.
+#  - link:     the mac run with no water_tracers_file for the transfers; the
+#              link must copy it. Same checks, same numbers.
 #  - neg_*:    mis-configured trees that the link must reject during init.
 CreateADUnitTestExec(shoc_cld_p3_water_tracer_transfers LIBS shoc cld_fraction p3 water_tracers)
 

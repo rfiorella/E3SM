@@ -5,8 +5,8 @@ namespace scream {
 namespace p3 {
 
 /*
- * Components of the p3_water_transfers field, written by P3 when the runtime
- * option export_water_transfers is true.
+ * Components of the p3_water_transfers field, written by P3 in builds with
+ * water tracers (EAMXX_ENABLE_WATER_TRACERS).
  *
  * Every component is the rate at which one P3 call moved mass between two
  * bulk water species (v=qv, c=qc, r=qr, i=qi), from the first to the second,

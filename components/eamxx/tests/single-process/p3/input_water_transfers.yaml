@@ -16,7 +16,6 @@ eamxx:
     do_prescribed_ccn: false
     use_hetfrz_classnuc: false
     internal_diagnostics_level: 2
-    export_water_transfers: true
 
 grids_manager:
   type: mesh_free
