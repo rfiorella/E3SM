@@ -60,6 +60,10 @@ void WaterIsotopes::enable (water_tracers::RegistryOptions& opts)
 // =========================================================================================
 void WaterIsotopes::configure (ekat::ParameterList& params)
 {
+  // The atmosphere driver copies these four options from water_tracers to
+  // water_tracer_transfers (AtmosphereDriver::setup_water_tracer_transfer_links),
+  // so both use the same alphas: keep its list of keys in sync with this one.
+
   // Liquid/vapor fractionation formulation
   m_runtime_options.liquid_vapor = parse_option<LiquidVaporFractionation>(
       params, "liquid_vapor_formulation", "horita_wesolowski_1994", {

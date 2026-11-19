@@ -46,6 +46,12 @@ CreateUnitTestExec(wtt_link_modifier_test
   LIBS scream_control eamxx_io eamxx_diagnostics shoc cld_fraction p3 water_tracers)
 target_include_directories(wtt_link_modifier_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
 
+# The generic-tracer runs: tracers.yaml, no alpha override (the isotope runs,
+# at the end, set their own)
+set (WTT_TRACERS_FILE tracers.yaml)
+set (WTT_ALPHA_OVERRIDE 0.0)
+set (OUT_YAML output_p3.yaml)
+set (OUT_PREFIX p3_water_tracer_transfers_output)
 foreach (f input_p3.yaml output_p3.yaml ${WTT_NEG_inputs})
   configure_file(${CMAKE_CURRENT_SOURCE_DIR}/${f} ${CMAKE_CURRENT_BINARY_DIR}/${f})
 endforeach()
@@ -222,3 +228,131 @@ foreach (c ${WTT_NEG_CASES} ${WTT_NEG_MOD_CASES})
   set_tests_properties (wtt_link_neg_${c} PROPERTIES
     PASS_REGULAR_EXPRESSION "${WTT_NEG_REGEX_${c}}")
 endforeach()
+
+# Isotope runs (tracers_iso.yaml: HDO and H218O, next to a generic R = 1
+# tracer), in builds that accept isotope entries:
+#  - iso:           mac, equilibrium alphas, evap configuration (surface
+#                   fluxes on). The tracers must be conserved (column +
+#                   precipitation + surface flux) and stay >= 0 (to
+#                   roundoff), condensing cloud must be enriched relative to
+#                   the vapor, and ice that P3 mostly deposited from vapor
+#                   must have R_qi/R_qv close to alpha_i (see
+#                   check_water_isotope_transfers.py).
+#  - iso_alpha1p5,
+#    iso_alpha0p7:  the same with alpha_override = 1.5 and 0.7, far from any
+#                   physical alpha: conservation and positivity only.
+#  - iso_alpha1:    mac with alpha_override = 1, no ocean (ocnfrac = 0, so the
+#                   isotopes' bulk-formula ocean flux, which has its own alpha,
+#                   is 0 and their surface flux is the land part, as for
+#                   wtrc_t): every isotope field must equal wtrc_t's bit for
+#                   bit, so the fractionation code is exact at alpha = 1.
+#  - p3_iso_alpha1: the same in the p3-only run (no SHOC, no surface flux).
+if (EAMXX_ENABLE_WATER_ISOTOPES)
+  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tracers_iso.yaml
+                 ${CMAKE_CURRENT_BINARY_DIR}/tracers_iso.yaml COPYONLY)
+  set (WTT_TRACERS_FILE tracers_iso.yaml)
+  set (WTT_ISO_CHECK ${CMAKE_CURRENT_SOURCE_DIR}/../shoc_water_tracer_transfers/check_water_isotope_transfers.py)
+
+  foreach (v iso iso_alpha1p5 iso_alpha0p7 iso_alpha1)
+    set (SURF_EVAP 1.5e-6)
+    set (OCNFRAC   0.5)
+    set (OCN_SSQ   0.01)
+    if (v STREQUAL iso)
+      set (WTT_ALPHA_OVERRIDE 0.0)
+    elseif (v STREQUAL iso_alpha1p5)
+      set (WTT_ALPHA_OVERRIDE 1.5)
+    elseif (v STREQUAL iso_alpha0p7)
+      set (WTT_ALPHA_OVERRIDE 0.7)
+    else()
+      set (WTT_ALPHA_OVERRIDE 1.0)
+      set (OCNFRAC 0.0)
+    endif()
+    set (OUT_YAML output_${v}.yaml)
+    set (OUT_PREFIX shoc_cld_p3_water_${v}_transfers_output)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/input.yaml ${CMAKE_CURRENT_BINARY_DIR}/input_${v}.yaml)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/output_iso.yaml ${CMAKE_CURRENT_BINARY_DIR}/output_${v}.yaml)
+    CreateUnitTestFromExec(shoc_cld_p3_water_${v}_transfers shoc_cld_p3_water_tracer_transfers
+      EXE_ARGS "--args -ifile=input_${v}.yaml"
+      LABELS shoc cld p3 water_tracers water_isotopes physics
+      FIXTURES_SETUP shoc_cld_p3_water_${v}_transfers)
+
+    set (out_nc shoc_cld_p3_water_${v}_transfers_output.INSTANT.nsteps_x1.np1.${RUN_T0}.nc)
+    if (v STREQUAL iso_alpha1)
+      # Bit for bit: every field of each isotope against wtrc_t's
+      set (pairs)
+      foreach (iso wtrc_hdo wtrc_o18)
+        foreach (f qv qc qr qi precip_liq_surf_mass precip_ice_surf_mass residual_shoc residual_p3 qv_surf_flux)
+          list (APPEND pairs "${iso}_${f}=wtrc_t_${f}")
+        endforeach()
+      endforeach()
+      add_test (NAME shoc_cld_p3_water_${v}_transfers_bfb
+        COMMAND ${SCREAM_BASE_DIR}/scripts/compare-nc-files -s ${out_nc} -c ${pairs}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+      # and the uniform-ratio checks of the generic tracers
+      add_test (NAME shoc_cld_p3_water_${v}_transfers_check
+        COMMAND ${WTT_CHECK} -f ${out_nc}
+          ${WTT_HEADERS}
+          --stages-header ${SCREAM_SRC_DIR}/physics/shoc/shoc_water_transfers.hpp
+          --tracer wtrc_t=1 wtrc_hdo=1 wtrc_o18=1
+          --min-p3-transfers 8
+          --rtol ${WTT_RTOL}
+          --dt ${MAC_DT}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+      set_tests_properties (shoc_cld_p3_water_${v}_transfers_bfb PROPERTIES
+        LABELS "shoc;cld;p3;water_tracers;water_isotopes;physics"
+        FIXTURES_REQUIRED shoc_cld_p3_water_${v}_transfers)
+    else()
+      set (alpha_args)
+      if (v STREQUAL iso)
+        set (alpha_args --alpha-check)
+      endif()
+      add_test (NAME shoc_cld_p3_water_${v}_transfers_check
+        COMMAND ${WTT_ISO_CHECK} -f ${out_nc}
+          --tracer wtrc_hdo=HDO wtrc_o18=H218O --reference wtrc_t
+          --stages-header ${SCREAM_SRC_DIR}/physics/shoc/shoc_water_transfers.hpp
+          --p3-header ${SCREAM_SRC_DIR}/physics/p3/p3_water_transfers.hpp
+          --stage-T-header ${SCREAM_SRC_DIR}/physics/specialized_tracers/water_tracers/eamxx_water_tracer_transfers_functions.hpp
+          --dt ${ATM_TIME_STEP} --dt-p3 ${MAC_DT}
+          --rtol-budget ${WTT_RTOL} --neg-rtol ${WTT_RTOL}
+          ${alpha_args}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+    endif()
+    set_tests_properties (shoc_cld_p3_water_${v}_transfers_check PROPERTIES
+      LABELS "shoc;cld;p3;water_tracers;water_isotopes;physics"
+      FIXTURES_REQUIRED shoc_cld_p3_water_${v}_transfers)
+  endforeach()
+
+  set (WTT_ALPHA_OVERRIDE 1.0)
+  set (OUT_YAML output_p3_iso_alpha1.yaml)
+  set (OUT_PREFIX p3_water_iso_alpha1_transfers_output)
+  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/input_p3.yaml ${CMAKE_CURRENT_BINARY_DIR}/input_p3_iso_alpha1.yaml)
+  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/output_p3_iso.yaml ${CMAKE_CURRENT_BINARY_DIR}/output_p3_iso_alpha1.yaml)
+  CreateUnitTestFromExec(p3_water_iso_alpha1_transfers shoc_cld_p3_water_tracer_transfers
+    EXE_ARGS "--args -ifile=input_p3_iso_alpha1.yaml"
+    LABELS p3 water_tracers water_isotopes physics
+    FIXTURES_SETUP p3_water_iso_alpha1_transfers)
+  set (out_nc p3_water_iso_alpha1_transfers_output.INSTANT.nsteps_x1.np1.${RUN_T0}.nc)
+  set (pairs)
+  foreach (iso wtrc_hdo wtrc_o18)
+    foreach (f qv qc qr qi precip_liq_surf_mass precip_ice_surf_mass residual_p3)
+      list (APPEND pairs "${iso}_${f}=wtrc_t_${f}")
+    endforeach()
+  endforeach()
+  add_test (NAME p3_water_iso_alpha1_transfers_bfb
+    COMMAND ${SCREAM_BASE_DIR}/scripts/compare-nc-files -s ${out_nc} -c ${pairs}
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+  add_test (NAME p3_water_iso_alpha1_transfers_check
+    COMMAND ${WTT_CHECK} -f ${out_nc}
+      ${WTT_HEADERS}
+      --tracer wtrc_t=1 wtrc_hdo=1 wtrc_o18=1
+      --min-p3-transfers 8
+      --rtol ${WTT_RTOL}
+      --dt ${P3_TIME_STEP}
+      --T-from-previous-slice
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+  foreach (t bfb check)
+    set_tests_properties (p3_water_iso_alpha1_transfers_${t} PROPERTIES
+      LABELS "p3;water_tracers;water_isotopes;physics"
+      FIXTURES_REQUIRED p3_water_iso_alpha1_transfers)
+  endforeach()
+endif()

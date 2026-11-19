@@ -62,13 +62,20 @@ private:
      Tier 1 (always compiled in, including release): an implausible or NaN
      temperature ends the run.
 
-     Tier 2 (debug builds only): a plausible temperature outside
-     [Tmin_warn, Tmax] means the polynomial is being extrapolated further than
-     we accept. Tmin_warn is below the fitted Tmin for liquid, which is
+     Tier 2: a plausible temperature outside [Tmin_warn, Tmax] means the
+     polynomial is being extrapolated further than we accept (it is still
+     used as is). Tmin_warn is below the fitted Tmin for liquid, which is
      routinely evaluated down to the sea-water freezing point (ocean
      evaporation) and below (supercooled liquid); see TemperatureBounds.
-     Gated on NDEBUG because it fires per pack per level per step, which would
-     swamp a production log.
+      - With a counter (num_extrapolated != nullptr, all builds): the number
+        of extrapolated lanes is added to *num_extrapolated and nothing is
+        printed. Callers that evaluate alpha at every level (the
+        water_tracer_transfers replay) do this and report the count once per
+        run, since cold levels extrapolate every step.
+      - Without one (debug builds only): a printf per pack. Gated on NDEBUG
+        because it fires per pack per call. The ocean flux of water_tracers
+        takes this path; it evaluates liquid alpha at the SST of evaporating
+        ocean only, which never leaves [Tmin_warn, Tmax].
 
      Lanes outside range_mask are ignored by both tiers: they hold padding, not
      data. */
@@ -78,7 +85,8 @@ private:
       const ScalarT& t,
       const TemperatureBounds& b,
       const ekat::Mask<ScalarT::n>& range_mask,
-      const char* caller)
+      const char* caller,
+      int* num_extrapolated = nullptr)
   {
     using RealT = typename ekat::ScalarTraits<ScalarT>::scalar_type;
 
@@ -87,9 +95,15 @@ private:
     const auto bad = (ekat::isnan(t) || t < RealT(T_implausible)) && range_mask;
     EKAT_KERNEL_REQUIRE_MSG(!bad.any(), caller);
 
-#ifndef NDEBUG
     const auto extrapolating =
         (t < RealT(b.Tmin_warn) || t > RealT(b.Tmax)) && range_mask;
+    if (num_extrapolated != nullptr) {
+      for (int s = 0; s < ScalarT::n; ++s) {
+        if (extrapolating[s]) ++(*num_extrapolated);
+      }
+      return;
+    }
+#ifndef NDEBUG
     if (extrapolating.any()) {
       Kokkos::printf("WARNING: %s: T outside the accepted range [%g, %g] K"
                      " (fitted range [%g, %g] K); extrapolating\n",
@@ -169,6 +183,11 @@ public:
   // the 1/T terms are formed, so NaN padding left behind by upstream physics
   // cannot raise a spurious FPE. Callers holding a fully-populated pack (N=1
   // scalar callers always are) may use the overload that omits it.
+  //
+  // num_extrapolated (optional): if given, the number of lanes in range_mask
+  // whose temperature is outside the fit's accepted range is added to it,
+  // instead of the debug-build warning (see check_temperature). Each call
+  // checks one fit, also for H217O and HTO, so this counts evaluations.
   // -----------------------------------------------------------------------
   template <typename ScalarT>
   KOKKOS_INLINE_FUNCTION
@@ -179,7 +198,8 @@ public:
       const WisoAlphaDir dir,
       const WaterIsotopeParameters<typename ekat::ScalarTraits<ScalarT>::scalar_type>& iso_params,
       const ekat::Mask<ScalarT::n>& range_mask = ekat::Mask<ScalarT::n>(true),
-      const char* caller = "water_isotopes::alpha_equilibrium")
+      const char* caller = "water_isotopes::alpha_equilibrium",
+      int* num_extrapolated = nullptr)
   {
     using RealT = typename ekat::ScalarTraits<ScalarT>::scalar_type;
     using Params = WaterIsotopeParameters<RealT>;
@@ -191,7 +211,8 @@ public:
       // two rows from two different studies with different fitted ranges.
       ScalarT t_live{RealT(T_lane_fill)};
       t_live.set(range_mask, temp);
-      check_temperature(t_live, iso_params.tbounds(phase, el), range_mask, caller);
+      check_temperature(t_live, iso_params.tbounds(phase, el), range_mask, caller,
+                        num_extrapolated);
 
       return exp(RealT(1e-3) *
                  ln_alpha_permil(t_live, iso_params.alpha_eq_coeffs(phase, el)));
@@ -211,10 +232,12 @@ public:
       const WaterIsotopologues species,
       const WisoAlphaDir dir,
       const WaterIsotopeParameters<typename ekat::ScalarTraits<ScalarT>::scalar_type>& iso_params,
-      const ekat::Mask<ScalarT::n>& range_mask = ekat::Mask<ScalarT::n>(true))
+      const ekat::Mask<ScalarT::n>& range_mask = ekat::Mask<ScalarT::n>(true),
+      int* num_extrapolated = nullptr)
   {
     return alpha_equilibrium(t, species, CondensedPhase::Liquid, dir, iso_params,
-                             range_mask, "water_isotopes::alpha_liquid_vapor");
+                             range_mask, "water_isotopes::alpha_liquid_vapor",
+                             num_extrapolated);
   }
 
   template <typename ScalarT>
@@ -224,10 +247,12 @@ public:
       const WaterIsotopologues species,
       const WisoAlphaDir dir,
       const WaterIsotopeParameters<typename ekat::ScalarTraits<ScalarT>::scalar_type>& iso_params,
-      const ekat::Mask<ScalarT::n>& range_mask = ekat::Mask<ScalarT::n>(true))
+      const ekat::Mask<ScalarT::n>& range_mask = ekat::Mask<ScalarT::n>(true),
+      int* num_extrapolated = nullptr)
   {
     return alpha_equilibrium(t, species, CondensedPhase::Ice, dir, iso_params,
-                             range_mask, "water_isotopes::alpha_ice_vapor");
+                             range_mask, "water_isotopes::alpha_ice_vapor",
+                             num_extrapolated);
   }
 };
 

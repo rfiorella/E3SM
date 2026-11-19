@@ -4,8 +4,10 @@ Water tracers follow a labeled portion of the model's water through the
 atmosphere. They are built from two processes, `water_tracers` and
 `water_tracer_transfers`. Only vapor transport (HOMME advection and SHOC
 diffusion) and the bulk water phase changes of SHOC and P3 are covered so far.
-There is no fractionation yet: every transfer moves tracer mass in proportion
-to the donor phase's tracer-to-bulk ratio (alpha = 1).
+Generic tracers move in proportion to the donor phase's tracer-to-bulk ratio
+in every transfer (no fractionation). Isotope tracers also fractionate, with
+equilibrium fractionation factors, in the phase changes through the vapor (see
+"Isotope fractionation" below).
 
 ## Tracers file
 
@@ -72,18 +74,87 @@ bottom-level concentration, so they do not close exactly against `surf_evap`
   `<base>_precip_{liq,ice}_surf_mass` (kg/m2, accumulated like the bulk
   precipitation) and the diagnostics `<base>_residual_{shoc,p3}`
   (bulk water minus replayed tracer water, per phase), and once for all
-  tracers `water_transfer_stage_T` (next section).
+  tracers `water_transfer_stage_T` (see "Stage temperatures") and
+  `water_transfer_alpha_extrapolations` (see "Isotope fractionation").
 
 Parameters of `water_tracer_transfers`:
 
 * `replay_shoc`, `replay_p3` (default true): which sources to replay.
 * `water_tracers_file`: copied from `water_tracers` when unset.
+* `liquid_vapor_formulation`, `ice_vapor_formulation`,
+  `standard_ratio_formulation`, `ocean_enrichment_formulation`: the isotope
+  options, copied from `water_tracers` when unset (and an error if set to a
+  different value), so both processes use the same fractionation factors.
+* `alpha_override` (test only, not in the namelist defaults; default 0, off):
+  if > 0, every isotope uses this value as both alpha_l and alpha_i in the
+  replay (so Bergeron's factor is 1). With 1, an isotope follows the bulk
+  water like a generic tracer, bit for bit.
+
+## Isotope fractionation
+
+Only tracers of `type: isotope` fractionate; generic tracers never do. For an
+isotope, each replayed transfer through the vapor removes tracer from its donor
+phase with a fractionation factor beta = R_sink/R_donor, from the equilibrium
+factors alpha_l = R_liquid/R_vapor and alpha_i = R_ice/R_vapor of the species
+(the formulations set by `liquid_vapor_formulation` and
+`ice_vapor_formulation`):
+
+| Transfer | beta | Temperature |
+|---|---|---|
+| SHOC net condensation (vapor to cloud liquid) | alpha_l | `ShocAfterTransport` |
+| SHOC net evaporation (cloud liquid to vapor) | 1/alpha_l | `ShocAfterTransport` |
+| P3 vapor deposition and ice nucleation | alpha_i | `P3Part2` |
+| P3 rain evaporation | 1/alpha_l | `P3Part2` |
+| P3 Bergeron process (cloud liquid to ice) | alpha_i/alpha_l | `P3Part2` |
+| P3 sublimation, and every transfer between condensates (autoconversion, accretion, riming, collection, freezing, melting, shedding) | 1 | |
+| P3 clips and homogeneous freezing, sedimentation, the checkpoint vapor repairs, surface fluxes | never fractionate | |
+
+The Bergeron factor treats the transfer as going through the vapor (the liquid
+evaporates and the vapor deposits on the ice). This is a deliberate departure
+from the EAM Fortran, which has no Bergeron branch and so uses 1. Sublimation
+uses 1, as in the Fortran: ice does not exchange isotopes with the vapor while
+it sublimates.
+
+Each alpha is evaluated once per level and tracer, at the temperature at the
+start of its stage (`water_transfer_stage_T`, below), on the levels where the
+transfers that use it moved water.
+
+**Rayleigh step.** All the sinks of one donor phase act together, as a
+Rayleigh distillation of the donor's water: if the sinks remove A of the
+donor's bulk water m (for P3, its reservoir plus its inflows in the same
+call), the fraction of the donor left is f = (m - A)/m, and the donor's tracer
+t loses t*(1 - f^beta_eff), with beta_eff the sinks' amount-weighted mean
+beta. That tracer is split among the sinks in proportion to amount*beta. This
+cannot move more tracer than the donor has, or leave tracer in a donor whose
+bulk water is all gone, and it does not depend on the order of the sinks or on
+splitting the step. Where every beta of a donor is 1 (always for generic
+tracers) the transfer is the linear one, amount*t/m, exactly as before. After
+P3's fixed-point passes over the donor ratios, a guard scales down the
+outflows of any fractionating donor that would exceed its tracer plus its
+final inflows (this conserves the tracer).
+
+**Extrapolated fits.** The fits of alpha are used as they are outside their
+fitted temperature range. Liquid alpha counts as extrapolated below 253.15 K,
+and supercooled liquid in P3 can be as cold as about 233 K; cirrus ice is
+colder than the 233-240 K lower limit of the ice fits. The diagnostic
+`water_transfer_alpha_extrapolations` (per column, accumulated over the atm
+step) counts the alpha evaluations at such temperatures, and their total over
+the run is logged once, at the end of the run. A temperature below 50 K, or
+NaN, stops the run.
+
+**Not represented.** Kinetic effects (of evaporation into undersaturated air
+and of deposition in supersaturation) are not included. Neither is any
+isotopic exchange at zero net mass change: existing cloud liquid and rain do
+not re-equilibrate with the vapor (only the water SHOC or P3 move between
+phases carries a fractionation). SHOC exports its net condensation per level,
+so condensation and evaporation within a level in the same call are not
+seen separately.
 
 ## Stage temperatures
 
 `water_transfer_stage_T` (K; layout column, `water_transfer_stage`, level) is
-the temperature at the start of each replayed stage, for the fractionation
-factors to come (nothing uses it yet). Its three components are, in order:
+the temperature at the start of each replayed stage, at which the isotopes'
+fractionation factors are evaluated. Its three components are, in order:
 
 1. `ShocAfterTransport`: SHOC after its turbulent transport, before its
    condensation;
@@ -142,10 +213,11 @@ A warning is logged if `zm`, `gw`, `nudging` or `iop_forcing` is in the tree.
 
 * Only SHOC and P3 are replayed. Other bulk water changes (ZM, GW, nudging,
   IOP forcing, the SHOC flux-consistency fixer) are not followed.
-* No fractionation yet. The surface flux of land and sea ice uses `r_land`
-  (default `r_ocn`); the coupler's land isotope fluxes are not imported.
-* A tracer with a uniform ratio R keeps R through every transfer; the tests
-  check R = 1 against the bulk fields to roundoff.
+* Only equilibrium fractionation, in the transfers listed above (see "Not
+  represented"). The surface flux of land and sea ice uses `r_land` (default
+  `r_ocn`); the coupler's land isotope fluxes are not imported.
+* A generic tracer with a uniform ratio R keeps R through every transfer; the
+  tests check R = 1 against the bulk fields to roundoff.
 
 ## Tests
 
@@ -163,3 +235,13 @@ or `T_mid` (a test-only dummy process, since no linked physics does). The P3-onl
 run checks the rebuilt `P3Entry` temperature against the previous step's `T_mid`
 (nothing else changes it there); the SHOC stage is only checked for consistent
 bookkeeping, since no output holds SHOC's temperature after transport.
+
+In builds with `EAMXX_ENABLE_WATER_ISOTOPES=ON`, the `*_water_iso*` tests run
+HDO and H218O next to a generic R = 1 tracer (`check_water_isotope_transfers.py`):
+column budgets (tracer + precipitation - surface flux) to roundoff, no negative
+tracer beyond roundoff (also with `alpha_override` 1.5 and 0.7), new SHOC cloud
+with R_qc/R_qv equal to the Rayleigh result for alpha_l, condensing cloud
+enriched relative to the vapor, and ice deposited from vapor near alpha_i.
+With `alpha_override: 1.0` the isotopes must equal the generic tracer bit for
+bit. The unit test `water_tracer_transfers_functions` covers the Rayleigh step
+itself.

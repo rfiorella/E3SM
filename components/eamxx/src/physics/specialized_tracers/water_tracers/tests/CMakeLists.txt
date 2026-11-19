@@ -14,6 +14,14 @@ CreateUnitTest(water_tracers_ocean_flux
   LABELS water_tracers physics
 )
 
+# The replay's Rayleigh donor step and fractionation factors (incl. FPE
+# safety with degenerate donors).
+CreateUnitTest(water_tracer_transfers_functions
+  SOURCES water_tracer_transfers_functions_tests.cpp
+  LIBS water_tracers
+  LABELS water_tracers physics
+)
+
 # water_tracers_file parsing and validation. The test writes its YAML fixtures
 # into the working directory.
 CreateUnitTest(water_tracers_registry

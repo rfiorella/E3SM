@@ -698,21 +698,25 @@ void AtmosphereDriver::setup_water_tracer_transfer_links ()
         "or set 'water_tracer_transfers::replay_shoc=false'.\n");
   }
 
-  // The tracer file is the one of water_tracers, unless set explicitly (and consistently)
-  const std::string key = "water_tracers_file";
+  // The tracer file and the isotope options (the formulations of the fractionation factors, which
+  // the replay evaluates too; the keys WaterIsotopes::configure reads) are those of water_tracers,
+  // unless set explicitly (and consistently)
   const auto& wtrc_pl = wtrc.proc->get_params();
-  const std::string wtrc_file = wtrc_pl.isParameter(key) ? wtrc_pl.get<std::string>(key) : "";
-  const std::string xfer_file = xfer_pl.isParameter(key) ? xfer_pl.get<std::string>(key) : "";
-  if (xfer_file=="") {
-    if (wtrc_file!="") {
-      xfer_pl.set<std::string>(key,wtrc_file);
+  for (const std::string key : {"water_tracers_file", "liquid_vapor_formulation", "ice_vapor_formulation",
+                                "standard_ratio_formulation", "ocean_enrichment_formulation"}) {
+    const std::string wtrc_val = wtrc_pl.isParameter(key) ? wtrc_pl.get<std::string>(key) : "";
+    const std::string xfer_val = xfer_pl.isParameter(key) ? xfer_pl.get<std::string>(key) : "";
+    if (xfer_val=="") {
+      if (wtrc_val!="") {
+        xfer_pl.set<std::string>(key,wtrc_val);
+      }
+      // else: leave it unset; the process errors out with a clear message if it needs it
+    } else if (wtrc_val!="") {
+      EKAT_REQUIRE_MSG(xfer_val==wtrc_val,
+          "Error! 'water_tracer_transfers::" + key + "' (" + xfer_val + ") differs from "
+          "'water_tracers::" + key + "' (" + wtrc_val + ").\n"
+          "  Both processes must use the same value; leave the former unset to copy the latter.\n");
     }
-    // else: leave it empty, the process itself errors out with a clear message
-  } else if (wtrc_file!="") {
-    EKAT_REQUIRE_MSG(xfer_file==wtrc_file,
-        "Error! 'water_tracer_transfers::water_tracers_file' (" + xfer_file + ") differs from "
-        "'water_tracers::water_tracers_file' (" + wtrc_file + ").\n"
-        "  Both processes must use the same tracers file; leave the former unset to copy the latter.\n");
   }
 
   m_atm_logger->info("  [EAMxx] water_tracer_transfers linked to water_tracers (shoc replay: " +

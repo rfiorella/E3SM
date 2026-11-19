@@ -327,6 +327,57 @@ void verify_dead_lane_fpe_safety()
   REQUIRE( alpha[0] == alpha_ref[0] );
 }
 
+/* With a counter, the extrapolation tier of check_temperature counts the
+   lanes in range_mask whose temperature is outside [Tmin_warn, Tmax], once per
+   evaluation, and the alphas are those of the call without one. */
+void verify_extrapolation_count()
+{
+  using WIF   = water_isotopes::WaterIsotopeFractionation;
+  using PackN = ekat::Pack<Real, SCREAM_PACK_SIZE>;
+  using MaskN = ekat::Mask<SCREAM_PACK_SIZE>;
+  using water_isotopes::WaterIsotopologues;
+
+  const water_isotopes::WaterIsotopeParameters<Real> iso_params;  // defaults
+  const auto el = iso_params.element_of(WaterIsotopologues::HDO);
+  const auto liq = iso_params.tbounds(water_isotopes::CondensedPhase::Liquid, el);
+  const auto ice = iso_params.tbounds(water_isotopes::CondensedPhase::Ice, el);
+
+  // Lanes cycle through: in range for both phases, too cold for liquid only,
+  // too cold for both, too warm for ice only; every third lane is masked out
+  const Real temps[4] = {Real(260), Real(liq.Tmin_warn - 10), Real(ice.Tmin_warn - 10), Real(ice.Tmax + 5)};
+  PackN t;
+  MaskN mask(true);
+  int expect_liq = 0, expect_ice = 0;
+  for (int s = 0; s < PackN::n; ++s) {
+    t[s] = temps[s % 4];
+    mask.set(s, s % 3 != 2);
+    if (!mask[s]) continue;
+    if (t[s] < liq.Tmin_warn || t[s] > liq.Tmax) ++expect_liq;
+    if (t[s] < ice.Tmin_warn || t[s] > ice.Tmax) ++expect_ice;
+  }
+
+  for (const auto sp : {WaterIsotopologues::HDO, WaterIsotopologues::H217O}) {
+    int n_liq = 0, n_ice = 0;
+    const PackN a_liq = WIF::alpha_liquid_vapor(t, sp, water_isotopes::CondensedOverVapor, iso_params, mask, &n_liq);
+    const PackN a_ice = WIF::alpha_ice_vapor(t, sp, water_isotopes::CondensedOverVapor, iso_params, mask, &n_ice);
+    REQUIRE( n_liq == expect_liq );
+    REQUIRE( n_ice == expect_ice );
+    // the counter only adds: a second evaluation doubles it
+    WIF::alpha_ice_vapor(t, sp, water_isotopes::CondensedOverVapor, iso_params, mask, &n_ice);
+    REQUIRE( n_ice == 2*expect_ice );
+    // same alphas as without a counter (which prints instead, in debug builds)
+    const PackN b_liq = WIF::alpha_liquid_vapor(t, sp, water_isotopes::CondensedOverVapor, iso_params, mask);
+    for (int s = 0; s < PackN::n; ++s) {
+      REQUIRE( a_liq[s] == b_liq[s] );
+      REQUIRE( a_ice[s] > Real(0) );
+    }
+  }
+  // H216O does not evaluate a fit, so it counts nothing
+  int n = 0;
+  WIF::alpha_liquid_vapor(t, WaterIsotopologues::H216O, water_isotopes::CondensedOverVapor, iso_params, mask, &n);
+  REQUIRE( n == 0 );
+}
+
 template <typename RealT>
 void run_both_pack_sizes(
   const char* phase, const AlphaTable& expected,
@@ -407,6 +458,10 @@ TEST_CASE("water_isotopes_fractionation") {
 
     SECTION("dead_lane_fpe_safety") {
       verify_dead_lane_fpe_safety();
+    }
+
+    SECTION("extrapolation_count") {
+      verify_extrapolation_count();
     }
 
   }
