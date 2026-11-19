@@ -76,6 +76,71 @@ struct SedFlux { enum : int { CloudLiquid, Rain, Ice, Count }; };
 // Components of the p3_water_entry field: bulk water at P3 entry [kg/kg, wet].
 struct WaterEntry { enum : int { Vapor, CloudLiquid, Rain, Ice, Count }; };
 
+/*
+ * The phases of each WaterTransfer component: the WaterEntry component it
+ * moves mass from, and the one it moves it to (the names encode them: C2V is
+ * cloud liquid to vapor).
+ *
+ * This is also P3's heating table. P3 heats the air by
+ *   dT = (H(to) - H(from))*amount/cp   [K], amount [kg/kg],
+ * for every transfer, with H(Vapor) = 0, H(CloudLiquid) = H(Rain) = LatVap and
+ * H(Ice) = LatVap + LatIce [J/kg] (P3 adds dT*inv_exner to theta): see
+ * update_prognostic_ice/liquid (Part2*), the clips in p3_main_part1/2/3 and
+ * homogeneous_freezing. tests/p3_water_transfers_tests.cpp checks the table
+ * against update_prognostic_ice/liquid and homogeneous_freezing; the clips are
+ * inline in the part functions and are only checked end to end, by the
+ * water_tracer_transfers tests.
+ */
+struct WaterTransferPhases {
+  int from[WaterTransfer::Count];
+  int to[WaterTransfer::Count];
+};
+
+// Build the table. Host only: device code needs a copy (e.g. captured by
+// value in a lambda), since an array at namespace scope cannot be indexed in
+// a CUDA kernel.
+inline WaterTransferPhases water_transfer_phases ()
+{
+  using WT = WaterTransfer;
+  constexpr int v = WaterEntry::Vapor;
+  constexpr int c = WaterEntry::CloudLiquid;
+  constexpr int r = WaterEntry::Rain;
+  constexpr int i = WaterEntry::Ice;
+  static_assert(WT::Count == 25, "Update water_transfer_phases to match WaterTransfer.");
+
+  WaterTransferPhases p {};
+  const auto set = [&p] (const int cmp, const int from, const int to) {
+    p.from[cmp] = from;
+    p.to[cmp]   = to;
+  };
+  set(WT::Part1ClipC2V,     c, v);
+  set(WT::Part1ClipR2V,     r, v);
+  set(WT::Part1ClipI2V,     i, v);
+  set(WT::Part1ClipI2R,     i, r);
+  set(WT::Part2VapdepV2I,   v, i);
+  set(WT::Part2NucleatV2I,  v, i);
+  set(WT::Part2SublimI2V,   i, v);
+  set(WT::Part2EvapR2V,     r, v);
+  set(WT::Part2AccretC2R,   c, r);
+  set(WT::Part2AutoconvC2R, c, r);
+  set(WT::Part2ShedC2R,     c, r);
+  set(WT::Part2BergC2I,     c, i);
+  set(WT::Part2CollectC2I,  c, i);
+  set(WT::Part2FreezeC2I,   c, i);
+  set(WT::Part2CollectR2I,  r, i);
+  set(WT::Part2FreezeR2I,   r, i);
+  set(WT::Part2MeltI2R,     i, r);
+  set(WT::Part2ClipC2V,     c, v);
+  set(WT::Part2ClipR2V,     r, v);
+  set(WT::Part2ClipI2V,     i, v);
+  set(WT::HomFreezeC2I,     c, i);
+  set(WT::HomFreezeR2I,     r, i);
+  set(WT::Part3ClipC2V,     c, v);
+  set(WT::Part3ClipR2V,     r, v);
+  set(WT::Part3ClipI2V,     i, v);
+  return p;
+}
+
 } // namespace p3
 } // namespace scream
 

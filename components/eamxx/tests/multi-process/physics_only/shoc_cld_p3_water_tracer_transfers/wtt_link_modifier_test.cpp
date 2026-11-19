@@ -1,7 +1,7 @@
 /*
  * The AD test driver, plus a test-only atm process, wtt_dummy_modifier, that
- * claims to update bulk water (qc) or a tracer group. The driver link of
- * water_tracer_transfers must refuse it between SHOC/P3 and the replay.
+ * claims to update bulk water (qc), a tracer group, or T_mid. The driver link
+ * of water_tracer_transfers must refuse it between SHOC/P3 and the replay.
  * No real process that updates bulk water is linked into these tests, and the
  * dummy never runs: the link has to stop during initialization.
  */
@@ -22,7 +22,7 @@ public:
   std::string name () const override { return "wtt_dummy_modifier"; }
 
   // What it claims to update: parameter 'updates' is a bulk field name (qc),
-  // or the name of a group (tracers)
+  // the name of a group (tracers), or T_mid
   void create_requests () override
   {
     using namespace ekat::units;
@@ -32,6 +32,8 @@ public:
     const auto what = m_params.get<std::string>("updates");
     if (what=="tracers") {
       add_group<Updated>(what, grid->name(), 1, MonolithicAlloc::NotRequired);
+    } else if (what=="T_mid") {
+      add_field<Updated>(what, grid->get_3d_scalar_layout(LEV), K, grid->name());
     } else {
       add_tracer<Updated>(what, grid, kg/kg, 1);
     }

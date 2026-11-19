@@ -776,8 +776,9 @@ void AtmosphereDriver::check_water_tracer_transfer_requests () const
   }
 
   // Processes strictly between the first source and the transfers (so strictly between shoc and p3,
-  // and between p3 and the transfers) may not change bulk water or tracers: the replay assumes
-  // only SHOC and P3 do. A replayed p3 is exempt (it is a source); an un-replayed one is not.
+  // and between p3 and the transfers) may not change bulk water, tracers or T_mid: the replay assumes
+  // only SHOC and P3 change bulk water, and the stage temperatures are rebuilt from T_mid assuming
+  // only they change it. A replayed p3 is exempt (it is a source); an un-replayed one is not.
   const std::set<std::string> bulk_water = {"qv","qc","qr","qi"};
   const std::set<std::string> tracer_groups = {"tracers","turbulence_advected_tracers"};
   for (int i=first_idx+1; i<xfer.index; ++i) {
@@ -793,6 +794,12 @@ void AtmosphereDriver::check_water_tracer_transfer_requests () const
             "Error! Process '" + leaf->name() + "' in group '" + gname + "' updates bulk water field '" +
             r.fid.name() + "' between SHOC/P3 and 'water_tracer_transfers'.\n"
             "  The transfer replay assumes only SHOC and P3 change bulk water there. Move '" + leaf->name() +
+            "' out of that range (before shoc, or after water_tracer_transfers).\n");
+        EKAT_REQUIRE_MSG(not ((r.usage & Computed) and r.fid.name()=="T_mid"),
+            "Error! Process '" + leaf->name() + "' in group '" + gname + "' updates 'T_mid' "
+            "between SHOC/P3 and 'water_tracer_transfers'.\n"
+            "  'water_tracer_transfers' rebuilds the temperature of each replayed stage from T_mid, assuming only\n"
+            "  SHOC and P3 change it there. Move '" + leaf->name() +
             "' out of that range (before shoc, or after water_tracer_transfers).\n");
       }
       for (const auto& r : leaf->get_group_requests()) {

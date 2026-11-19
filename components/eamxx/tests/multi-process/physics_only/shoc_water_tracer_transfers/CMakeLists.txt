@@ -2,7 +2,9 @@ include (ScreamUtils)
 
 # water_tracers + SHOC + water_tracer_transfers (SHOC replay only): tracers with
 # a uniform ratio R to bulk water must keep it through SHOC's transport and
-# condensation, in every phase (see check_water_tracer_transfers.py).
+# condensation, in every phase (see check_water_tracer_transfers.py), and the
+# rebuilt stage temperatures (water_transfer_stage_T; for SHOC a bookkeeping
+# check only, and P3's stages must hold the fill value).
 CreateADUnitTestExec(shoc_water_tracer_transfers LIBS shoc water_tracers)
 
 # Ensure test input files are present in the data dir
@@ -53,11 +55,14 @@ CreateUnitTestFromExec(shoc_water_tracer_transfers_evap shoc_water_tracer_transf
   LABELS shoc water_tracers physics
   FIXTURES_SETUP shoc_water_tracer_transfers_evap)
 
-# Tolerance of the roundoff checks, relative to the total water at a point
+# Tolerance of the roundoff checks, relative to the total water at a point,
+# and of the stage temperature checks, relative to T_mid
 if (SCREAM_DOUBLE_PRECISION)
   set (WTT_RTOL 1e-12)
+  set (WTT_T_RTOL 1e-13)
 else()
   set (WTT_RTOL 1e-5)
+  set (WTT_T_RTOL 1e-5)
 endif()
 add_test (NAME shoc_water_tracer_transfers_check
   COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/check_water_tracer_transfers.py
@@ -67,6 +72,8 @@ add_test (NAME shoc_water_tracer_transfers_check
     --tracer wtrc_t=1 wtrc_half=0.5
     --exact-qr-qi
     --rtol ${WTT_RTOL}
+    --stage-T-header ${SCREAM_SRC_DIR}/physics/specialized_tracers/water_tracers/eamxx_water_tracer_transfers_functions.hpp
+    --T-rtol ${WTT_T_RTOL}
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 set_tests_properties (shoc_water_tracer_transfers_check PROPERTIES
   LABELS "shoc;water_tracers;physics"
@@ -81,6 +88,8 @@ add_test (NAME shoc_water_tracer_transfers_evap_check
     --tracer wtrc_t=1 wtrc_half=0.5
     --exact-qr-qi
     --rtol ${WTT_RTOL}
+    --stage-T-header ${SCREAM_SRC_DIR}/physics/specialized_tracers/water_tracers/eamxx_water_tracer_transfers_functions.hpp
+    --T-rtol ${WTT_T_RTOL}
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 set_tests_properties (shoc_water_tracer_transfers_evap_check PROPERTIES
   LABELS "shoc;water_tracers;physics"

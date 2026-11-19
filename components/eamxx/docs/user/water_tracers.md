@@ -71,12 +71,38 @@ bottom-level concentration, so they do not close exactly against `surf_evap`
   tracers, in the order the bulk model applied it. It also computes
   `<base>_precip_{liq,ice}_surf_mass` (kg/m2, accumulated like the bulk
   precipitation) and the diagnostics `<base>_residual_{shoc,p3}`
-  (bulk water minus replayed tracer water, per phase).
+  (bulk water minus replayed tracer water, per phase), and once for all
+  tracers `water_transfer_stage_T` (next section).
 
 Parameters of `water_tracer_transfers`:
 
 * `replay_shoc`, `replay_p3` (default true): which sources to replay.
 * `water_tracers_file`: copied from `water_tracers` when unset.
+
+## Stage temperatures
+
+`water_transfer_stage_T` (K; layout column, `water_transfer_stage`, level) is
+the temperature at the start of each replayed stage, for the fractionation
+factors to come (nothing uses it yet). Its three components are, in order:
+
+1. `ShocAfterTransport`: SHOC after its turbulent transport, before its
+   condensation;
+2. `P3Entry`: P3's entry state;
+3. `P3Part2`: P3 after its first clipping of small masses, the state its
+   process rates are computed from.
+
+SHOC and P3 export no temperature. Both heat in proportion to the water they
+move, so `water_tracer_transfers` rebuilds the stage temperatures from `T_mid`
+and the exports, undoing P3's latent heating (`p3::water_transfer_phases` in
+`p3_water_transfers.hpp` gives the phases, and so the latent heat, of each
+transfer) and then SHOC's condensation heating. This needs `T_mid` to be
+changed only by SHOC and P3 between SHOC and `water_tracer_transfers`; the
+driver checks it (see below). A component whose stage is not replayed
+(`replay_shoc` or `replay_p3` false) holds EAMxx's fill value (about 3.4e33,
+marked as `_FillValue` in output files).
+
+`ShocAfterTransport` includes SHOC's energy fixer, which corrects SHOC's final
+temperature and is not exported separately.
 
 ## Enabling
 
@@ -107,8 +133,8 @@ that:
   `shoc::check_flux_state_consistency` is then false (the fixer zeroes
   `surf_evap` during the step, so bulk water and the tracers would get different
   surface fluxes);
-* no process between SHOC/P3 and the replay updates `qv`, `qc`, `qr`, `qi` or the
-  tracer groups.
+* no process between SHOC/P3 and the replay updates `qv`, `qc`, `qr`, `qi`, the
+  tracer groups or `T_mid` (the stage temperatures are rebuilt from `T_mid`).
 
 A warning is logged if `zm`, `gw`, `nudging` or `iop_forcing` is in the tree.
 
@@ -133,4 +159,7 @@ The multi-process tests are in
 (`shoc_cld_p3_wtt_link`, nothing configured by hand) and negative tests
 (`wtt_link_neg_*`) for mis-ordered or mis-grouped processes, a missing
 `water_tracers`, sub-cycled P3, and a process in between that updates bulk water
-(a test-only dummy process, since no linked physics does).
+or `T_mid` (a test-only dummy process, since no linked physics does). The P3-only
+run checks the rebuilt `P3Entry` temperature against the previous step's `T_mid`
+(nothing else changes it there); the SHOC stage is only checked for consistent
+bookkeeping, since no output holds SHOC's temperature after transport.

@@ -26,6 +26,8 @@ field_names:
   - wtrc_t_qv_surf_flux
   - surf_evap
   - shoc_water_stages
+  - T_mid
+  - water_transfer_stage_T
 output_control:
   frequency: 1
   frequency_units: nsteps
