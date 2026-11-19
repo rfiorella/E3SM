@@ -60,7 +60,7 @@ void WaterIsotopes::enable (water_tracers::RegistryOptions& opts)
 // =========================================================================================
 void WaterIsotopes::configure (ekat::ParameterList& params)
 {
-  // The atmosphere driver copies these four options from water_tracers to
+  // The atmosphere driver copies these six options from water_tracers to
   // water_tracer_transfers (AtmosphereDriver::setup_water_tracer_transfer_links),
   // so both use the same alphas: keep its list of keys in sync with this one.
 
@@ -90,6 +90,20 @@ void WaterIsotopes::configure (ekat::ParameterList& params)
       params, "ice_vapor_formulation", "merlivat_nief_1967", {
         {"merlivat_nief_1967", IceVaporFractionation::MerlivatNief1967},
         {"isocam3",            IceVaporFractionation::IsoCAM3}
+      });
+
+  // Kinetic fractionation of ocean evaporation
+  m_runtime_options.kinetic_fractionation = parse_option<KineticFractionationFormulation>(
+      params, "kinetic_fractionation_formulation", "brutsaert_merlivat_jouzel_1979", {
+        {"brutsaert_merlivat_jouzel_1979", KineticFractionationFormulation::BrutsaertMerlivatJouzel1979},
+        {"none",                           KineticFractionationFormulation::None}
+      });
+
+  // Molecular diffusivity ratios used by the kinetic fractionation
+  m_runtime_options.diffusivity = parse_option<DiffusivityRatioFormulation>(
+      params, "diffusivity_formulation", "merlivat_1978", {
+        {"merlivat_1978", DiffusivityRatioFormulation::Merlivat1978},
+        {"cappa_2003",    DiffusivityRatioFormulation::Cappa2003}
       });
 
   m_iso_params = WaterIsotopeParameters<Real>(m_runtime_options);
