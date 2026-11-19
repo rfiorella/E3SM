@@ -41,6 +41,9 @@ eamxx:
       replay_p3: false
       # Test only: > 0 replaces the isotopes' alphas (0: off)
       alpha_override: ${WTT_ALPHA_OVERRIDE}
+      # Kinetic isotope fractionation (off except in the *_kinetic* runs)
+      kinetic_fractionation: ${WTT_KINETIC}
+      kinetic_ice_supersaturation: ${WTT_KINETIC_ICE_S}
 
 grids_manager:
   type: mesh_free

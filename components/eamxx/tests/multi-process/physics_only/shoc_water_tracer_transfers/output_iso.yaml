@@ -36,6 +36,8 @@ field_names:
   - shoc_water_stages
   - water_transfer_stage_T
   - water_transfer_alpha_extrapolations
+  # The kinetic runs' saturation inputs (empty otherwise: no process needs them)
+  ${WTT_KINETIC_OUTPUT}
 output_control:
   frequency: 1
   frequency_units: nsteps

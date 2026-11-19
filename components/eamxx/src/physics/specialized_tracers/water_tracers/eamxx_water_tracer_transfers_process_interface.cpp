@@ -1,10 +1,12 @@
 #include "eamxx_water_tracer_transfers_process_interface.hpp"
 #include "eamxx_water_tracer_transfers_functions.hpp"
 #include "../water_isotopes/eamxx_water_isotopes_fractionation.hpp"
+#include "../water_isotopes/eamxx_water_isotopes_kinetic.hpp"
 
 #include "physics/p3/p3_water_transfers.hpp"
 #include "physics/shoc/shoc_water_transfers.hpp"
 #include "share/physics/physics_constants.hpp"
+#include "share/physics/physics_functions.hpp"  // qv_sat_wet (ETI on CPU builds)
 
 #include <ekat_assert.hpp>
 #include <ekat_pack_kokkos.hpp>
@@ -41,6 +43,33 @@ void clip_stage (Pack (&tr)[nphases], Pack (&q)[nphases], const int from, const 
   tr[to]   += moved;
   q[to]    += amount;
   q[from].set(amount != Real(0), Real(0));
+}
+
+// The saturation ratio qv/qv_sat of vapor qv [kg/kg, wet] over liquid (ice =
+// false) or ice, at temperature T [K], dry pressure p_dry [Pa] and wet and dry
+// pseudo densities dp, dp_dry [Pa]: the relative humidity of EAMxx's RH
+// diagnostic (share/diagnostics/relative_humidity.cpp), Murphy & Koop (2005)
+// saturation vapor pressure, qv_sat on the wet basis of qv. It is also P3's
+// own ratio, which P3 forms on its dry basis (qv*dp/dp_dry over qv_sat_dry at
+// p_dry_mid). Lanes outside mask return 1, and get in-range inputs before the
+// saturation function (which evaluates every lane), so padding cannot trap.
+KOKKOS_INLINE_FUNCTION
+Pack saturation_ratio (const Pack& qv, const Pack& T, const Pack& p_dry, const Pack& dp,
+                       const Pack& dp_dry, const bool ice, const ekat::Mask<Pack::n>& mask)
+{
+  using PF = physics::Functions<Real, DefaultDevice>;
+
+  Pack qv_live(0), T_live(273.15), p_live(1.e5), dp_live(1), dp_dry_live(1);
+  qv_live.set(mask, qv);
+  T_live.set(mask, T);
+  p_live.set(mask, p_dry);
+  dp_live.set(mask, dp);
+  dp_dry_live.set(mask, dp_dry);
+  const Pack qv_sat = PF::qv_sat_wet(T_live, p_live, ice, mask, dp_live, dp_dry_live, PF::MurphyKoop,
+                                     "water_tracer_transfers (saturation ratio)");
+  Pack s(1);
+  s.set(mask, qv_live/qv_sat);
+  return s;
 }
 
 // P3's part2 process rates, in WaterTransfer order from Part2VapdepV2I
@@ -98,6 +127,14 @@ WaterTracerTransfers::WaterTracerTransfers (const ekat::Comm& comm, const ekat::
   EKAT_REQUIRE_MSG(m_alpha_override >= 0,
       "Error! 'water_tracer_transfers::alpha_override' must be > 0 (or 0, off), got " +
       std::to_string(m_alpha_override) + ".\n");
+
+  // Kinetic fractionation of isotopes in the replay (see the class comment)
+  m_kinetic = m_params.get<bool>("kinetic_fractionation", false);
+  const auto ice_S = m_params.get<std::string>("kinetic_ice_supersaturation", "empirical");
+  EKAT_REQUIRE_MSG(ice_S=="empirical" or ice_S=="model",
+      "Error! Invalid 'water_tracer_transfers::kinetic_ice_supersaturation': '" + ice_S +
+      "'. Valid options: empirical, model.\n");
+  m_kinetic_ice_model_S = ice_S=="model";
 }
 
 // =========================================================================================
@@ -146,8 +183,12 @@ void WaterTracerTransfers::create_requests ()
   // The temperature at the start of each replayed stage, rebuilt from T_mid
   // (see water_tracers::stage_temperatures). P3's part2 stage needs P3's dry basis.
   add_field<Required>("T_mid", scalar3d_mid, K, grid_name, ps);
-  if (m_replay_p3) {
+  if (m_replay_p3 or m_kinetic) {
     add_field<Required>("pseudo_density_dry", scalar3d_mid, Pa, grid_name, ps);
+  }
+  // The saturation ratios of the kinetic factors (see saturation_ratio)
+  if (m_kinetic) {
+    add_field<Required>("p_dry_mid", scalar3d_mid, Pa, grid_name, ps);
   }
   const auto stage_T_layout = m_grid->get_3d_vector_layout(LEV, wt::TransferStage::Count, "water_transfer_stage");
   add_field<Computed>("water_transfer_stage_T", stage_T_layout, K, grid_name, ps);
@@ -328,6 +369,7 @@ void WaterTracerTransfers::replay_shoc ()
   using WS  = shoc::WaterStage;
   using TS  = wt::TransferStage;
   using WIF = water_isotopes::WaterIsotopeFractionation;
+  using WIK = water_isotopes::WaterIsotopeKinetic;
 
   const auto& gn = m_grid->name();
   const int nlev = m_num_levs;
@@ -344,6 +386,15 @@ void WaterTracerTransfers::replay_shoc ()
   const auto extrap_run  = m_alpha_extrapolations_run;
   const auto iso_params  = m_isotopes.parameters();
   const Real alpha_fixed = m_alpha_override;
+
+  // Kinetic fractionation: the state for the relative humidity
+  const bool kinetic = m_kinetic and m_alpha_override <= 0;
+  Field::view_dev_t<const Pack**> p_dry, dp, dp_dry;
+  if (kinetic) {
+    p_dry  = get_field_in("p_dry_mid", gn).get_view<const Pack**>();
+    dp     = get_field_in("pseudo_density", gn).get_view<const Pack**>();
+    dp_dry = get_field_in("pseudo_density_dry", gn).get_view<const Pack**>();
+  }
 
   // With the P3 replay, P3 ran between SHOC and this process, so the bulk qr
   // and qi SHOC returned are P3's entry values, not the bulk fields
@@ -396,6 +447,7 @@ void WaterTracerTransfers::replay_shoc ()
       Pack beta(1);
       if (fractionates) {
         Pack alpha_l(alpha_fixed);
+        Pack alpha_evap(alpha_fixed);  // the liquid/vapor factor of net evaporation
         if (alpha_fixed <= 0) {
           const auto in_range = ekat::range<IntPack>(k*Pack::n) < nlev;
           Pack T(0);
@@ -407,8 +459,26 @@ void WaterTracerTransfers::replay_shoc ()
             Kokkos::atomic_add(&num_extrap(icol), Real(nx));
             Kokkos::atomic_add(&extrap_run(icol), Real(nx));
           }
+          alpha_evap = alpha_l;
+
+          // Kinetic fractionation (D4 of the design): net evaporation is
+          // taken as evaporation into the level's subsaturated air, with the
+          // effective factor akel at the relative humidity over liquid of
+          // SHOC's vapor after transport, at the same temperature. Net
+          // condensation, and the cloud SHOC keeps, stay at equilibrium.
+          // Two proxies: the sign of the net transfer stands in for
+          // evaporation that no condensation in the same level pairs with
+          // (SHOC exports only the net per level), and the grid-mean
+          // relative humidity for that of the sub-grid part where the cloud
+          // evaporates (SHOC's PDF gives none).
+          const auto evap_lanes = in_range && evap;
+          if (kinetic && evap_lanes.any()) {
+            const Pack rh_l = saturation_ratio(qv_trans, T, p_dry(icol, k), dp(icol, k), dp_dry(icol, k),
+                                               false, evap_lanes);
+            alpha_evap = WIK::alpha_liquid_vapor_kinetic(alpha_l, rh_l, species, iso_params, evap_lanes);
+          }
         }
-        beta = wt::shoc_condensation_beta(alpha_l, cond);
+        beta = wt::shoc_condensation_beta(alpha_l, alpha_evap, cond);
       }
 
       const Pack dtr = wt::shoc_condensation(tr_donor, q_donor, cond, beta);
@@ -439,6 +509,7 @@ void WaterTracerTransfers::replay_p3 (const Real dt)
   using SF  = p3::SedFlux;
   using TS  = wt::TransferStage;
   using WIF = water_isotopes::WaterIsotopeFractionation;
+  using WIK = water_isotopes::WaterIsotopeKinetic;
   using Mask = ekat::Mask<Pack::n>;
 
   const auto& gn = m_grid->name();
@@ -470,6 +541,15 @@ void WaterTracerTransfers::replay_p3 (const Real dt)
   const auto extrap_run  = m_alpha_extrapolations_run;
   const auto iso_params  = m_isotopes.parameters();
   const Real alpha_fixed = m_alpha_override;
+
+  // Kinetic fractionation: the state for the saturation ratios
+  const bool kinetic     = m_kinetic and m_alpha_override <= 0;
+  const bool ice_model_S = m_kinetic_ice_model_S;
+  Field::view_dev_t<const Pack**> p_dry, dp_dry;
+  if (kinetic) {
+    p_dry  = get_field_in("p_dry_mid", gn).get_view<const Pack**>();
+    dp_dry = get_field_in("pseudo_density_dry", gn).get_view<const Pack**>();
+  }
 
   for (const auto& spec : m_specs) {
     const auto tr_qv = get_field_out(wt::phase_field_name(spec.name, wt::WaterPhase::Vapor), gn)
@@ -589,6 +669,30 @@ void WaterTracerTransfers::replay_p3 (const Real dt)
             if (nx > 0) {
               Kokkos::atomic_add(&num_extrap(icol), Real(nx));
               Kokkos::atomic_add(&extrap_run(icol), Real(nx));
+            }
+
+            // Kinetic fractionation, from P3's state before its part2 rates:
+            // the bulk vapor after the part1 clips (q[iv]) at P3Part2. (P3
+            // takes its qv_sat from its entry temperature, before the part1
+            // clips, which differs from P3Part2 by < 1e-4 K in the tests.)
+            // alpha_l only serves liquid that evaporates (rain evaporation,
+            // and Bergeron's liquid) and alpha_i only vapor that deposits, so
+            // both become the effective factors (see wt::part2_beta).
+            if (kinetic) {
+              constexpr Real tkini = WIK::tkini;
+              if (need_l.any()) {
+                const Pack rh_l = saturation_ratio(q[iv], T, get(p_dry, k, in_range), get(dp, k, in_range),
+                                                   get(dp_dry, k, in_range), false, need_l);
+                alpha_l = WIK::alpha_liquid_vapor_kinetic(alpha_l, rh_l, species, iso_params, need_l);
+              }
+              const auto cold_i = need_i && T < tkini;
+              if (cold_i.any()) {
+                const Pack S_i = ice_model_S
+                    ? saturation_ratio(q[iv], T, get(p_dry, k, in_range), get(dp, k, in_range),
+                                       get(dp_dry, k, in_range), true, cold_i)
+                    : WIK::ice_supersaturation_empirical(T);
+                alpha_i = WIK::alpha_ice_vapor_kinetic(alpha_i, T, S_i, species, iso_params, cold_i);
+              }
             }
           }
           for (int j=0; j<num_part2; ++j) {

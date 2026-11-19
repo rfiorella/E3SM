@@ -2,6 +2,7 @@
 
 #include "physics/specialized_tracers/water_tracers/eamxx_water_tracer_transfers_functions.hpp"
 #include "physics/specialized_tracers/water_isotopes/eamxx_water_isotopes_fractionation.hpp"
+#include "physics/specialized_tracers/water_isotopes/eamxx_water_isotopes_kinetic.hpp"
 
 #include "share/core/eamxx_types.hpp"
 
@@ -293,6 +294,27 @@ TEST_CASE("shoc_condensation") {
     REQUIRE(moved[0] == -tr_c);
   }
 
+  SECTION("kinetic: condensation keeps alpha_l, evaporation takes 1/akel") {
+    using WIK = water_isotopes::WaterIsotopeKinetic;
+    const water_isotopes::WaterIsotopeParameters<Real> iso_params;
+    const Real alpha = 1.08;
+    for (const Real rh : {0.5, 0.9, 1.0}) {
+      const Pack1 akel = WIK::alpha_liquid_vapor_kinetic(Pack1(alpha), Pack1(rh),
+                                                         water_isotopes::WaterIsotopologues::HDO, iso_params);
+      INFO("rh = " << rh << ", akel = " << akel[0]);
+      REQUIRE(wt::shoc_condensation_beta(Pack1(alpha), akel, Pack1(1e-5))[0] == alpha);
+      REQUIRE(wt::shoc_condensation_beta(Pack1(alpha), akel, Pack1(-1e-5))[0] == 1/akel[0]);
+      // the evaporate is at least as depleted as at equilibrium
+      REQUIRE(1/akel[0] <= 1/alpha);
+      if (rh < 1) REQUIRE(1/akel[0] < 1/alpha);
+    }
+    // The two-factor form with alpha_evap = alpha_l is the equilibrium one, bit for bit
+    for (const Real cond : {3e-5, -5e-5, 0.0}) {
+      REQUIRE(wt::shoc_condensation_beta(Pack1(alpha), Pack1(alpha), Pack1(cond))[0] ==
+              wt::shoc_condensation_beta(Pack1(alpha), Pack1(cond))[0]);
+    }
+  }
+
   SECTION("new cloud from vapor: R_qc/R_qv = alpha_l(T), to first order in the condensed fraction") {
     using WIF = water_isotopes::WaterIsotopeFractionation;
     const water_isotopes::WaterIsotopeParameters<Real> iso_params;
@@ -346,6 +368,31 @@ TEST_CASE("part2_beta") {
     wt::donor_transfers(Pack1(tr_c), Pack1(q_c), amount, beta, moved);
     const Real R_ice_new = moved[0][0]/a, R_c = tr_c/q_c;
     REQUIRE(rel_close(R_ice_new, R_c*(1/al[0])*ai[0], 1e-4));
+  }
+
+  SECTION("kinetic factors: Bergeron is akci/akel, less fractionating than at equilibrium") {
+    // The replay passes akel as alpha_l and akci as alpha_i (cold, the liquid
+    // evaporating at RH_l < 1, the vapor depositing at S_i > 1)
+    using WIK = water_isotopes::WaterIsotopeKinetic;
+    using WIF = water_isotopes::WaterIsotopeFractionation;
+    const water_isotopes::WaterIsotopeParameters<Real> iso_params;
+    const Real T = 245, rh_l = 0.9, S_i = 1.1;
+    for (const auto sp : {water_isotopes::WaterIsotopologues::HDO, water_isotopes::WaterIsotopologues::H218O}) {
+      const Pack1 alpha_l = WIF::alpha_liquid_vapor(Pack1(T), sp, water_isotopes::CondensedOverVapor, iso_params);
+      const Pack1 alpha_i = WIF::alpha_ice_vapor(Pack1(T), sp, water_isotopes::CondensedOverVapor, iso_params);
+      const Pack1 akel = WIK::alpha_liquid_vapor_kinetic(alpha_l, Pack1(rh_l), sp, iso_params);
+      const Pack1 akci = WIK::alpha_ice_vapor_kinetic(alpha_i, Pack1(T), Pack1(S_i), sp, iso_params);
+      const Real berg_eq  = wt::part2_beta(WT::Part2BergC2I, alpha_l, alpha_i)[0];
+      const Real berg_kin = wt::part2_beta(WT::Part2BergC2I, akel, akci)[0];
+      INFO("alpha_l = " << alpha_l[0] << ", alpha_i = " << alpha_i[0] << ", akel = " << akel[0]
+           << ", akci = " << akci[0] << ", Bergeron beta: eq " << berg_eq << ", kinetic " << berg_kin);
+      REQUIRE(berg_kin == akci[0]/akel[0]);
+      REQUIRE(berg_eq > 1);
+      REQUIRE(berg_kin < berg_eq);
+      REQUIRE(wt::part2_beta(WT::Part2EvapR2V, akel, akci)[0] < wt::part2_beta(WT::Part2EvapR2V, alpha_l, alpha_i)[0]);
+      REQUIRE(wt::part2_beta(WT::Part2VapdepV2I, akel, akci)[0] < wt::part2_beta(WT::Part2VapdepV2I, alpha_l, alpha_i)[0]);
+      REQUIRE(wt::part2_beta(WT::Part2VapdepV2I, akel, akci)[0] > 1);
+    }
   }
 }
 

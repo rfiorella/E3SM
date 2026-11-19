@@ -321,6 +321,8 @@ be lost if SCREAM_HACK_XML is not enabled.
       <water_tracers_file type="file" doc="YAML file defining the water tracers; if unset, copied from water_tracers"></water_tracers_file>
       <replay_shoc type="logical" doc="Replay SHOC condensation/evaporation on the water tracers">true</replay_shoc>
       <replay_p3 type="logical" doc="Replay all P3 transfers and sedimentation on the water tracers">true</replay_p3>
+      <kinetic_fractionation type="logical" doc="Kinetic isotope fractionation in the replay only: net evaporation of cloud liquid (SHOC) and rain (P3) into subsaturated air, deposition on ice below 253.15 K (P3), and the Bergeron process (only used if the tracers file defines isotope entries). The kinetic factor of ocean evaporation is water_tracers::kinetic_fractionation_formulation">false</kinetic_fractionation>
+      <kinetic_ice_supersaturation type="string" valid_values="empirical,model" doc="Supersaturation over ice of the kinetic factor of deposition (with kinetic_fractionation): empirical (a function of temperature, as in iCAM) or model (P3's relative humidity over ice)">empirical</kinetic_ice_supersaturation>
     </water_tracer_transfers>
 
     <!-- Gravity Wave Drag -->

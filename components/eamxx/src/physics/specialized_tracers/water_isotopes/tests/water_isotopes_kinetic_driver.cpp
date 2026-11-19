@@ -3,7 +3,7 @@
 //
 //   water_isotopes_kinetic_driver <cases.csv>
 //
-// Input rows are "species,rbot,zbot,ustar" (species HDO or H218O; a header
+// Input rows are "species,rbot,zbot,ustar" (species HDO, H218O, H217O or HTO; a header
 // line and lines starting with '#' are skipped). Output rows are
 // "species,rbot,zbot,ustar,alpkn" with %.17e, using the default
 // WaterIsotopeParameters (Merlivat 1978 diffusivities). Not a ctest test.
@@ -56,6 +56,10 @@ int main (int argc, char** argv)
         sp = WaterIsotopologues::HDO;
       } else if (sp_name == "H218O") {
         sp = WaterIsotopologues::H218O;
+      } else if (sp_name == "H217O") {
+        sp = WaterIsotopologues::H217O;
+      } else if (sp_name == "HTO") {
+        sp = WaterIsotopologues::HTO;
       } else {
         ok = false;
       }

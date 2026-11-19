@@ -14,6 +14,7 @@ field_names:
   - qi
   - pseudo_density
   - pseudo_density_dry
+  - p_dry_mid
   - T_mid
   - precip_liq_surf_mass
   - precip_ice_surf_mass
