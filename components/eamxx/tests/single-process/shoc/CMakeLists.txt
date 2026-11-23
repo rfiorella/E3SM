@@ -117,51 +117,30 @@ set_tests_properties (check_U_V_slices_fail_missing PROPERTIES
           WILL_FAIL TRUE
           FIXTURES_REQUIRED ${FIXTURES_BASE_NAME}_np${TEST_RANK_START}_omp1)
 
-# export_water_transfers: SHOC exports bulk water after turbulent transport and
-# after condensation (shoc_water_stages), which must reproduce the qv and qc
+# In builds with water tracers SHOC exports bulk water after turbulent transport
+# and after condensation (shoc_water_stages), which must reproduce the qv and qc
 # SHOC returns (see check_water_stages.py).
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/input_water_transfers.yaml
-               ${CMAKE_CURRENT_BINARY_DIR}/input_water_transfers.yaml)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/output_water_transfers.yaml
-               ${CMAKE_CURRENT_BINARY_DIR}/output_water_transfers.yaml)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/output_water_transfers_bulk.yaml
-               ${CMAKE_CURRENT_BINARY_DIR}/output_water_transfers_bulk.yaml)
-CreateUnitTestFromExec(shoc_standalone_water_transfers shoc_standalone
-  EXE_ARGS "--args -ifile=input_water_transfers.yaml"
-  LABELS shoc physics
-  FIXTURES_SETUP shoc_standalone_water_transfers)
+if (EAMXX_ENABLE_WATER_TRACERS)
+  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/input_water_transfers.yaml
+                 ${CMAKE_CURRENT_BINARY_DIR}/input_water_transfers.yaml)
+  configure_file(${CMAKE_CURRENT_SOURCE_DIR}/output_water_transfers.yaml
+                 ${CMAKE_CURRENT_BINARY_DIR}/output_water_transfers.yaml)
+  CreateUnitTestFromExec(shoc_standalone_water_transfers shoc_standalone
+    EXE_ARGS "--args -ifile=input_water_transfers.yaml"
+    LABELS shoc physics
+    FIXTURES_SETUP shoc_standalone_water_transfers)
 
-# Bulk fields must be unchanged by the export: compare every field of
-# output.yaml with the default run (npX runs are BFB with each other, see above)
-set (WT_BULK_FIELDS T_mid cldfrac_liq eddy_diff_mom horiz_winds U V
-     surf_mom_flux surf_mom_flux_U surf_mom_flux_V qv qc sgs_buoy_flux tke
-     inv_qc_relvar pbl_height shoc_T_mid_tend shoc_qv_tend shoc_tke_tend
-     shoc_horiz_winds_tend shoc_sgs_buoy_flux_tend shoc_eddy_diff_mom_tend
-     shoc_qc_tend shoc_cldfrac_liq_tend)
-set (WT_BULK_CMP)
-foreach (field IN LISTS WT_BULK_FIELDS)
-  list (APPEND WT_BULK_CMP "${field}=${field}")
-endforeach()
-add_test (NAME shoc_water_transfers_bulk_bfb_check
-  COMMAND ${SCREAM_BASE_DIR}/scripts/compare-nc-files
-    -s shoc_standalone_water_transfers_bulk_output.INSTANT.nsteps_x1.np1.${RUN_T0}.nc
-    -t ${TEST_BASE_NAME}_output.INSTANT.nsteps_x1.np${TEST_RANK_START}.${RUN_T0}.nc
-    -c ${WT_BULK_CMP}
-  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
-set_tests_properties (shoc_water_transfers_bulk_bfb_check PROPERTIES
-  LABELS "shoc;physics"
-  FIXTURES_REQUIRED "shoc_standalone_water_transfers;${FIXTURES_BASE_NAME}_np${TEST_RANK_START}_omp1")
-
-# output_water_transfers.yaml skips t0, so its file is stamped one step later
-math (EXPR WT_FIRST_OUTPUT_SECONDS "45000 + ${ATM_TIME_STEP}")
-add_test (NAME shoc_water_stages_bookkeeping_check
-  COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/check_water_stages.py
-    -f shoc_standalone_water_transfers_output.INSTANT.nsteps_x1.np1.2021-10-12-${WT_FIRST_OUTPUT_SECONDS}.nc
-    --header ${SCREAM_SRC_DIR}/physics/shoc/shoc_water_transfers.hpp
-  WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
-set_tests_properties (shoc_water_stages_bookkeeping_check PROPERTIES
-  LABELS "shoc;physics"
-  FIXTURES_REQUIRED shoc_standalone_water_transfers)
+  # output_water_transfers.yaml skips t0, so its file is stamped one step later
+  math (EXPR WT_FIRST_OUTPUT_SECONDS "45000 + ${ATM_TIME_STEP}")
+  add_test (NAME shoc_water_stages_bookkeeping_check
+    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/check_water_stages.py
+      -f shoc_standalone_water_transfers_output.INSTANT.nsteps_x1.np1.2021-10-12-${WT_FIRST_OUTPUT_SECONDS}.nc
+      --header ${SCREAM_SRC_DIR}/physics/shoc/shoc_water_transfers.hpp
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+  set_tests_properties (shoc_water_stages_bookkeeping_check PROPERTIES
+    LABELS "shoc;physics"
+    FIXTURES_REQUIRED shoc_standalone_water_transfers)
+endif()
 
 # The water tracers are diffused in the same SHOC solve as bulk water, so a
 # tracer with R = 1 must come out of the first SHOC call with exactly the

@@ -109,8 +109,9 @@ public:
   void setup_shoc_3d_turbulence_link();
 
   // If the water_tracer_transfers process exists, check its position in the process
-  // tree and configure SHOC/P3 to export their bulk water transfers.
-  // The 'pre' part must run before set_grids (SHOC/P3 read their options in
+  // tree and give it the tracers file of water_tracers (SHOC/P3 export their bulk water
+  // transfers in every build with water tracers, so there is nothing to set there).
+  // The 'pre' part must run before set_grids (water_tracer_transfers reads the file in
   // create_requests); the 'post' part needs the field requests, so it runs after.
   void setup_water_tracer_transfer_links();
   void check_water_tracer_transfer_requests() const;

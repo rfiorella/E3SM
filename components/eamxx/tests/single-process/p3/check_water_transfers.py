@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Check that P3's export_water_transfers fields close the bulk water budget.
+Check that P3's water transfer export fields close the bulk water budget.
 
 For every P3 call (one per output time slice here, since P3 runs once per
 step with no subcycling), the state P3 returns must equal the state at P3

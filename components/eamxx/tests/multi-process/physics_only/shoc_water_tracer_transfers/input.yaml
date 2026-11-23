@@ -36,7 +36,6 @@ eamxx:
       coeff_kh_horiz: 0.1
       coeff_km_horiz: 0.1
       shoc_1p5tke: false
-      export_water_transfers: true
     water_tracer_transfers:
       water_tracers_file: tracers.yaml
       replay_p3: false

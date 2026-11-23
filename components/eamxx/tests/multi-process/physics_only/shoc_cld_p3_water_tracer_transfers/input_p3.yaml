@@ -19,7 +19,6 @@ eamxx:
     max_total_ni: 740.0e3
     do_prescribed_ccn: false
     use_hetfrz_classnuc: false
-    export_water_transfers: true
   water_tracer_transfers:
     water_tracers_file: tracers.yaml
     replay_shoc: false

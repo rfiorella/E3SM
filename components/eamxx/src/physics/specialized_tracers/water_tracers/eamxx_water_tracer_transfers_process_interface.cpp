@@ -152,14 +152,14 @@ void WaterTracerTransfers::create_requests ()
   }
   add_field<Required>("pseudo_density", scalar3d_mid, Pa, grid_name, ps);
 
-  // Bulk water after each SHOC stage (SHOC with export_water_transfers=true)
+  // Bulk water after each SHOC stage (exported by SHOC in builds with water tracers)
   if (m_replay_shoc) {
     const auto stages_layout = m_grid->get_3d_vector_layout(LEV, shoc::WaterStage::Count, "shoc_water_stage");
     add_field<Required>("shoc_water_stages", stages_layout, kg/kg, grid_name, ps);
   }
 
-  // P3's entry state, transfers and sedimentation fluxes (P3 with
-  // export_water_transfers=true; same layouts as P3 registers them)
+  // P3's entry state, transfers and sedimentation fluxes (exported by P3 in
+  // builds with water tracers; same layouts as P3 registers them)
   if (m_replay_p3) {
     const auto entry_layout     = m_grid->get_3d_vector_layout(LEV, p3::WaterEntry::Count, "p3_water_species");
     const auto transfers_layout = m_grid->get_3d_vector_layout(LEV, p3::WaterTransfer::Count, "p3_water_transfer");

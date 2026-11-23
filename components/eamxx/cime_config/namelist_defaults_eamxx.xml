@@ -248,7 +248,6 @@ be lost if SCREAM_HACK_XML is not enabled.
       <set_cld_frac_i_to_one type="logical" doc="set P3 input ice cloud fraction to 1 everywhere">false</set_cld_frac_i_to_one>
       <use_separate_ice_liq_frac type="logical" doc="use separate ice and liquid cloud fractions from shoc">false</use_separate_ice_liq_frac>
       <extra_p3_diags type="logical" doc="Extra P3 diagnostics">false</extra_p3_diags>
-      <export_water_transfers type="logical" doc="Export every bulk water transfer (p3_water_transfers, p3_sed_flux, p3_water_entry) for water tracers">false</export_water_transfers>
     </p3>
 
     <!-- SHOC macrophysics -->
@@ -270,7 +269,6 @@ be lost if SCREAM_HACK_XML is not enabled.
       <coeff_kh_horiz type="real" doc="Horizontal eddy diffusivity coefficient for heat">0.1</coeff_kh_horiz>
       <coeff_km_horiz type="real" doc="Horizontal eddy diffusivity coefficient for momentum">0.1</coeff_km_horiz>
       <extra_shoc_diags type="logical" doc="Extra SHOC diagnostics">false</extra_shoc_diags>
-      <export_water_transfers type="logical" doc="Export bulk water after turbulent transport and after condensation (shoc_water_stages) for water tracers">false</export_water_transfers>
       <shoc_1p5tke type="logical" doc="turn off SGS variability in SHOC, effectively reducing it to a 1.5 TKE closure">false</shoc_1p5tke>
     </shoc>
 

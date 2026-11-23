@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-Check SHOC's export_water_transfers field, shoc_water_stages.
+Check SHOC's water stage export field, shoc_water_stages.
 
 Bookkeeping (default): in every output slice (each follows a SHOC call), the
 stages must reproduce the qv and qc SHOC returned:
