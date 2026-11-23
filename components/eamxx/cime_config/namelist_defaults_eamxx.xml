@@ -316,7 +316,9 @@ be lost if SCREAM_HACK_XML is not enabled.
 
     <!-- Replays SHOC and P3 bulk water transfers on the water tracers. Not in any
          default atm_procs_list; add it right after p3 in the subcycled physics group.
-         The AD enables the SHOC/P3 exports and checks the process order at run time. -->
+         SHOC and P3 export the transfers in builds with EAMXX_ENABLE_WATER_TRACERS=ON; the AD
+         checks the process order at run time and copies the tracers file and the isotope
+         options from water_tracers when they are unset here. -->
     <water_tracer_transfers inherit="atm_proc_base">
       <water_tracers_file type="file" doc="YAML file defining the water tracers; if unset, copied from water_tracers"></water_tracers_file>
       <replay_shoc type="logical" doc="Replay SHOC condensation/evaporation on the water tracers">true</replay_shoc>
