@@ -89,10 +89,29 @@ namespace scream
  * homogeneous freezing, sedimentation, the checkpoints and the surface
  * fluxes never fractionate. The isotope options (formulations of alpha) are
  * those of water_tracers; the driver copies them. The test-only parameter
- * alpha_override > 0 replaces alpha_l and alpha_i by that value.
- * water_transfer_alpha_extrapolations counts, per column and atm step, the
- * alpha evaluations at a temperature outside the fit's accepted range (the
- * fit is extrapolated); the run's total is logged once, at finalize.
+ * alpha_override > 0 replaces alpha_l and alpha_i by that value (and turns
+ * the kinetic factors below off). water_transfer_alpha_extrapolations counts,
+ * per column and atm step, the alpha evaluations at a temperature outside the
+ * fit's accepted range (the fit is extrapolated); the run's total is logged
+ * once, at finalize.
+ *
+ * Kinetic fractionation (kinetic_fractionation, default false). Net
+ * evaporation of liquid into subsaturated air and deposition on ice from
+ * supersaturated air then use effective factors instead of the equilibrium
+ * ones (water_isotopes::WaterIsotopeKinetic):
+ *  - SHOC net evaporation (net condensation < 0): 1/akel, with the relative
+ *    humidity over liquid of SHOC's vapor after transport at
+ *    ShocAfterTransport. Net condensation stays at equilibrium;
+ *  - P3 rain evaporation: 1/akel, and P3 vapor deposition and nucleation:
+ *    akci, with P3's state before its part2 rates (the bulk vapor after the
+ *    part1 clips, at P3Part2); the Bergeron factor becomes akci/akel;
+ *  - akci only below 253.15 K (a hard step, as in the Fortran), with the
+ *    supersaturation over ice of kinetic_ice_supersaturation: "empirical"
+ *    (default, the Fortran's ssatf(T)) or "model" (P3's RH over ice).
+ * The saturation ratios are those of the RH diagnostic (Murphy & Koop 2005 at
+ * p_dry_mid, wet basis), i.e. P3's own; the process then also requires
+ * p_dry_mid and pseudo_density_dry. The ocean flux's kinetic factor is a
+ * separate option of water_tracers (kinetic_fractionation_formulation).
  */
 
 class WaterTracerTransfers : public AtmosphereProcess
@@ -148,6 +167,12 @@ protected:
   // Test only: if > 0, alpha_l = alpha_i = m_alpha_override for every
   // isotope tracer, instead of the equilibrium alphas (0: off)
   Real m_alpha_override;
+
+  // Kinetic fractionation of isotopes (see the class comment), and whether
+  // akci uses P3's RH over ice (kinetic_ice_supersaturation: model) rather
+  // than the empirical supersaturation of temperature
+  bool m_kinetic;
+  bool m_kinetic_ice_model_S;
 
   // P3 replay: the bulk water rebuilt from P3's exports, per column, phase
   // (WaterPhase order) and level pack [kg/kg, wet]. Scratch, set by each

@@ -46,10 +46,14 @@ static constexpr Real stage_T_fill = constants::fill_value<Real>;
  * every other tracer has beta = 1 for every class, which donor_transfers
  * turns into the linear transfer it has always had, bit for bit.
  *
- * The betas are equilibrium factors (no kinetic effect), from
+ * The betas come from
  *   alpha_l = R_liquid/R_vapor and alpha_i = R_ice/R_vapor
  * (water_isotopes::WisoAlphaDir CondensedOverVapor) at the temperature at the
- * start of the stage (water_transfer_stage_T).
+ * start of the stage (water_transfer_stage_T): the equilibrium factors, or,
+ * with the process option kinetic_fractionation, the effective (kinetic)
+ * factors of the transfers that have one (water_isotopes::WaterIsotopeKinetic
+ * alpha_liquid_vapor_kinetic for net evaporation of liquid,
+ * alpha_ice_vapor_kinetic for deposition on ice).
  */
 
 // Bounds of beta in donor_transfers. The equilibrium alphas of the water
@@ -187,27 +191,42 @@ ScalarT shoc_condensation (const ScalarT& tr_donor, const ScalarT& q_donor, cons
   return moved[0];
 }
 
-// The fractionation factor of SHOC's net condensation `amount`, given alpha_l
-// at the temperature after SHOC's transport: condensation (amount > 0) leaves
-// the new liquid in equilibrium with the vapor, beta = alpha_l; evaporation
-// (amount < 0) gives the vapor the liquid's ratio over alpha_l, beta =
-// 1/alpha_l. (The net transfer of a level is all that SHOC exports; no
-// kinetic effect.)
+// The fractionation factor of SHOC's net condensation `amount`, given the
+// liquid/vapor factors at the temperature after SHOC's transport:
+// condensation (amount > 0) leaves the new liquid in equilibrium with the
+// vapor, beta = alpha_cond (the equilibrium alpha_l); evaporation (amount < 0)
+// gives the vapor the liquid's ratio over alpha_evap, beta = 1/alpha_evap.
+// alpha_evap is alpha_l too, or with kinetic fractionation the effective
+// factor of evaporation into the level's subsaturated air (akel). The net
+// transfer of a level is all that SHOC exports, so its sign stands in for
+// "unpaired" evaporation (see WaterTracerTransfers::replay_shoc).
+template <typename ScalarT>
+KOKKOS_INLINE_FUNCTION
+ScalarT shoc_condensation_beta (const ScalarT& alpha_cond, const ScalarT& alpha_evap,
+                                const ScalarT& amount)
+{
+  using RealT = typename ekat::ScalarTraits<ScalarT>::scalar_type;
+
+  ScalarT beta = alpha_cond;
+  beta.set(amount < RealT(0), RealT(1)/alpha_evap);
+  return beta;
+}
+
+// Equilibrium only: alpha_l for condensation, 1/alpha_l for evaporation
 template <typename ScalarT>
 KOKKOS_INLINE_FUNCTION
 ScalarT shoc_condensation_beta (const ScalarT& alpha_l, const ScalarT& amount)
 {
-  using RealT = typename ekat::ScalarTraits<ScalarT>::scalar_type;
-
-  ScalarT beta = alpha_l;
-  beta.set(amount < RealT(0), RealT(1)/alpha_l);
-  return beta;
+  return shoc_condensation_beta(alpha_l, alpha_l, amount);
 }
 
 // -----------------------------------------------------------------------
 // The fractionation factor of P3 part2 process rate `cmp` (a Part2*
 // component of p3_water_transfers), given alpha_l and alpha_i at P3's part2
-// temperature:
+// temperature. alpha_l is only used for liquid that evaporates and alpha_i
+// only for vapor that deposits, so with kinetic fractionation the caller
+// passes the effective factors (akel, akci) and the kinetic Bergeron factor
+// is akci/akel:
 //  - vapor deposition and deposition/condensation-freezing nucleation
 //    (v -> i): alpha_i;
 //  - rain evaporation (r -> v): 1/alpha_l;

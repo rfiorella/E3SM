@@ -6,8 +6,8 @@ atmosphere. They are built from two processes, `water_tracers` and
 diffusion) and the bulk water phase changes of SHOC and P3 are covered so far.
 Generic tracers move in proportion to the donor phase's tracer-to-bulk ratio
 in every transfer (no fractionation). Isotope tracers also fractionate, with
-equilibrium fractionation factors, in the phase changes through the vapor (see
-"Isotope fractionation" below).
+equilibrium fractionation factors (and, optionally, kinetic ones), in the phase
+changes through the vapor (see "Isotope fractionation" below).
 
 ## Tracers file
 
@@ -72,8 +72,9 @@ smooth or rough regime from the surface Reynolds number). Two options of
 
 * `kinetic_fractionation_formulation`: `brutsaert_merlivat_jouzel_1979`
   (default) or `none` (alpkn = 1);
-* `diffusivity_formulation`: the molecular diffusivity ratios it uses,
-  `merlivat_1978` (default) or `cappa_2003`.
+* `diffusivity_formulation`: the molecular diffusivity ratios it uses, one
+  per species, `merlivat_1978` (default) or `cappa_2003` (values under
+  "Kinetic fractionation" below).
 
 alpkn lies in (0, 1] for ustar times the bottom-level height above about
 1e-5 m2/s; there is no low-wind guard, as in the Fortran (debug builds check
@@ -102,10 +103,17 @@ Parameters of `water_tracer_transfers`:
   `kinetic_fractionation_formulation`, `diffusivity_formulation`: the isotope
   options, copied from `water_tracers` when unset (and an error if set to a
   different value), so both processes use the same fractionation factors.
+* `kinetic_fractionation` (default false): kinetic isotope fractionation in
+  the replay (see "Kinetic fractionation" below). It affects the replay only;
+  the kinetic factor of ocean evaporation is
+  `water_tracers::kinetic_fractionation_formulation`.
+* `kinetic_ice_supersaturation` (`empirical`, default, or `model`): the
+  supersaturation over ice of the kinetic factor of deposition, with
+  `kinetic_fractionation`.
 * `alpha_override` (test only, not in the namelist defaults; default 0, off):
   if > 0, every isotope uses this value as both alpha_l and alpha_i in the
-  replay (so Bergeron's factor is 1). With 1, an isotope follows the bulk
-  water like a generic tracer, bit for bit.
+  replay (so Bergeron's factor is 1), and no kinetic factor. With 1, an
+  isotope follows the bulk water like a generic tracer, bit for bit.
 
 ## Isotope fractionation
 
@@ -159,13 +167,73 @@ step) counts the alpha evaluations at such temperatures, and their total over
 the run is logged once, at the end of the run. A temperature below 50 K, or
 NaN, stops the run.
 
-**Not represented.** Kinetic effects (of evaporation into undersaturated air
-and of deposition in supersaturation) are not included. Neither is any
-isotopic exchange at zero net mass change: existing cloud liquid and rain do
-not re-equilibrate with the vapor (only the water SHOC or P3 move between
-phases carries a fractionation). SHOC exports its net condensation per level,
-so condensation and evaporation within a level in the same call are not
-seen separately.
+**Kinetic fractionation** (`kinetic_fractionation: true`; off by default).
+Evaporation of liquid into subsaturated air and deposition on ice from
+supersaturated air then use effective fractionation factors, ports of iCAM's
+`wiso_akel` and `wiso_akci` (`share/util/water_isotopes.F90`), in the same
+R_condensed/R_vapor convention, with D_i/D the species' molecular diffusivity
+ratio (`diffusivity_formulation`):
+
+* liquid evaporating at relative humidity RH over liquid (Stewart 1975):
+  akel = alpha_l*h/(alpha_l*(D/D_i)^0.58*(h - 1) + 1), with the effective
+  humidity h = min(1, 0.25*min(1, RH) + 0.75). akel >= alpha_l, equal at
+  RH >= 1, and grows as RH falls: the evaporate is more depleted than at
+  equilibrium.
+* vapor depositing on ice at supersaturation ratio S over ice (Jouzel &
+  Merlivat 1984): akci = alpha_i*S/(alpha_i*(D/D_i)*(S - 1) + 1), with S
+  clipped to [1, 2], **only below 253.15 K**: a hard step, as in the Fortran
+  (akci = alpha_i at and above 253.15 K). akci <= alpha_i and falls as S
+  grows: cold ice takes in less of the heavy isotopes than at equilibrium.
+  S is set by `kinetic_ice_supersaturation`: `empirical` (the Fortran default,
+  `wiso_ssatf`: S = min(max(1 - 0.002*(T - 273.16), 1), 2), 1.04 at 253.15 K,
+  1.15 at 200 K) or `model` (P3's RH over ice, see below).
+
+Every species uses its own diffusivity ratio, as in the Fortran (`difrm` of
+`water_isotopes.F90`), here and in the ocean's kinetic factor:
+
+| `diffusivity_formulation` | HDO | H218O | H217O | HTO |
+|---|---|---|---|---|
+| `merlivat_1978` (default; the Fortran's active row, Merlivat 1978 + Schoenemann et al. 2014) | 0.9757 | 0.9727 | 0.9858 | 0.9679 |
+| `cappa_2003` (the Fortran's Cappa et al. 2003 + Merlivat 1978 row) | 0.9839 | 0.9691 | 0.9856 | 0.9679 |
+
+(HDO's is per hydrogen atom, D/H.) Only the equilibrium factors of H217O and
+HTO derive from those of H218O and HDO (exponents 0.529 and 2); their kinetic
+part uses their own ratios. H217O's 0.9858 is 0.9727^0.518, the diffusion
+exponent of Barkan & Luz (2007), so kinetic fractionation produces 17O-excess.
+
+Where they apply (isotopes only; everything else in the table above is
+unchanged):
+
+| Transfer | beta with kinetic fractionation | Humidity |
+|---|---|---|
+| SHOC net evaporation (cloud liquid to vapor) | 1/akel | RH over liquid of SHOC's vapor after transport, at `ShocAfterTransport` |
+| SHOC net condensation | alpha_l (equilibrium) | |
+| P3 rain evaporation | 1/akel | RH over liquid of P3's vapor after its part1 clips, at `P3Part2` |
+| P3 vapor deposition and ice nucleation | akci | S over ice: `empirical` (of `P3Part2`), or `model` (P3's vapor after its part1 clips) |
+| P3 Bergeron process | akci/akel | both of the above (the liquid evaporates at RH < 1, the vapor deposits at S > 1) |
+
+The relative humidities are those of EAMxx's RH diagnostic (Murphy & Koop
+2005 saturation vapor pressure at `p_dry_mid`, on the wet basis of the vapor),
+which is also P3's own (P3 forms it on its dry basis). The process then also
+requires `p_dry_mid` and `pseudo_density_dry`. The humidity is that of the
+state before the transfer (P3's state before its process rates, SHOC's after
+its transport), not after it: P3's limiters bring the vapor close to saturation
+by the end of its call.
+
+The kinetic factor of cloud evaporation rests on two proxies. SHOC exports only
+its net condensation per level, so the sign of the net transfer stands in for
+"evaporation that no condensation pairs with": net condensation stays at
+equilibrium and net evaporation is taken as kinetic. And SHOC gives no humidity
+for the sub-grid part of the level where the cloud evaporates, so the
+grid-mean RH stands in for it. Treat the cloud-evaporation kinetics as the
+first suspect if results look wrong.
+
+**Not represented.** Isotopic exchange at zero net mass change: existing cloud
+liquid and rain do not re-equilibrate with the vapor (only the water SHOC or
+P3 move between phases carries a fractionation), with or without kinetic
+fractionation. Rain-vapor and cloud-vapor exchange are named follow-ons. SHOC
+exports its net condensation per level, so condensation and evaporation within
+a level in the same call are not seen separately.
 
 ## Stage temperatures
 
@@ -230,7 +298,8 @@ A warning is logged if `zm`, `gw`, `nudging` or `iop_forcing` is in the tree.
 
 * Only SHOC and P3 are replayed. Other bulk water changes (ZM, GW, nudging,
   IOP forcing, the SHOC flux-consistency fixer) are not followed.
-* Only equilibrium fractionation, in the transfers listed above (see "Not
+* Equilibrium fractionation in the transfers listed above, and optionally
+  kinetic fractionation of net evaporation and cold deposition (see "Not
   represented"). The surface flux of land and sea ice uses `r_land` (default
   `r_ocn`); the coupler's land isotope fluxes are not imported.
 * A generic tracer with a uniform ratio R keeps R through every transfer; the
@@ -260,5 +329,12 @@ tracer beyond roundoff (also with `alpha_override` 1.5 and 0.7), new SHOC cloud
 with R_qc/R_qv equal to the Rayleigh result for alpha_l, condensing cloud
 enriched relative to the vapor, and ice deposited from vapor near alpha_i.
 With `alpha_override: 1.0` the isotopes must equal the generic tracer bit for
-bit. The unit test `water_tracer_transfers_functions` covers the Rayleigh step
-itself.
+bit. The `*_iso_kinetic*` runs turn `kinetic_fractionation` on: the same
+budget and positivity checks; in one SHOC call from R = 1, cloud that SHOC's
+net transfer evaporates must keep the Rayleigh result for 1/akel (computed in
+the check script); ice deposited from vapor must be near akci; and against the
+run with kinetic fractionation off, rain evaporating below cloud must be more
+enriched with a lower deuterium excess, and cold deposited ice less enriched.
+The unit test `water_tracer_transfers_functions` covers the Rayleigh step
+itself, and `water_isotopes_kinetic` compares akel and akci with reference
+values of the Fortran functions.

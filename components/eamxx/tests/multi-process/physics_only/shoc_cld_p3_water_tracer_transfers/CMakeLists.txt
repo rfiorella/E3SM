@@ -46,10 +46,12 @@ CreateUnitTestExec(wtt_link_modifier_test
   LIBS scream_control eamxx_io eamxx_diagnostics shoc cld_fraction p3 water_tracers)
 target_include_directories(wtt_link_modifier_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
 
-# The generic-tracer runs: tracers.yaml, no alpha override (the isotope runs,
-# at the end, set their own)
+# The generic-tracer runs: tracers.yaml, no alpha override, no kinetic isotope
+# fractionation (the isotope runs, at the end, set their own)
 set (WTT_TRACERS_FILE tracers.yaml)
 set (WTT_ALPHA_OVERRIDE 0.0)
+set (WTT_KINETIC false)
+set (WTT_KINETIC_ICE_S empirical)
 set (OUT_YAML output_p3.yaml)
 set (OUT_PREFIX p3_water_tracer_transfers_output)
 foreach (f input_p3.yaml output_p3.yaml ${WTT_NEG_inputs})
@@ -247,17 +249,36 @@ endforeach()
 #                   wtrc_t): every isotope field must equal wtrc_t's bit for
 #                   bit, so the fractionation code is exact at alpha = 1.
 #  - p3_iso_alpha1: the same in the p3-only run (no SHOC, no surface flux).
+#  - iso_kinetic,
+#    iso_kinetic_model: the iso run with kinetic_fractionation on, with the
+#                   empirical supersaturation over ice and with P3's RH over
+#                   ice. Conservation and positivity; ice that P3 mostly
+#                   deposited from vapor must have R_qi/R_qv close to the
+#                   effective factor (akci below 253.15 K); and against the iso
+#                   run (kinetic off, same bulk water bit for bit): where the
+#                   rain evaporated below cloud into subsaturated air, the rain
+#                   left is more enriched and has a lower deuterium excess, and
+#                   cold ice deposited from vapor is less enriched relative to
+#                   the vapor.
 if (EAMXX_ENABLE_WATER_ISOTOPES)
   configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tracers_iso.yaml
                  ${CMAKE_CURRENT_BINARY_DIR}/tracers_iso.yaml COPYONLY)
   set (WTT_TRACERS_FILE tracers_iso.yaml)
   set (WTT_ISO_CHECK ${CMAKE_CURRENT_SOURCE_DIR}/../shoc_water_tracer_transfers/check_water_isotope_transfers.py)
 
-  foreach (v iso iso_alpha1p5 iso_alpha0p7 iso_alpha1)
+  foreach (v iso iso_alpha1p5 iso_alpha0p7 iso_alpha1 iso_kinetic iso_kinetic_model)
     set (SURF_EVAP 1.5e-6)
     set (OCNFRAC   0.5)
     set (OCN_SSQ   0.01)
-    if (v STREQUAL iso)
+    set (WTT_KINETIC false)
+    set (WTT_KINETIC_ICE_S empirical)
+    if (v MATCHES "kinetic")
+      set (WTT_ALPHA_OVERRIDE 0.0)
+      set (WTT_KINETIC true)
+      if (v MATCHES "model")
+        set (WTT_KINETIC_ICE_S model)
+      endif()
+    elseif (v STREQUAL iso)
       set (WTT_ALPHA_OVERRIDE 0.0)
     elseif (v STREQUAL iso_alpha1p5)
       set (WTT_ALPHA_OVERRIDE 1.5)
@@ -277,6 +298,7 @@ if (EAMXX_ENABLE_WATER_ISOTOPES)
       FIXTURES_SETUP shoc_cld_p3_water_${v}_transfers)
 
     set (out_nc shoc_cld_p3_water_${v}_transfers_output.INSTANT.nsteps_x1.np1.${RUN_T0}.nc)
+    set (fixtures shoc_cld_p3_water_${v}_transfers)
     if (v STREQUAL iso_alpha1)
       # Bit for bit: every field of each isotope against wtrc_t's
       set (pairs)
@@ -305,6 +327,11 @@ if (EAMXX_ENABLE_WATER_ISOTOPES)
       set (alpha_args)
       if (v STREQUAL iso)
         set (alpha_args --alpha-check)
+      elseif (v MATCHES "kinetic")
+        # against the iso run, which must have run first
+        set (alpha_args --alpha-check --kinetic --kinetic-ice-S ${WTT_KINETIC_ICE_S}
+          --equilibrium-file shoc_cld_p3_water_iso_transfers_output.INSTANT.nsteps_x1.np1.${RUN_T0}.nc)
+        list (APPEND fixtures shoc_cld_p3_water_iso_transfers)
       endif()
       add_test (NAME shoc_cld_p3_water_${v}_transfers_check
         COMMAND ${WTT_ISO_CHECK} -f ${out_nc}
@@ -319,7 +346,7 @@ if (EAMXX_ENABLE_WATER_ISOTOPES)
     endif()
     set_tests_properties (shoc_cld_p3_water_${v}_transfers_check PROPERTIES
       LABELS "shoc;cld;p3;water_tracers;water_isotopes;physics"
-      FIXTURES_REQUIRED shoc_cld_p3_water_${v}_transfers)
+      FIXTURES_REQUIRED "${fixtures}")
   endforeach()
 
   set (WTT_ALPHA_OVERRIDE 1.0)

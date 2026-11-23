@@ -156,13 +156,26 @@ enum class DiffusivityRatioFormulation {
   FormulationCount
 };
 
-// Diffusivity ratio D_i/D, indexed [formulation][element]
+// Diffusivity ratio D_i/D of each species, indexed [formulation][species]
+// (WaterIsotopologues order). The rows of difrm in water_isotopes.F90 (which
+// has H2O first): HDO is per hydrogen atom (D/H), as there; H216O is 1. Every
+// kinetic factor (alpha_kinetic, akel, akci) uses its species' own value, as
+// the Fortran does.
+//  - Merlivat1978: the Fortran's active row, "Merlivat 1978 + Schoenemann et
+//    al., 2014": HDO 0.9757 and H218O 0.9727 (Merlivat 1978), H217O 0.9858
+//    (Schoenemann et al. 2014; equal to 0.9727^0.518, with the diffusion
+//    exponent 0.518 of Barkan & Luz 2007), HTO 0.9679 (the Fortran: "pulled
+//    from GISS ModelE2.1 and isoCAM3").
+//  - Cappa2003: the Fortran's commented-out "Cappa et. al., 2003 + Merlivat
+//    1978" row: HDO 0.9839 and H218O 0.9691 (Cappa et al. 2003), H217O 0.9856
+//    (labeled in the Fortran as Merlivat 1978, directly from the paper), HTO
+//    0.9679.
 static constexpr Real
 DiffusivityRatio_table[etoi(DiffusivityRatioFormulation::FormulationCount)]
-                      [etoi(IsoElement::Count)] = {
-  // Hydrogen (HDO), Oxygen (H218O)
-  { 0.9757, 0.9727 }, // Merlivat (1978)
-  { 0.9839, 0.9691 }  // Cappa et al. (2003)
+                      [etoi(WaterIsotopologues::Count)] = {
+  // H216O, HDO,  H218O,  H217O,  HTO
+  { 1.0, 0.9757, 0.9727, 0.9858, 0.9679 }, // Merlivat (1978) + Schoenemann et al. (2014)
+  { 1.0, 0.9839, 0.9691, 0.9856, 0.9679 }  // Cappa et al. (2003) + Merlivat (1978)
 };
 
 // Runtime configuration struct - holds user's formulation choices
@@ -229,8 +242,8 @@ private:
   // resolved once on construction and stored by value.
   EquilibriumFractionationCoefficients
     eq_[etoi(CondensedPhase::Count)][etoi(IsoElement::Count)];
-  // Diffusivity ratios D_i/D for the selected formulation, stored by value.
-  Scalar difrm_[etoi(IsoElement::Count)];
+  // Diffusivity ratios D_i/D for the selected formulation, per species, stored by value.
+  Scalar difrm_[etoi(WaterIsotopologues::Count)];
 
 public:
   // -----------------------------------------------------------------------
@@ -245,7 +258,9 @@ public:
           alpha_eq_liq_table[etoi(opts.liquid_vapor)][e];
       eq_[etoi(CondensedPhase::Ice)][e] =
           alpha_eq_ice_table[etoi(opts.ice_vapor)][e];
-      difrm_[e] = DiffusivityRatio_table[etoi(opts.diffusivity)][e];
+    }
+    for (int s = 0; s < etoi(WaterIsotopologues::Count); ++s) {
+      difrm_[s] = DiffusivityRatio_table[etoi(opts.diffusivity)][s];
     }
   }
 
@@ -284,9 +299,9 @@ public:
     return eq_[etoi(p)][etoi(e)].tbounds;
   }
 
-  // Molecular diffusivity ratio D_i/D of the selected formulation.
+  // Molecular diffusivity ratio D_i/D of a species, in the selected formulation.
   KOKKOS_INLINE_FUNCTION
-  Scalar difrm(IsoElement e) const { return difrm_[etoi(e)]; }
+  Scalar difrm(WaterIsotopologues s) const { return difrm_[etoi(s)]; }
 
   // Selected kinetic fractionation formulation.
   KOKKOS_INLINE_FUNCTION
