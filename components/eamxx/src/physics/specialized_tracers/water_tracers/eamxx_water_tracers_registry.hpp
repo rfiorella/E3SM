@@ -32,17 +32,20 @@ namespace water_tracers {
  * WaterPhase): tracer wtrc_hdo has fields wtrc_hdo_qv, wtrc_hdo_qc,
  * wtrc_hdo_qr and wtrc_hdo_qi. Tracer names must start with `wtrc_` (so
  * none of these can alias any other field) and must not end in
- * `_surf_flux` (each tracer also registers <name>_surf_flux).
+ * `_surf_flux` (each tracer also registers the flux field <name>_qv_surf_flux).
  *
  * Keys by type (anything else is an error, so a misspelled key cannot be
  * silently ignored):
  *   generic:  type, ocean_flux (bulk_proportional [default] | bulk_formula),
- *             r_ocn (default 1), init (ratio [default] | zero),
- *             r_init (default r_ocn)
- *   isotope:  type, species (required), init (default ratio), r_init
- *             (default: the species' ocean ratio, resolved by the process at
- *             construction). Only accepted when the process is built with
+ *             r_ocn (default 1), r_land (default r_ocn),
+ *             init (ratio [default] | zero), r_init (default r_ocn)
+ *   isotope:  type, species (required), r_land (default: the species' ocean
+ *             ratio), init (default ratio), r_init (default: the species'
+ *             ocean ratio, resolved by the process at construction). Only
+ *             accepted when the process is built with
  *             EAMXX_ENABLE_WATER_ISOTOPES=ON.
+ * r_land is the ratio of the tracer evaporated from land and sea ice, in the
+ * units of r_ocn (tracer/bulk mass ratio).
  *
  * The returned specs are sorted by tracer name: ekat::ParameterList stores
  * sublists in a std::map. Nothing downstream depends on the order.
@@ -91,6 +94,13 @@ struct TracerSpec {
   // Ocean ratio R_ocn. Generic: from the file (default 1). Isotope: set by the
   // water_isotopes process from its parameter tables.
   Real r_ocn = 1;
+
+  // Land and sea-ice ratio R_land: the tracer/bulk ratio of the evaporation
+  // that is not from the ocean. From the file; default r_ocn (resolved here for
+  // generic tracers, by the water_isotopes process for isotopes, so
+  // r_land_given records whether the file set it).
+  bool r_land_given = false;
+  Real r_land = 1;
 
   // Initialization (see InitType). r_init_given records whether the file set
   // r_init, so a subclass that resolves r_ocn later knows whether to default

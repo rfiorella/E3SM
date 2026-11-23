@@ -56,12 +56,13 @@ initial_conditions:
   # The name of the file containing the initial conditions for this test.
   filename: ${SCREAM_DATA_DIR}/init/${EAMxx_tests_IC_FILE_72lev}
   topography_filename: ${TOPO_DATA_DIR}/${EAMxx_tests_TOPO_FILE}
-  # No surface fluxes: SHOC gives the tracers none yet (wtracer_sfc = 0)
+  # No bulk surface evaporation: the tracers get none either (an ocean fraction of 1 with
+  # surf_evap = 0 is a cancelling ocean evaporation and land dew)
   surf_sens_flux: 0.0
   surf_evap: 0.0
   precip_liq_surf_mass: 0.0
   precip_ice_surf_mass: 0.0
-  # Ocean inputs of water_tracers (its fluxes are diagnostic only)
+  # Ocean inputs of water_tracers (it turns them into tracer surface fluxes, applied by SHOC)
   sst: 300.0
   ocnfrac: 1.0
   ocn_ssq: 0.02

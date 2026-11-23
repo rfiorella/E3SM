@@ -3,6 +3,8 @@
 # As tracers_generic.yaml, plus isotopes
 tracers:
   wtrc_bp:    {type: generic, ocean_flux: bulk_proportional, r_ocn: 1.0}
+  wtrc_rp:    {type: generic, ocean_flux: bulk_proportional, r_ocn: 0.5, r_land: 2.0}
+  wtrc_rl:    {type: generic, ocean_flux: bulk_formula, r_ocn: 0.5, r_land: 2.0}
   wtrc_bf:    {type: generic, ocean_flux: bulk_formula, r_ocn: 1.0, init: ratio}
   wtrc_hdo:   {type: isotope, species: HDO}
   wtrc_h218o: {type: isotope, species: H218O}

@@ -117,6 +117,9 @@ void WaterIsotopes::resolve (std::vector<water_tracers::TracerSpec>& specs) cons
     if (!spec.r_init_given) {
       spec.r_init = spec.r_ocn;
     }
+    if (!spec.r_land_given) {
+      spec.r_land = spec.r_ocn;
+    }
     spec.ocean_flux = water_tracers::OceanFlux::BulkFormula;
   }
 }

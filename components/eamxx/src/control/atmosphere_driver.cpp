@@ -319,6 +319,11 @@ void AtmosphereDriver::create_grids()
     setup_shoc_3d_turbulence_link();
   }
 
+  if (m_atm_process_group->has_process("shoc") &&
+      m_atm_process_group->has_process("water_tracers")) {
+    setup_shoc_tracer_surface_flux_link();
+  }
+
   // IOP object needs the grids_manager to have been created, but is then needed in set_grids()
   // implementation of some processes, so setup here.
   const bool enable_iop =
@@ -713,6 +718,41 @@ void AtmosphereDriver::setup_water_tracer_transfer_links ()
   m_atm_logger->info("  [EAMxx] water_tracer_transfers linked to water_tracers (shoc replay: " +
                      std::string(replay_shoc ? "yes" : "no") + ", p3 replay: " +
                      std::string(replay_p3 ? "yes" : "no") + ")");
+}
+
+void AtmosphereDriver::setup_shoc_tracer_surface_flux_link ()
+{
+  EKAT_REQUIRE_MSG(m_atm_process_group->has_process("shoc") &&
+                   m_atm_process_group->has_process("water_tracers"),
+                   "Error! Attempting to setup the tracer surface flux link between "
+                   "water_tracers and SHOC, but one of them is not defined.\n");
+
+  // Position of each process among the leaf processes, in execution order
+  std::vector<std::shared_ptr<AtmosphereProcess>> leaves;
+  collect_leaf_processes(m_atm_process_group,leaves);
+  int wtrc_pos = -1, shoc_pos = -1, num_wtrc = 0, num_shoc = 0;
+  for (int i=0; i<static_cast<int>(leaves.size()); ++i) {
+    if (leaves[i]->name()=="water_tracers") { wtrc_pos = i; ++num_wtrc; }
+    if (leaves[i]->name()=="shoc")          { shoc_pos = i; ++num_shoc; }
+  }
+  EKAT_REQUIRE_MSG(num_wtrc==1 && num_shoc==1,
+      "Error! The atm process tree must have exactly one 'water_tracers' and one 'shoc' process, but has "
+      + std::to_string(num_wtrc) + " and " + std::to_string(num_shoc) + ".\n");
+  EKAT_REQUIRE_MSG(wtrc_pos<shoc_pos,
+      "Error! Process 'water_tracers' must come BEFORE 'shoc' in the atm_procs_list.\n"
+      "  'water_tracers' computes the tracer surface fluxes from the surf_evap of the start of the step,\n"
+      "  and 'shoc' applies them. Move 'water_tracers' ahead of 'shoc'.\n");
+
+  // The fixer zeroes surf_evap where it fires, so in a sub-cycled SHOC the later
+  // subcycles give bulk water no surface flux, while the tracers keep the flux that
+  // water_tracers computed at the start of the step.
+  auto& shoc_params = leaves[shoc_pos]->get_params();
+  EKAT_REQUIRE_MSG(not shoc_params.get<bool>("check_flux_state_consistency",false),
+      "Error! 'shoc::check_flux_state_consistency' is true, but SHOC applies the water tracer surface fluxes.\n"
+      "  That fixer zeroes surf_evap during the step, so bulk water and the tracers would get "
+      "different surface fluxes. Set it to false.\n");
+
+  shoc_params.set<bool>("apply_tracer_surface_fluxes", true);
 }
 
 void AtmosphereDriver::check_water_tracer_transfer_requests () const

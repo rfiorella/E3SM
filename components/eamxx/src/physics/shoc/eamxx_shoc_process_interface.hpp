@@ -10,6 +10,7 @@
 #include <ekat_parameter_list.hpp>
 
 #include <string>
+#include <vector>
 
 namespace scream
 {
@@ -547,6 +548,12 @@ protected:
   // Apply TMS drag coeff to shoc_main inputs (if necessary)
   void apply_turbulent_mountain_stress ();
 
+  // Pair each flux in "tracer_surface_fluxes" with its tracer's row (if requested)
+  void setup_tracer_surface_fluxes ();
+
+  // Fill wtracer_sfc from the "tracer_surface_fluxes" group (if requested)
+  void apply_tracer_surface_fluxes ();
+
 protected:
 
   void finalize_impl   ();
@@ -569,6 +576,16 @@ protected:
   Int m_nadv;
   Int m_num_tracers;
   Int hdtime;
+
+  // Surface fluxes of tracers [kg/m2/s, upward positive], set when the driver
+  // sets the parameter apply_tracer_surface_fluxes. Each field of the group
+  // "tracer_surface_fluxes" is named <tracer field>_surf_flux, where the tracer
+  // is in "turbulence_advected_tracers". SHOC does not know which tracers these
+  // are: initialize_impl pairs each flux with the row of its tracer in the
+  // group (m_tracer_flux_names[i] fills row m_tracer_flux_rows[i]).
+  bool m_apply_tracer_surface_fluxes = false;
+  std::vector<std::string> m_tracer_flux_names;
+  std::vector<int>         m_tracer_flux_rows;
 
   // Export shoc_water_stages for the water tracers (see shoc_water_transfers.hpp);
   // on in builds with water tracers (EAMXX_ENABLE_WATER_TRACERS)

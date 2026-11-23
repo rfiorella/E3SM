@@ -1,8 +1,9 @@
 include (ScreamUtils)
 
 # Standalone AD runs of the water_tracers process on a mesh-free point grid.
-# All inputs are constant ICs (no input files). The ocean fluxes are
-# diagnostic only, so tracers and qv stay at their initial values.
+# All inputs are constant ICs (no input files). The process only computes the
+# tracer surface fluxes (SHOC applies them), so tracers and qv stay at their
+# initial values.
 
 set (NUM_STEPS 2)
 set (ATM_TIME_STEP 1800)
@@ -34,6 +35,17 @@ add_test (NAME water_tracers_standalone_phase_ic_check
           -c "wtrc_bf_qv=qv" "wtrc_bf_qc=qc" "wtrc_bf_qr=qr" "wtrc_bf_qi=qi"
           WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 set_tests_properties (water_tracers_standalone_phase_ic_check PROPERTIES
+          LABELS "water_tracers;physics"
+          FIXTURES_REQUIRED water_tracers_standalone_generic)
+
+# The tracer surface fluxes (check_surface_fluxes.py): an R = 1 proportional tracer
+# gets exactly surf_evap, and R_ocn != R_land tracers a mix of the two parts.
+add_test (NAME water_tracers_standalone_surface_flux_check
+          COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/check_surface_fluxes.py
+          -f water_tracers_standalone_output_generic.INSTANT.nsteps_x1.np1.${FIRST_OUTPUT_T}.nc
+          --surf-evap 2.0e-5 --ocnfrac 0.5 --ssq 0.02 --re 0.0015 --ustar 0.3
+          WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+set_tests_properties (water_tracers_standalone_surface_flux_check PROPERTIES
           LABELS "water_tracers;physics"
           FIXTURES_REQUIRED water_tracers_standalone_generic)
 

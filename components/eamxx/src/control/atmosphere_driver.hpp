@@ -116,6 +116,11 @@ public:
   void setup_water_tracer_transfer_links();
   void check_water_tracer_transfer_requests() const;
 
+  // If water_tracers and shoc both exist, check that water_tracers runs first and tell
+  // SHOC to apply the tracer surface fluxes that water_tracers computes. Runs before
+  // set_grids, since SHOC requests the fluxes in create_requests.
+  void setup_shoc_tracer_surface_flux_link();
+
   // Add column data to all pre/postcondition property checks
   // for use in output.
   void add_additional_column_data_to_property_checks ();

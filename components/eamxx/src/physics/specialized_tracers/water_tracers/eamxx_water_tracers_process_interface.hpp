@@ -19,11 +19,19 @@ namespace scream
  * The tracers are defined in a YAML file (the water_tracers_file parameter; see
  * eamxx_water_tracers_registry.hpp). Each one is registered as four advected
  * tracers <name>_qv, <name>_qc, <name>_qr, <name>_qi [kg/kg], one per bulk
- * water phase, plus a diagnostic <name>_surf_flux [kg/m2/s], the upward ocean
- * evaporation flux of the vapor tracer. The flux is computed every step from
- * the ocean bulk state imported from the coupler (ocn_ssq, ocn_re, ocn_ustar)
- * and the bottom-level atmosphere, and is NOT applied to anything: this
- * process never changes bulk water or a tracer after initialization.
+ * water phase, plus the surface flux of its vapor, <name>_qv_surf_flux
+ * [kg/m2/s, upward positive], in the group "tracer_surface_fluxes". The flux
+ * is the tracer's share of the surface evaporation: the ocean part is computed
+ * every step from the ocean bulk state imported from the coupler (ocn_ssq,
+ * ocn_re, ocn_ustar) and the bottom-level atmosphere, and the rest of the
+ * merged surf_evap (land and sea ice) evaporates at the tracer's r_land (see
+ * surface_tracer_flux).
+ *
+ * This process only computes the fluxes; it never changes bulk water or a
+ * tracer after initialization. SHOC applies them (in the same implicit solve
+ * as the bulk surface evaporation, when the driver sets its parameter
+ * apply_tracer_surface_fluxes), so water_tracers must come before shoc in the
+ * atm_procs_list: it reads surf_evap at the start of the step.
  *
  * Tracer kinds: generic (bulk_proportional or bulk_formula) and isotopes.
  * Isotope entries are only accepted when EAMXX_HAS_WATER_ISOTOPES is
@@ -70,7 +78,7 @@ protected:
 
   std::shared_ptr<const AbstractGrid> m_grid;
 
-  // One entry per tracer in water_tracers_file, sorted by name. r_ocn/r_init and
+  // One entry per tracer in water_tracers_file, sorted by name. r_ocn/r_land/r_init and
   // ocean_flux for isotope specs are resolved by m_isotopes.resolve() in the
   // constructor, before initialize/run time reads them.
   std::vector<water_tracers::TracerSpec> m_specs;

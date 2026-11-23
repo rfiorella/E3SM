@@ -71,6 +71,10 @@ void WaterTracers::create_requests ()
   add_field<Required>("p_mid",          scalar3d_mid, Pa, grid_name, ps);
   add_field<Required>("pseudo_density", scalar3d_mid, Pa, grid_name, ps);
 
+  // Merged ocean+land+ice surface evaporation [kg/m2/s, upward positive]. This
+  // process runs before SHOC, so it sees the value SHOC will apply this step.
+  add_field<Required>("surf_evap", scalar2d, kg/m2/s, grid_name);
+
   // Ocean surface state from the coupler (atmosphere_surface_coupling_importer)
   add_field<Required>("ocnfrac",   scalar2d, none,  grid_name);
   add_field<Required>("sst",       scalar2d, K,     grid_name);
@@ -78,16 +82,17 @@ void WaterTracers::create_requests ()
   add_field<Required>("ocn_re",    scalar2d, none,  grid_name);
   add_field<Required>("ocn_ustar", scalar2d, m/s,   grid_name);
 
-  // The tracers (one field per phase) and their diagnostic ocean fluxes. The
-  // flux group is not used yet; it is where a later process will find the
-  // fluxes to apply.
+  // The tracers (one field per phase) and the surface flux of each vapor
+  // tracer, <vapor tracer field>_surf_flux. SHOC applies the fluxes in the
+  // group (see the class comment); it finds the tracer of a flux by stripping
+  // the suffix.
   bool any_ratio_init = false;
   for (const auto& spec : m_specs) {
     for (const auto phase : wt::water_phases) {
       add_tracer<Updated>(wt::phase_field_name(spec.name, phase), m_grid, kg/kg, ps,
                           TracerAdvection::DynamicsAndTurbulence);
     }
-    add_field<Computed>(spec.name + "_surf_flux", scalar2d, kg/m2/s, grid_name, "tracer_surface_fluxes");
+    add_field<Computed>(wt::phase_field_name(spec.name, wt::WaterPhase::Vapor) + "_surf_flux", scalar2d, kg/m2/s, grid_name, "tracer_surface_fluxes");
     any_ratio_init |= spec.init==water_tracers::InitType::Ratio;
   }
 
@@ -237,6 +242,7 @@ void WaterTracers::compute_tracer_fluxes ()
 
   const auto qv  = get_field_in("qv",  gn).get_view<const Real**>();
   const auto sst = get_field_in("sst", gn).get_view<const Real*>();
+  const auto surf_evap = get_field_in("surf_evap", gn).get_view<const Real*>();
 
   // Local copies, so the lambda captures views and values rather than `this`.
   const auto sfc_f     = m_sfc_f;
@@ -252,9 +258,11 @@ void WaterTracers::compute_tracer_fluxes ()
   for (const auto& spec : m_specs) {
     const auto q_i  = get_field_in(wt::phase_field_name(spec.name, wt::WaterPhase::Vapor), gn)
                         .get_view<const Real**>();
-    const auto flux = get_field_out(spec.name + "_surf_flux", gn).get_view<Real*>();
-    const auto kind  = spec.ocean_flux;
-    const Real r_ocn = spec.r_ocn;
+    const auto flux = get_field_out(wt::phase_field_name(spec.name, wt::WaterPhase::Vapor) + "_surf_flux", gn)
+                        .get_view<Real*>();
+    const auto kind   = spec.ocean_flux;
+    const Real r_ocn  = spec.r_ocn;
+    const Real r_land = spec.r_land;
 
     // Only isotopes fractionate; every other tracer uses alpha = 1. The
     // species is unused unless fractionates is true.
@@ -271,11 +279,11 @@ void WaterTracers::compute_tracer_fluxes ()
             Pack1(sst(icol)), species, water_isotopes::CondensedOverVapor, iso_params,
             wt::is_evaporating(f, e));
       }
-      const Pack1 f_i = wt::ocean_flux(kind, r_ocn,
+      const Pack1 f_i = wt::surface_tracer_flux(kind, r_ocn, r_land,
           f, Pack1(sfc_rho(icol)), Pack1(sfc_ustar(icol)), Pack1(sfc_re(icol)),
-          Pack1(sfc_ssq(icol)), Pack1(qv(icol, kbot)), Pack1(q_i(icol, kbot)), e,
-          alpha);
-      flux(icol) = (f_i + wt::land_ice_tracer_flux<Pack1>())[0];
+          Pack1(sfc_ssq(icol)), Pack1(qv(icol, kbot)), Pack1(q_i(icol, kbot)),
+          Pack1(surf_evap(icol)), e, alpha);
+      flux(icol) = f_i[0];
     });
   }
 }

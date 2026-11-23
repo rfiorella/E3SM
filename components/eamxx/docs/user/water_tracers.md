@@ -23,6 +23,10 @@ Each entry has a `type` (`generic` or `isotope`), an `init` (`ratio`: start from
 accept `ocean_flux` and `r_ocn`; isotope entries need a `species` (and a build
 with `EAMXX_ENABLE_WATER_ISOTOPES=ON`). The key is the tracer's base name.
 
+Both kinds accept `r_land` (default: `r_ocn`; for isotopes, the species' ocean
+ratio), the tracer-to-bulk ratio of the evaporation from land and sea ice. See
+"Surface evaporation" below.
+
 ## Fields
 
 Each tracer has one field per bulk water phase, named `<base>_{qv,qc,qr,qi}`
@@ -30,12 +34,38 @@ Each tracer has one field per bulk water phase, named `<base>_{qv,qc,qr,qi}`
 The tracer vapor is advected by HOMME and diffused by SHOC. The other phases
 only change through `water_tracer_transfers`.
 
+## Surface evaporation
+
+For each tracer, `water_tracers` computes the field `<base>_qv_surf_flux`
+(kg/m2/s, positive upward; for example `wtrc_t_qv_surf_flux`) every step, in the
+group `tracer_surface_fluxes`. `shoc` applies these fluxes in the same implicit
+solve as the surface evaporation of bulk water (`surf_evap`, the merged ocean,
+land and sea-ice flux), so a tracer with R = 1 stays equal to bulk water. SHOC
+does not know the tracers: it applies each flux to the tracer whose field is the
+flux's name without `_surf_flux`. The driver turns this on (SHOC's parameter
+`apply_tracer_surface_fluxes`) when both `water_tracers` and `shoc` are in the
+tree, and requires `water_tracers` to come before `shoc`, since the flux uses
+the `surf_evap` of the start of the step.
+
+With S = `surf_evap`, E the ocean-only bulk evaporation (computed from `ocnfrac`,
+`ocn_ssq`, `ocn_re`, `ocn_ustar` and the bottom level) and L = S - E the rest:
+
+* the ocean part follows `ocean_flux`/`r_ocn` as before (for `bulk_proportional`,
+  `r_ocn*E`);
+* the land and sea-ice part evaporates at `r_land` (`r_land*L`, for L > 0);
+* dew (E < 0 or L < 0) removes the tracer at its bottom-level ratio to `qv`.
+
+For `bulk_proportional` tracers, when both parts evaporate, the flux is formed as
+`r_land*S + (r_ocn - r_land)*E`, so with `r_ocn = r_land = 1` it is exactly `S`.
+`bulk_formula` tracers and isotopes compute the ocean part from the tracer's own
+bottom-level concentration, so they do not close exactly against `surf_evap`
+(they do, to roundoff, for R = 1); their land part is the same.
+
 ## The two processes
 
 * `water_tracers` registers the fields, sets their initial conditions and
-  computes the ocean evaporation flux. That flux is diagnostic only: SHOC does
-  not apply a surface flux to the tracers, so runs with surface evaporation
-  do not conserve the tracer mass yet.
+  computes the surface evaporation flux of each tracer (next section). It never
+  changes the bulk water or a tracer after initialization.
 * `water_tracer_transfers` replays what SHOC (condensation/evaporation) and P3
   (all process rates, sedimentation, clipping) did to the bulk water on the
   tracers, in the order the bulk model applied it. It also computes
@@ -51,7 +81,7 @@ Parameters of `water_tracer_transfers`:
 ## Enabling
 
 Neither process is in a default `atm_procs_list`. Put `water_tracers` before
-`homme` and `water_tracer_transfers` directly after `p3`, inside the
+`homme` (and so before `shoc`) and `water_tracer_transfers` directly after `p3`, inside the
 (sub-cycled) group that holds `shoc` and `p3`:
 
 ``` {.shell .copy}
@@ -73,6 +103,10 @@ that:
 * no process between them has its own `number_of_subcycles` other than 1
   (sub-cycle the enclosing group instead; the exports only keep the last call);
 * `shoc::check_flux_state_consistency` is false when SHOC is replayed;
+* `water_tracers` comes before `shoc`, if both are in the tree, and
+  `shoc::check_flux_state_consistency` is then false (the fixer zeroes
+  `surf_evap` during the step, so bulk water and the tracers would get different
+  surface fluxes);
 * no process between SHOC/P3 and the replay updates `qv`, `qc`, `qr`, `qi` or the
   tracer groups.
 
@@ -82,7 +116,8 @@ A warning is logged if `zm`, `gw`, `nudging` or `iop_forcing` is in the tree.
 
 * Only SHOC and P3 are replayed. Other bulk water changes (ZM, GW, nudging,
   IOP forcing, the SHOC flux-consistency fixer) are not followed.
-* No fractionation yet, and no surface evaporation applied to the tracers.
+* No fractionation yet. The surface flux of land and sea ice uses `r_land`
+  (default `r_ocn`); the coupler's land isotope fluxes are not imported.
 * A tracer with a uniform ratio R keeps R through every transfer; the tests
   check R = 1 against the bulk fields to roundoff.
 

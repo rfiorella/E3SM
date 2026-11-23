@@ -3,7 +3,7 @@
 # What check_water_tracer_transfers.py needs. Slice 0 is the initial state
 # (t0 output); every later slice follows one atm step, whose last subcycle
 # produced the SHOC and P3 exports.
-filename_prefix: shoc_cld_p3_wtt_link_output
+filename_prefix: ${OUT_PREFIX}
 averaging_type: instant
 # Tracers and bulk water must agree to roundoff in Real; the default
 # single-precision output would add ~1e-7 relative error to every term.
@@ -31,6 +31,8 @@ field_names:
   - wtrc_half_precip_liq_surf_mass
   - wtrc_half_precip_ice_surf_mass
   - wtrc_half_residual_shoc
+  - wtrc_t_qv_surf_flux
+  - surf_evap
   - wtrc_half_residual_p3
   - shoc_water_stages
   - p3_water_entry
