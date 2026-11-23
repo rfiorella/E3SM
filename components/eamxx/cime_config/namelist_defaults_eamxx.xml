@@ -314,6 +314,15 @@ be lost if SCREAM_HACK_XML is not enabled.
       <ocean_enrichment_formulation type="string" doc="Ocean isotopic enrichment/depletion relative to VSMOW (only used if the tracers file defines isotope entries)">modern</ocean_enrichment_formulation>
     </water_tracers>
 
+    <!-- Replays SHOC and P3 bulk water transfers on the water tracers. Not in any
+         default atm_procs_list; add it right after p3 in the subcycled physics group.
+         The AD enables the SHOC/P3 exports and checks the process order at run time. -->
+    <water_tracer_transfers inherit="atm_proc_base">
+      <water_tracers_file type="file" doc="YAML file defining the water tracers; if unset, copied from water_tracers"></water_tracers_file>
+      <replay_shoc type="logical" doc="Replay SHOC condensation/evaporation on the water tracers">true</replay_shoc>
+      <replay_p3 type="logical" doc="Replay all P3 transfers and sedimentation on the water tracers">true</replay_p3>
+    </water_tracer_transfers>
+
     <!-- Gravity Wave Drag -->
     <gw inherit="atm_proc_base">
       <use_gw_orographic type="logical" doc="Flag for orographic GWD">true</use_gw_orographic>

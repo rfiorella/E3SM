@@ -1,0 +1,82 @@
+%YAML 1.1
+---
+driver_options:
+  atmosphere_dag_verbosity_level: 5
+
+time_stepping:
+  time_step: ${ATM_TIME_STEP}
+  run_t0: ${RUN_T0}  # YYYY-MM-DD-XXXXX
+  number_of_steps: ${NUM_STEPS}
+
+# Link test: the driver sets the export flags and copies water_tracers_file.
+# water_tracer_transfers must run right after P3, in the same subcycle: the
+# SHOC and P3 exports only hold their last call.
+eamxx:
+  atm_procs_list: [water_tracers, mac]
+  schedule_type: sequential
+  water_tracers:
+    water_tracers_file: tracers.yaml
+  mac:
+    type: group
+    schedule_type: sequential
+    atm_procs_list: [shoc, cld_fraction, p3, water_tracer_transfers]
+    number_of_subcycles: ${MAC_SUBCYCLES}
+    shoc:
+      lambda_low: 0.001
+      lambda_high: 0.08
+      lambda_slope: 2.65
+      lambda_thresh: 0.02
+      thl2tune: 1.0
+      qw2tune: 1.0
+      qwthl2tune: 1.0
+      w2tune: 1.0
+      length_fac: 0.5
+      c_diag_3rd_mom: 7.0
+      coeff_kh: 0.1
+      coeff_km: 0.1
+      coeff_kh_horiz: 0.1
+      coeff_km_horiz: 0.1
+      shoc_1p5tke: false
+    p3:
+      max_total_ni: 740.0e3
+      do_prescribed_ccn: false
+
+grids_manager:
+  type: mesh_free
+  geo_data_source: IC_FILE
+  grids_names: [physics_gll]
+  physics_gll:
+    type: point_grid
+    aliases: [physics]
+    number_of_global_columns:   218
+    number_of_vertical_levels:  72
+
+initial_conditions:
+  # The name of the file containing the initial conditions for this test.
+  filename: ${SCREAM_DATA_DIR}/init/${EAMxx_tests_IC_FILE_72lev}
+  topography_filename: ${TOPO_DATA_DIR}/${EAMxx_tests_TOPO_FILE}
+  # No surface fluxes: SHOC gives the tracers none yet (wtracer_sfc = 0)
+  surf_sens_flux: 0.0
+  surf_evap: 0.0
+  precip_liq_surf_mass: 0.0
+  precip_ice_surf_mass: 0.0
+  # Ocean inputs of water_tracers (its fluxes are diagnostic only)
+  sst: 300.0
+  ocnfrac: 1.0
+  ocn_ssq: 0.02
+  ocn_re: 0.0015
+  ocn_ustar: 0.3
+  # Set by water_tracers from bulk water (init: ratio)
+  wtrc_t_qv: 0.0
+  wtrc_t_qc: 0.0
+  wtrc_t_qr: 0.0
+  wtrc_t_qi: 0.0
+  wtrc_half_qv: 0.0
+  wtrc_half_qc: 0.0
+  wtrc_half_qr: 0.0
+  wtrc_half_qi: 0.0
+
+# The parameters for I/O control
+scorpio:
+  output_yaml_files: ["output_link.yaml"]
+...

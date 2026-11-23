@@ -34,6 +34,8 @@
 
 #include <fstream>
 #include <random>
+#include <set>
+#include <vector>
 #include <ranges>
 
 namespace scream {
@@ -325,9 +327,21 @@ void AtmosphereDriver::create_grids()
     setup_iop_data_manager ();
   }
 
+  // The water tracer replay needs SHOC/P3 to export their bulk water transfers, which they
+  // decide in create_requests (called by set_grids). Check the process tree and set the
+  // export flags now; check the field requests of the processes in between afterwards.
+  const bool do_wtrc_transfers = m_atm_process_group->has_process("water_tracer_transfers");
+  if (do_wtrc_transfers) {
+    setup_water_tracer_transfer_links();
+  }
+
   // Set the grids in the processes. Do this by passing the grids manager.
   // Each process will grab what they need
   m_atm_process_group->set_grids(m_grids_manager);
+
+  if (do_wtrc_transfers) {
+    check_water_tracer_transfer_requests();
+  }
 
   m_ad_status |= s_grids_created;
 
@@ -536,6 +550,236 @@ void AtmosphereDriver::setup_shoc_3d_turbulence_link ()
 
     auto shoc_process = m_atm_process_group->get_process_nonconst("shoc");
     shoc_process->get_params().set<bool>("do_3d_turbulence_shoc", do_3d_turbulence);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Water tracer transfer links (water_tracer_transfers <-> water_tracers/shoc/p3)
+// ---------------------------------------------------------------------------
+namespace {
+
+// Where a leaf process sits in the process tree
+struct ProcLocation {
+  std::shared_ptr<AtmosphereProcessGroup> parent;
+  int index;
+  std::shared_ptr<AtmosphereProcess> proc;
+};
+
+// Collect all leaf processes called 'name', searching nested groups recursively.
+// (AtmosphereProcessGroup::get_process_nonconst(name) only looks in the first nested group.)
+void find_leaf_processes (const std::shared_ptr<AtmosphereProcessGroup>& group,
+                          const std::string& name,
+                          std::vector<ProcLocation>& found)
+{
+  for (int i=0; i<group->get_num_processes(); ++i) {
+    auto proc = group->get_process_nonconst(i);
+    auto sub  = std::dynamic_pointer_cast<AtmosphereProcessGroup>(proc);
+    if (sub) {
+      find_leaf_processes(sub,name,found);
+    } else if (proc->name()==name) {
+      found.push_back({group,i,proc});
+    }
+  }
+}
+
+// Collect all leaf processes in 'proc' (which may itself be a group)
+void collect_leaf_processes (const std::shared_ptr<AtmosphereProcess>& proc,
+                             std::vector<std::shared_ptr<AtmosphereProcess>>& leaves)
+{
+  auto sub = std::dynamic_pointer_cast<AtmosphereProcessGroup>(proc);
+  if (sub) {
+    for (int i=0; i<sub->get_num_processes(); ++i) {
+      collect_leaf_processes(sub->get_process_nonconst(i),leaves);
+    }
+  } else {
+    leaves.push_back(proc);
+  }
+}
+
+// Bulk water modifiers that the tracers do not follow. Found by grepping src/physics for
+// processes that request Updated/Computed qv/qc/qr/qi (other than shoc and p3, which the
+// replay follows, and homme, which only advects): gw, zm, nudging, iop_forcing.
+const std::vector<std::string> unfollowed_bulk_water_modifiers =
+  {"zm", "gw", "nudging", "iop_forcing"};
+
+// The one location of a mandatory process; error if absent or duplicated
+ProcLocation find_unique_process (const std::shared_ptr<AtmosphereProcessGroup>& root,
+                                  const std::string& name, const std::string& hint)
+{
+  std::vector<ProcLocation> found;
+  find_leaf_processes(root,name,found);
+  EKAT_REQUIRE_MSG (found.size()>0,
+      "Error! Process 'water_tracer_transfers' requires process '" + name + "', which is not in the atm process tree.\n"
+      + hint);
+  EKAT_REQUIRE_MSG (found.size()==1,
+      "Error! Process 'water_tracer_transfers' requires exactly one '" + name + "' process, but the tree has "
+      + std::to_string(found.size()) + ".\n");
+  return found[0];
+}
+
+} // anonymous namespace
+
+void AtmosphereDriver::setup_water_tracer_transfer_links ()
+{
+  EKAT_REQUIRE_MSG(m_atm_process_group->has_process("water_tracer_transfers"),
+                   "Error! Attempting to setup links for water_tracer_transfers, "
+                   "but it is not defined.\n");
+
+  auto root = m_atm_process_group;
+  std::vector<ProcLocation> found;
+  find_leaf_processes(root,"water_tracer_transfers",found);
+  EKAT_REQUIRE_MSG(found.size()==1,
+      "Error! The process 'water_tracer_transfers' appears " + std::to_string(found.size()) +
+      " times in the atm process tree, but it must appear exactly once.\n");
+  const auto xfer = found[0];
+  auto& xfer_pl = xfer.proc->get_params();
+  const std::string gname = xfer.parent->name();
+
+  const auto wtrc = find_unique_process(root,"water_tracers",
+      "  Add 'water_tracers' to the atm_procs_list (before the physics group that holds 'water_tracer_transfers'),\n"
+      "  or remove 'water_tracer_transfers' from the atm_procs_list.\n");
+
+  const bool replay_shoc = xfer_pl.get<bool>("replay_shoc",true);
+  const bool replay_p3   = xfer_pl.get<bool>("replay_p3",true);
+
+  // Sources must be direct children of the same group, ahead of the transfers: shoc < p3 < transfers
+  std::vector<ProcLocation> sources;
+  int first_idx = xfer.index;
+  for (const std::string name : {"shoc","p3"}) {
+    if (not (name=="shoc" ? replay_shoc : replay_p3)) {
+      continue;
+    }
+    const std::string flag = "replay_" + name;
+    const auto src = find_unique_process(root,name,
+        "  Add '" + name + "' to the atm_procs_list before 'water_tracer_transfers', or set "
+        "'water_tracer_transfers::" + flag + "=false'.\n");
+    EKAT_REQUIRE_MSG(src.parent==xfer.parent,
+        "Error! Process '" + name + "' (in group '" + src.parent->name() + "') and 'water_tracer_transfers' "
+        "(in group '" + gname + "') must be in the same atm process group.\n"
+        "  Move 'water_tracer_transfers' into group '" + src.parent->name() + "', right after '" + name + "'\n"
+        "  (the transfers are replayed from the exports of the last call of '" + name + "').\n");
+    EKAT_REQUIRE_MSG(src.index<xfer.index,
+        "Error! In group '" + gname + "', process '" + name + "' must come BEFORE 'water_tracer_transfers'.\n"
+        "  Change the atm_procs_list of '" + gname + "' so that '" + name + "' precedes 'water_tracer_transfers'.\n");
+    if (not sources.empty()) {
+      EKAT_REQUIRE_MSG(sources.back().index<src.index,
+          "Error! In group '" + gname + "', process 'shoc' must come BEFORE 'p3' "
+          "when 'water_tracer_transfers' replays both.\n"
+          "  Change the atm_procs_list of '" + gname + "' to put 'shoc' before 'p3'.\n");
+    }
+    sources.push_back(src);
+    first_idx = std::min(first_idx,src.index);
+  }
+
+  // SHOC and P3 exports hold only their last call: nothing between the first source and the
+  // transfers (inclusive) may be sub-cycled by itself. Sub-cycling the whole group is fine.
+  for (int i=first_idx; i<=xfer.index; ++i) {
+    auto proc = xfer.parent->get_process_nonconst(i);
+    const int nsub = proc->get_params().get<int>("number_of_subcycles",1);
+    EKAT_REQUIRE_MSG(nsub==1,
+        "Error! Process '" + proc->name() + "' in group '" + gname + "' has number_of_subcycles=" +
+        std::to_string(nsub) + ", but the processes between the first replayed source and "
+        "'water_tracer_transfers' (inclusive) must not be sub-cycled individually.\n"
+        "  The SHOC/P3 exports keep only their last call. Set '" + proc->name() + "::number_of_subcycles=1' "
+        "and sub-cycle group '" + gname + "' instead.\n");
+  }
+
+  if (replay_shoc) {
+    const bool check = sources.front().proc->get_params().get<bool>("check_flux_state_consistency",false);
+    EKAT_REQUIRE_MSG(not check,
+        "Error! 'shoc::check_flux_state_consistency' is true, but 'water_tracer_transfers' replays SHOC.\n"
+        "  That fixer can change qv outside the exported SHOC stages. Set it to false, "
+        "or set 'water_tracer_transfers::replay_shoc=false'.\n");
+  }
+
+  // Ask the sources to export their transfers (read in their create_requests)
+  for (const auto& src : sources) {
+    src.proc->get_params().set<bool>("export_water_transfers",true);
+  }
+
+  // The tracer file is the one of water_tracers, unless set explicitly (and consistently)
+  const std::string key = "water_tracers_file";
+  const auto& wtrc_pl = wtrc.proc->get_params();
+  const std::string wtrc_file = wtrc_pl.isParameter(key) ? wtrc_pl.get<std::string>(key) : "";
+  const std::string xfer_file = xfer_pl.isParameter(key) ? xfer_pl.get<std::string>(key) : "";
+  if (xfer_file=="") {
+    if (wtrc_file!="") {
+      xfer_pl.set<std::string>(key,wtrc_file);
+    }
+    // else: leave it empty, the process itself errors out with a clear message
+  } else if (wtrc_file!="") {
+    EKAT_REQUIRE_MSG(xfer_file==wtrc_file,
+        "Error! 'water_tracer_transfers::water_tracers_file' (" + xfer_file + ") differs from "
+        "'water_tracers::water_tracers_file' (" + wtrc_file + ").\n"
+        "  Both processes must use the same tracers file; leave the former unset to copy the latter.\n");
+  }
+
+  m_atm_logger->info("  [EAMxx] water_tracer_transfers linked to water_tracers (shoc replay: " +
+                     std::string(replay_shoc ? "yes" : "no") + ", p3 replay: " +
+                     std::string(replay_p3 ? "yes" : "no") + ")");
+}
+
+void AtmosphereDriver::check_water_tracer_transfer_requests () const
+{
+  auto root = m_atm_process_group;
+  std::vector<ProcLocation> found;
+  find_leaf_processes(root,"water_tracer_transfers",found);
+  EKAT_REQUIRE_MSG(found.size()==1, "Error! Expected exactly one 'water_tracer_transfers' process.\n");
+  const auto xfer = found[0];
+  const std::string gname = xfer.parent->name();
+  const bool replay_shoc = xfer.proc->get_params().get<bool>("replay_shoc",true);
+  const bool replay_p3   = xfer.proc->get_params().get<bool>("replay_p3",true);
+
+  // Index of the first replayed source (setup_water_tracer_transfer_links guarantees the order)
+  int first_idx = xfer.index;
+  for (int i=0; i<xfer.index; ++i) {
+    const auto n = xfer.parent->get_process_nonconst(i)->name();
+    if ((n=="shoc" and replay_shoc) or (n=="p3" and replay_p3)) {
+      first_idx = std::min(first_idx,i);
+    }
+  }
+
+  // Processes strictly between the first source and the transfers (so strictly between shoc and p3,
+  // and between p3 and the transfers) may not change bulk water or tracers: the replay assumes
+  // only SHOC and P3 do. A replayed p3 is exempt (it is a source); an un-replayed one is not.
+  const std::set<std::string> bulk_water = {"qv","qc","qr","qi"};
+  const std::set<std::string> tracer_groups = {"tracers","turbulence_advected_tracers"};
+  for (int i=first_idx+1; i<xfer.index; ++i) {
+    auto proc = xfer.parent->get_process_nonconst(i);
+    if (proc->name()=="p3" and replay_p3) {
+      continue;
+    }
+    std::vector<std::shared_ptr<AtmosphereProcess>> leaves;
+    collect_leaf_processes(proc,leaves);
+    for (const auto& leaf : leaves) {
+      for (const auto& r : leaf->get_field_requests()) {
+        EKAT_REQUIRE_MSG(not ((r.usage & Computed) and bulk_water.count(r.fid.name())>0),
+            "Error! Process '" + leaf->name() + "' in group '" + gname + "' updates bulk water field '" +
+            r.fid.name() + "' between SHOC/P3 and 'water_tracer_transfers'.\n"
+            "  The transfer replay assumes only SHOC and P3 change bulk water there. Move '" + leaf->name() +
+            "' out of that range (before shoc, or after water_tracer_transfers).\n");
+      }
+      for (const auto& r : leaf->get_group_requests()) {
+        EKAT_REQUIRE_MSG(not ((r.usage & Computed) and tracer_groups.count(r.name)>0),
+            "Error! Process '" + leaf->name() + "' in group '" + gname + "' updates the group '" + r.name +
+            "' between SHOC/P3 and 'water_tracer_transfers'.\n"
+            "  The transfer replay assumes only SHOC and P3 change bulk water there. Move '" + leaf->name() +
+            "' out of that range (before shoc, or after water_tracer_transfers).\n");
+      }
+    }
+  }
+
+  // Other bulk water modifiers anywhere in the tree are not followed by the tracers
+  std::string others;
+  for (const auto& name : unfollowed_bulk_water_modifiers) {
+    if (root->has_process(name)) {
+      others += (others.empty() ? "" : ", ") + name;
+    }
+  }
+  if (others!="") {
+    m_atm_logger->warn("[EAMxx] water_tracer_transfers: the atm process tree contains process(es) that change "
+                       "bulk water: " + others + ".\n  The water tracers do not follow those processes, "
+                       "so they will drift from the bulk water.");
   }
 }
 
