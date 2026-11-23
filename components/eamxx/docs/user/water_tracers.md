@@ -1,13 +1,34 @@
 # Water tracers
 
 Water tracers follow a labeled portion of the model's water through the
-atmosphere. They are built from two processes, `water_tracers` and
-`water_tracer_transfers`. Only vapor transport (HOMME advection and SHOC
-diffusion) and the bulk water phase changes of SHOC and P3 are covered so far.
-Generic tracers move in proportion to the donor phase's tracer-to-bulk ratio
-in every transfer (no fractionation). Isotope tracers also fractionate, with
-equilibrium fractionation factors (and, optionally, kinetic ones), in the phase
-changes through the vapor (see "Isotope fractionation" below).
+atmosphere. Generic tracers move in proportion to the donor phase's
+tracer-to-bulk ratio in every transfer (no fractionation). Isotope tracers also
+fractionate, with equilibrium fractionation factors (and, optionally, kinetic
+ones), in the phase changes through the vapor and in ocean evaporation. Only
+vapor transport (HOMME advection and SHOC diffusion), surface evaporation and
+the bulk water phase changes of SHOC and P3 are covered so far.
+
+## Overview
+
+Two processes do the work, with SHOC and P3 in between:
+
+1. `water_tracers` registers the tracer fields, sets their initial conditions
+   and computes, every step, the surface flux of each tracer. It never changes
+   the bulk water or a tracer after initialization.
+2. `shoc` applies the tracer surface fluxes in the same implicit solve as the
+   bulk surface evaporation, and diffuses the tracers like bulk water (HOMME
+   advects them).
+3. `shoc` and `p3` export the bulk water transfers they perform (the amount
+   moved between phases by each process, per level), in builds with
+   `EAMXX_ENABLE_WATER_TRACERS=ON`. The exports are read-only: the bulk model
+   does not know the tracers.
+4. `water_tracer_transfers` replays those transfers on the tracers, in the order
+   the bulk model applied them. Isotopes are fractionated in the replay: the
+   tracer moved by a transfer is the donor's tracer-to-bulk ratio times the
+   amount of bulk water moved, times a fractionation factor.
+
+The atmosphere driver links the processes at startup and checks the process
+order (see "Enabling").
 
 ## Tracers file
 
@@ -36,6 +57,51 @@ Each tracer has one field per bulk water phase, named `<base>_{qv,qc,qr,qi}`
 The tracer vapor is advected by HOMME and diffused by SHOC. The other phases
 only change through `water_tracer_transfers`.
 
+`water_tracers` also computes `<base>_qv_surf_flux` (see "Surface evaporation").
+`water_tracer_transfers` computes `<base>_precip_{liq,ice}_surf_mass` (kg/m2,
+accumulated like the bulk precipitation) and the diagnostics
+`<base>_residual_{shoc,p3}` (bulk water minus replayed tracer water, per phase),
+and once for all tracers `water_transfer_stage_T` (see "Stage temperatures") and
+`water_transfer_alpha_extrapolations` (see "Isotope fractionation").
+
+## Configuration
+
+Parameters of `water_tracers`:
+
+* `water_tracers_file`: the tracers file above.
+* The isotope options (only used if the tracers file defines isotope entries):
+    * `liquid_vapor_formulation`: `horita_wesolowski_1994` (default) or
+      `majoube_1971`;
+    * `ice_vapor_formulation`: `merlivat_nief_1967` (default) or `isocam3`;
+    * `standard_ratio_formulation`: `normalized` (default; every standard ratio
+      is 1) or `natural_abundance`;
+    * `ocean_enrichment_formulation`: `modern` (default) or `LGM`;
+    * `kinetic_fractionation_formulation`: kinetic factor of the ocean
+      evaporation, `brutsaert_merlivat_jouzel_1979` (default) or `none`;
+    * `diffusivity_formulation`: the molecular diffusivity ratios of the kinetic
+      factors, `merlivat_1978` (default) or `cappa_2003`.
+
+Parameters of `water_tracer_transfers`:
+
+* `replay_shoc`, `replay_p3` (default true): which sources to replay.
+* `water_tracers_file`: copied from `water_tracers` when unset.
+* `liquid_vapor_formulation`, `ice_vapor_formulation`,
+  `standard_ratio_formulation`, `ocean_enrichment_formulation`,
+  `kinetic_fractionation_formulation`, `diffusivity_formulation`: the isotope
+  options, copied from `water_tracers` when unset (and an error if set to a
+  different value), so both processes use the same fractionation factors.
+* `kinetic_fractionation` (default false): kinetic isotope fractionation in
+  the replay (see "Kinetic fractionation" below). It affects the replay only;
+  the kinetic factor of ocean evaporation is
+  `water_tracers::kinetic_fractionation_formulation` (on by default).
+* `kinetic_ice_supersaturation` (`empirical`, default, or `model`): the
+  supersaturation over ice of the kinetic factor of deposition, with
+  `kinetic_fractionation`.
+* `alpha_override` (test only, not in the namelist defaults; default 0, off):
+  if > 0, every isotope uses this value as both alpha_l and alpha_i in the
+  replay (so Bergeron's factor is 1), and no kinetic factor. With 1, an
+  isotope follows the bulk water like a generic tracer, bit for bit.
+
 ## Surface evaporation
 
 For each tracer, `water_tracers` computes the field `<base>_qv_surf_flux`
@@ -52,7 +118,7 @@ the `surf_evap` of the start of the step.
 With S = `surf_evap`, E the ocean-only bulk evaporation (computed from `ocnfrac`,
 `ocn_ssq`, `ocn_re`, `ocn_ustar` and the bottom level) and L = S - E the rest:
 
-* the ocean part follows `ocean_flux`/`r_ocn` as before (for `bulk_proportional`,
+* the ocean part follows `ocean_flux`/`r_ocn` (for `bulk_proportional`,
   `r_ocn*E`);
 * the land and sea-ice part evaporates at `r_land` (`r_land*L`, for L > 0);
 * dew (E < 0 or L < 0) removes the tracer at its bottom-level ratio to `qv`.
@@ -63,65 +129,30 @@ For `bulk_proportional` tracers, when both parts evaporate, the flux is formed a
 bottom-level concentration, so they do not close exactly against `surf_evap`
 (they do, to roundoff, for R = 1); their land part is the same.
 
-For isotopes, the ocean part also carries two fractionation factors: the
-equilibrium factor alpha_l at the SST, and the kinetic factor alpkn of
-evaporation into the boundary layer (a port of iCAM's `wiso_kmol`: Brutsaert
-(1975) resistances with the Merlivat & Jouzel (1979) kinetic modifier, a
-smooth or rough regime from the surface Reynolds number). Two options of
-`water_tracers` control alpkn:
+For isotopes, the ocean part also carries two fractionation factors, described
+under "Isotope fractionation": the equilibrium factor alpha_l at the SST and the
+kinetic factor alpkn. The land and sea-ice part never fractionates.
 
-* `kinetic_fractionation_formulation`: `brutsaert_merlivat_jouzel_1979`
-  (default) or `none` (alpkn = 1);
-* `diffusivity_formulation`: the molecular diffusivity ratios it uses, one
-  per species, `merlivat_1978` (default) or `cappa_2003` (values under
-  "Kinetic fractionation" below).
+## The replay
 
-alpkn lies in (0, 1] for ustar times the bottom-level height above about
-1e-5 m2/s; there is no low-wind guard, as in the Fortran (debug builds check
-the range). The land and sea-ice part never fractionates.
-
-## The two processes
-
-* `water_tracers` registers the fields, sets their initial conditions and
-  computes the surface evaporation flux of each tracer (next section). It never
-  changes the bulk water or a tracer after initialization.
-* `water_tracer_transfers` replays what SHOC (condensation/evaporation) and P3
-  (all process rates, sedimentation, clipping) did to the bulk water on the
-  tracers, in the order the bulk model applied it. It also computes
-  `<base>_precip_{liq,ice}_surf_mass` (kg/m2, accumulated like the bulk
-  precipitation) and the diagnostics `<base>_residual_{shoc,p3}`
-  (bulk water minus replayed tracer water, per phase), and once for all
-  tracers `water_transfer_stage_T` (see "Stage temperatures") and
-  `water_transfer_alpha_extrapolations` (see "Isotope fractionation").
-
-Parameters of `water_tracer_transfers`:
-
-* `replay_shoc`, `replay_p3` (default true): which sources to replay.
-* `water_tracers_file`: copied from `water_tracers` when unset.
-* `liquid_vapor_formulation`, `ice_vapor_formulation`,
-  `standard_ratio_formulation`, `ocean_enrichment_formulation`,
-  `kinetic_fractionation_formulation`, `diffusivity_formulation`: the isotope
-  options, copied from `water_tracers` when unset (and an error if set to a
-  different value), so both processes use the same fractionation factors.
-* `kinetic_fractionation` (default false): kinetic isotope fractionation in
-  the replay (see "Kinetic fractionation" below). It affects the replay only;
-  the kinetic factor of ocean evaporation is
-  `water_tracers::kinetic_fractionation_formulation`.
-* `kinetic_ice_supersaturation` (`empirical`, default, or `model`): the
-  supersaturation over ice of the kinetic factor of deposition, with
-  `kinetic_fractionation`.
-* `alpha_override` (test only, not in the namelist defaults; default 0, off):
-  if > 0, every isotope uses this value as both alpha_l and alpha_i in the
-  replay (so Bergeron's factor is 1), and no kinetic factor. With 1, an
-  isotope follows the bulk water like a generic tracer, bit for bit.
+`water_tracer_transfers` replays what SHOC (condensation/evaporation) and P3
+(all process rates, sedimentation, clipping) did to the bulk water on the
+tracers, in the order the bulk model applied it. Each transfer moves tracer out
+of its donor phase in proportion to the donor's tracer-to-bulk ratio (for
+isotopes, with the fractionation factors below). It must be placed directly
+after `p3` in the group that holds `shoc` and `p3`, because the exports only
+hold the last call of each.
 
 ## Isotope fractionation
 
-Only tracers of `type: isotope` fractionate; generic tracers never do. For an
-isotope, each replayed transfer through the vapor removes tracer from its donor
-phase with a fractionation factor beta = R_sink/R_donor, from the equilibrium
-factors alpha_l = R_liquid/R_vapor and alpha_i = R_ice/R_vapor of the species
-(the formulations set by `liquid_vapor_formulation` and
+Only tracers of `type: isotope` fractionate; generic tracers never do.
+
+### Equilibrium fractionation
+
+For an isotope, each replayed transfer through the vapor removes tracer from its
+donor phase with a fractionation factor beta = R_sink/R_donor, from the
+equilibrium factors alpha_l = R_liquid/R_vapor and alpha_i = R_ice/R_vapor of
+the species (the formulations set by `liquid_vapor_formulation` and
 `ice_vapor_formulation`):
 
 | Transfer | beta | Temperature |
@@ -141,8 +172,8 @@ uses 1, as in the Fortran: ice does not exchange isotopes with the vapor while
 it sublimates.
 
 Each alpha is evaluated once per level and tracer, at the temperature at the
-start of its stage (`water_transfer_stage_T`, below), on the levels where the
-transfers that use it moved water.
+start of its stage (`water_transfer_stage_T`, see "Stage temperatures"), on the
+levels where the transfers that use it moved water.
 
 **Rayleigh step.** All the sinks of one donor phase act together, as a
 Rayleigh distillation of the donor's water: if the sinks remove A of the
@@ -167,9 +198,11 @@ step) counts the alpha evaluations at such temperatures, and their total over
 the run is logged once, at the end of the run. A temperature below 50 K, or
 NaN, stops the run.
 
-**Kinetic fractionation** (`kinetic_fractionation: true`; off by default).
-Evaporation of liquid into subsaturated air and deposition on ice from
-supersaturated air then use effective fractionation factors, ports of iCAM's
+### Kinetic fractionation
+
+With `water_tracer_transfers::kinetic_fractionation: true` (off by default),
+evaporation of liquid into subsaturated air and deposition on ice from
+supersaturated air use effective fractionation factors, ports of iCAM's
 `wiso_akel` and `wiso_akci` (`share/util/water_isotopes.F90`), in the same
 R_condensed/R_vapor convention, with D_i/D the species' molecular diffusivity
 ratio (`diffusivity_formulation`):
@@ -228,12 +261,32 @@ for the sub-grid part of the level where the cloud evaporates, so the
 grid-mean RH stands in for it. Treat the cloud-evaporation kinetics as the
 first suspect if results look wrong.
 
-**Not represented.** Isotopic exchange at zero net mass change: existing cloud
-liquid and rain do not re-equilibrate with the vapor (only the water SHOC or
-P3 move between phases carries a fractionation), with or without kinetic
-fractionation. Rain-vapor and cloud-vapor exchange are named follow-ons. SHOC
-exports its net condensation per level, so condensation and evaporation within
-a level in the same call are not seen separately.
+### Ocean evaporation
+
+The ocean part of an isotope's surface flux carries the equilibrium factor
+alpha_l at the SST and the kinetic factor alpkn of evaporation into the boundary
+layer (a port of iCAM's `wiso_kmol`: Brutsaert (1975) resistances with the
+Merlivat & Jouzel (1979) kinetic modifier, a smooth or rough regime from the
+surface Reynolds number). Two options of `water_tracers` control alpkn:
+
+* `kinetic_fractionation_formulation`: `brutsaert_merlivat_jouzel_1979`
+  (default) or `none` (alpkn = 1);
+* `diffusivity_formulation`: the molecular diffusivity ratios it uses, one
+  per species, `merlivat_1978` (default) or `cappa_2003` (values in the table
+  above).
+
+alpkn lies in (0, 1] for ustar times the bottom-level height above about
+1e-5 m2/s; there is no low-wind guard, as in the Fortran (debug builds check
+the range). The land and sea-ice part never fractionates.
+
+### Not represented
+
+Isotopic exchange at zero net mass change: existing cloud liquid and rain do
+not re-equilibrate with the vapor (only the water SHOC or P3 move between
+phases carries a fractionation), with or without kinetic fractionation.
+Rain-vapor and cloud-vapor exchange are not implemented yet. SHOC exports its
+net condensation per level, so condensation and evaporation within a level in
+the same call are not seen separately.
 
 ## Stage temperatures
 
@@ -276,8 +329,9 @@ Neither process is in a default `atm_procs_list`. Put `water_tracers` before
 Builds with `EAMXX_ENABLE_WATER_TRACERS=ON` make SHOC and P3 export the bulk
 water transfers that `water_tracer_transfers` replays (in every run of such a
 build, whether or not the tracer processes are used). At startup the
-atmosphere driver copies the tracers file to `water_tracer_transfers` and checks
-that:
+atmosphere driver copies the tracers file and the six isotope options to
+`water_tracer_transfers` (an error if the latter sets one to a different value)
+and checks that:
 
 * `water_tracers` exists, and `shoc` and `p3` (when replayed) are in the same
   group as `water_tracer_transfers`, in the order `shoc`, `p3`,
@@ -300,8 +354,9 @@ A warning is logged if `zm`, `gw`, `nudging` or `iop_forcing` is in the tree.
   IOP forcing, the SHOC flux-consistency fixer) are not followed.
 * Equilibrium fractionation in the transfers listed above, and optionally
   kinetic fractionation of net evaporation and cold deposition (see "Not
-  represented"). The surface flux of land and sea ice uses `r_land` (default
-  `r_ocn`); the coupler's land isotope fluxes are not imported.
+  represented" for what is missing). The surface flux of land and sea ice uses
+  `r_land` (default `r_ocn`); the coupler's land isotope fluxes are not
+  imported.
 * A generic tracer with a uniform ratio R keeps R through every transfer; the
   tests check R = 1 against the bulk fields to roundoff.
 
@@ -338,3 +393,16 @@ enriched with a lower deuterium excess, and cold deposited ice less enriched.
 The unit test `water_tracer_transfers_functions` covers the Rayleigh step
 itself, and `water_isotopes_kinetic` compares akel and akci with reference
 values of the Fortran functions.
+
+The driver's copy of the isotope options is tested by `shoc_cld_p3_wtt_link_iso`
+(the options set only on `water_tracers`: `liquid_vapor_formulation:
+majoube_1971`, `ice_vapor_formulation: isocam3`, `diffusivity_formulation:
+cappa_2003`, `kinetic_fractionation_formulation: none`, with
+`kinetic_fractionation: true` on the transfers) and
+`shoc_cld_p3_wtt_link_iso_manual` (the same, set by hand on both processes). The
+two outputs must be bit for bit equal. A missing copy of the first three options
+would change the replay's results; the other three options
+(`standard_ratio_formulation`, `ocean_enrichment_formulation`,
+`kinetic_fractionation_formulation`) do not enter the replay's results, so a
+missing copy of those shows in no output. `wtt_link_neg_iso_*` check that an
+option set to different values on the two processes stops the run.

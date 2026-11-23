@@ -17,6 +17,8 @@ include (ScreamUtils)
 #              (incl. water_tracers after shoc, SHOC's flux fixer on: SHOC
 #              applies the tracer surface fluxes, and a process between SHOC
 #              and P3 that updates T_mid).
+#  - link_iso, link_iso_manual, neg_iso_*: the isotope options (only in builds
+#              with EAMXX_ENABLE_WATER_ISOTOPES, at the end of this file)
 CreateADUnitTestExec(shoc_cld_p3_water_tracer_transfers LIBS shoc cld_fraction p3 water_tracers)
 
 # Ensure test input files are present in the data dir
@@ -381,5 +383,108 @@ if (EAMXX_ENABLE_WATER_ISOTOPES)
     set_tests_properties (p3_water_iso_alpha1_transfers_${t} PROPERTIES
       LABELS "p3;water_tracers;water_isotopes;physics"
       FIXTURES_REQUIRED p3_water_iso_alpha1_transfers)
+  endforeach()
+
+  # Driver link of the isotope options. AtmosphereDriver::setup_water_tracer_transfer_links
+  # copies the six options of WaterIsotopes::configure from water_tracers to
+  # water_tracer_transfers, unless the latter sets one itself (then they must agree).
+  #  - link_iso:        mac run with the isotope tracers and kinetic_fractionation on,
+  #                     the options set NON-DEFAULT on water_tracers only
+  #  - link_iso_manual: the same, the options set by hand on both processes
+  # The two outputs must be bit for bit equal (all variables, tolerance 0): the
+  # replay's alphas depend on liquid_vapor_formulation, ice_vapor_formulation (isocam3
+  # differs for HDO only) and diffusivity_formulation (kinetic is on), so a copy
+  # missing in the driver would change the results. The other three options
+  # (standard_ratio_formulation, ocean_enrichment_formulation,
+  # kinetic_fractionation_formulation) are read by water_tracer_transfers but do
+  # not enter its results (they act on the tracers' initial and ocean ratios and
+  # on the ocean flux, in water_tracers): a missing copy of those is NOT visible
+  # in the outputs, and only the negative tests below cover them (a mismatch
+  # must stop the run). The checks here are conservation and positivity; the
+  # alpha check is left out, since it assumes the default formulations.
+  set (ISO_OPT_LIST
+    "liquid_vapor_formulation: majoube_1971"
+    "ice_vapor_formulation: isocam3"
+    "diffusivity_formulation: cappa_2003"
+    "kinetic_fractionation_formulation: none")
+  function (wtt_iso_opts out indent)
+    set (txt)
+    foreach (o ${ARGN})
+      string (APPEND txt "${indent}${o}\n")
+    endforeach()
+    string (REGEX REPLACE "\n$" "" txt "${txt}")
+    set (${out} "${txt}" PARENT_SCOPE)
+  endfunction()
+
+  set (SURF_EVAP 1.5e-6)
+  set (OCNFRAC   0.5)
+  set (OCN_SSQ   0.01)
+  foreach (v link_iso link_iso_manual)
+    wtt_iso_opts (WTRC_ISO_OPTS "    " ${ISO_OPT_LIST})
+    if (v STREQUAL link_iso)
+      set (XFER_ISO_OPTS "")
+    else()
+      wtt_iso_opts (XFER_ISO_OPTS "      " ${ISO_OPT_LIST})
+    endif()
+    set (OUT_YAML output_${v}.yaml)
+    set (OUT_PREFIX shoc_cld_p3_wtt_${v}_output)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/input_link_iso.yaml ${CMAKE_CURRENT_BINARY_DIR}/input_${v}.yaml)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/output_iso.yaml ${CMAKE_CURRENT_BINARY_DIR}/output_${v}.yaml)
+    CreateUnitTestFromExec(shoc_cld_p3_wtt_${v} shoc_cld_p3_water_tracer_transfers
+      EXE_ARGS "--args -ifile=input_${v}.yaml"
+      LABELS shoc cld p3 water_tracers water_isotopes physics
+      FIXTURES_SETUP shoc_cld_p3_wtt_${v})
+  endforeach()
+  set (link_iso_nc        shoc_cld_p3_wtt_link_iso_output.INSTANT.nsteps_x1.np1.${RUN_T0}.nc)
+  set (link_iso_manual_nc shoc_cld_p3_wtt_link_iso_manual_output.INSTANT.nsteps_x1.np1.${RUN_T0}.nc)
+  add_test (NAME shoc_cld_p3_wtt_link_iso_check
+    COMMAND ${WTT_ISO_CHECK} -f ${link_iso_nc}
+      --tracer wtrc_hdo=HDO wtrc_o18=H218O --reference wtrc_t
+      --stages-header ${SCREAM_SRC_DIR}/physics/shoc/shoc_water_transfers.hpp
+      --p3-header ${SCREAM_SRC_DIR}/physics/p3/p3_water_transfers.hpp
+      --stage-T-header ${SCREAM_SRC_DIR}/physics/specialized_tracers/water_tracers/eamxx_water_tracer_transfers_functions.hpp
+      --dt ${ATM_TIME_STEP} --dt-p3 ${MAC_DT}
+      --rtol-budget ${WTT_RTOL} --neg-rtol ${WTT_RTOL}
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+  # every output field (compare-nc-files without -c would also compare 'time', which it cannot)
+  set (iso_link_fields)
+  file (STRINGS ${CMAKE_CURRENT_SOURCE_DIR}/output_iso.yaml iso_out_lines REGEX "^  - ")
+  foreach (l ${iso_out_lines})
+    string (REGEX REPLACE "^  - +" "" f "${l}")
+    list (APPEND iso_link_fields "${f}=${f}")
+  endforeach()
+  add_test (NAME shoc_cld_p3_wtt_link_iso_bfb
+    COMMAND ${SCREAM_BASE_DIR}/scripts/compare-nc-files -s ${link_iso_nc} -t ${link_iso_manual_nc} -tol 0
+      -c ${iso_link_fields}
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+  set_tests_properties (shoc_cld_p3_wtt_link_iso_check PROPERTIES
+    LABELS "shoc;cld;p3;water_tracers;water_isotopes;physics"
+    FIXTURES_REQUIRED shoc_cld_p3_wtt_link_iso)
+  set_tests_properties (shoc_cld_p3_wtt_link_iso_bfb PROPERTIES
+    LABELS "shoc;cld;p3;water_tracers;water_isotopes;physics"
+    FIXTURES_REQUIRED "shoc_cld_p3_wtt_link_iso;shoc_cld_p3_wtt_link_iso_manual")
+
+  # negative tests: an isotope option set on both processes, to different values,
+  # must stop the run in the link. One per kind: an option that changes the
+  # replay's results (ice_vapor_formulation) and one that does not
+  # (ocean_enrichment_formulation).
+  foreach (c ice_vapor ocean_enrichment)
+    if (c STREQUAL ice_vapor)
+      set (WTRC_ISO_OPTS "    ice_vapor_formulation: isocam3")
+      set (XFER_ISO_OPTS "      ice_vapor_formulation: merlivat_nief_1967")
+      set (WTT_NEG_REGEX_iso_${c} "'water_tracer_transfers::ice_vapor_formulation'[ \n]+\\(merlivat_nief_1967\\)[ \n]+differs[ \n]+from[ \n]+'water_tracers::ice_vapor_formulation'[ \n]+\\(isocam3\\)")
+    else()
+      set (WTRC_ISO_OPTS "    ocean_enrichment_formulation: LGM")
+      set (XFER_ISO_OPTS "      ocean_enrichment_formulation: modern")
+      set (WTT_NEG_REGEX_iso_${c} "'water_tracer_transfers::ocean_enrichment_formulation'[ \n]+\\(modern\\)[ \n]+differs[ \n]+from[ \n]+'water_tracers::ocean_enrichment_formulation'[ \n]+\\(LGM\\)")
+    endif()
+    set (OUT_YAML output_link_iso.yaml)
+    set (OUT_PREFIX shoc_cld_p3_wtt_link_iso_neg_output)
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/input_link_iso.yaml ${CMAKE_CURRENT_BINARY_DIR}/input_neg_iso_${c}.yaml)
+    CreateUnitTestFromExec(wtt_link_neg_iso_${c} shoc_cld_p3_water_tracer_transfers
+      EXE_ARGS "--args -ifile=input_neg_iso_${c}.yaml"
+      LABELS water_tracers water_isotopes physics)
+    set_tests_properties (wtt_link_neg_iso_${c} PROPERTIES
+      PASS_REGULAR_EXPRESSION "${WTT_NEG_REGEX_iso_${c}}")
   endforeach()
 endif()
