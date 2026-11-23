@@ -1,0 +1,8 @@
+%YAML 1.1
+---
+# Uniform ratios: R = 1 must follow bulk water exactly, and every transfer
+# preserves R = 0.5.
+tracers:
+  wtrc_t:    {type: generic, init: ratio, r_init: 1}
+  wtrc_half: {type: generic, init: ratio, r_init: 0.5}
+...

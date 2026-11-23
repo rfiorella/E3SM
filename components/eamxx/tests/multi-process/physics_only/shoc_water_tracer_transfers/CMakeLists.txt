@@ -39,6 +39,7 @@ add_test (NAME shoc_water_tracer_transfers_check
     --stages-header ${SCREAM_SRC_DIR}/physics/shoc/shoc_water_transfers.hpp
     --phases-header ${SCREAM_SRC_DIR}/physics/specialized_tracers/water_tracers/eamxx_water_tracers_registry.hpp
     --tracer wtrc_t=1 wtrc_half=0.5
+    --exact-qr-qi
     --rtol ${WTT_RTOL}
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 set_tests_properties (shoc_water_tracer_transfers_check PROPERTIES
