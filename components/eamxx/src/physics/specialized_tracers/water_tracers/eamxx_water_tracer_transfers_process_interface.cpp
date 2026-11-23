@@ -152,6 +152,15 @@ void WaterTracerTransfers::create_requests ()
   }
   add_field<Required>("pseudo_density", scalar3d_mid, Pa, grid_name, ps);
 
+  // The temperature at the start of each replayed stage, rebuilt from T_mid
+  // (see water_tracers::stage_temperatures). P3's part2 stage needs P3's dry basis.
+  add_field<Required>("T_mid", scalar3d_mid, K, grid_name, ps);
+  if (m_replay_p3) {
+    add_field<Required>("pseudo_density_dry", scalar3d_mid, Pa, grid_name, ps);
+  }
+  const auto stage_T_layout = m_grid->get_3d_vector_layout(LEV, wt::TransferStage::Count, "water_transfer_stage");
+  add_field<Computed>("water_transfer_stage_T", stage_T_layout, K, grid_name, ps);
+
   // Bulk water after each SHOC stage (exported by SHOC in builds with water tracers)
   if (m_replay_shoc) {
     const auto stages_layout = m_grid->get_3d_vector_layout(LEV, shoc::WaterStage::Count, "shoc_water_stage");
@@ -203,14 +212,89 @@ void WaterTracerTransfers::create_requests ()
 }
 
 // =========================================================================================
+void WaterTracerTransfers::initialize_impl (const RunType /* run_type */)
+{
+  // Stages that are not replayed hold the fill value, so output marks them as missing
+  if (not (m_replay_shoc and m_replay_p3)) {
+    get_field_out("water_transfer_stage_T", m_grid->name()).get_header().set_may_be_filled(true);
+  }
+}
+
+// =========================================================================================
 void WaterTracerTransfers::run_impl (const double dt)
 {
+  rebuild_stage_temperatures(dt);
   if (m_replay_shoc) {
     replay_shoc();
   }
   if (m_replay_p3) {
     replay_p3(dt);
   }
+}
+
+// =========================================================================================
+void WaterTracerTransfers::rebuild_stage_temperatures (const Real dt)
+{
+  using MDPolicy = Kokkos::MDRangePolicy<KT::ExeSpace, Kokkos::Rank<2>>;
+  using WS = shoc::WaterStage;
+  using TS = wt::TransferStage;
+
+  const auto& gn = m_grid->name();
+  const int nlev = m_num_levs;
+  const int nlev_packs = ekat::npack<Pack>(nlev);
+  const MDPolicy policy({0, 0}, {m_num_cols, nlev_packs});
+
+  const auto T_mid   = get_field_in("T_mid", gn).get_view<const Pack**>();
+  const auto stage_T = get_field_out("water_transfer_stage_T", gn).get_view<Pack***>();
+
+  const bool replay_shoc = m_replay_shoc;
+  const bool replay_p3   = m_replay_p3;
+  Field::view_dev_t<const Pack***> stages, xfer;
+  Field::view_dev_t<const Pack**>  dp, dp_dry;
+  if (replay_shoc) {
+    stages = get_field_in("shoc_water_stages", gn).get_view<const Pack***>();
+  }
+  if (replay_p3) {
+    xfer   = get_field_in("p3_water_transfers", gn).get_view<const Pack***>();
+    dp     = get_field_in("pseudo_density", gn).get_view<const Pack**>();
+    dp_dry = get_field_in("pseudo_density_dry", gn).get_view<const Pack**>();
+  }
+
+  // P3's heating table, captured by value
+  const auto phases = p3::water_transfer_phases();
+
+  Kokkos::parallel_for("water_tracer_transfers_stage_T", policy,
+                       KOKKOS_LAMBDA(const int icol, const int k) {
+    // Padded lanes past the last level are read as `pad` (never what the
+    // fields hold there), so the math cannot trap
+    const auto in_range = ekat::range<IntPack>(k*Pack::n) < nlev;
+    const auto get = [&] (const auto& x, const Real pad) {
+      Pack y(pad);
+      y.set(in_range, x);
+      return y;
+    };
+
+    Pack shoc_cond(0);
+    if (replay_shoc) {
+      shoc_cond = get(stages(icol, WS::LiquidAfterCondensation, k), 0)
+                - get(stages(icol, WS::LiquidAfterTransport,    k), 0);
+    }
+    Pack wet_to_dry(1);
+    if (replay_p3) {
+      wet_to_dry = get(dp(icol, k), 1)/get(dp_dry(icol, k), 1);
+    }
+    // Mass moved by a P3 component over the call [kg/kg] (the exports are rates)
+    const auto p3_amount = [&] (const int cmp) {
+      return get(xfer(icol, cmp, k), 0)*dt;
+    };
+
+    Pack T[TS::Count];
+    wt::stage_temperatures(get(T_mid(icol, k), 0), replay_shoc, shoc_cond, replay_p3, phases,
+                           p3_amount, wet_to_dry, T);
+    for (int s=0; s<TS::Count; ++s) {
+      stage_T(icol, s, k) = T[s];
+    }
+  });
 }
 
 // =========================================================================================

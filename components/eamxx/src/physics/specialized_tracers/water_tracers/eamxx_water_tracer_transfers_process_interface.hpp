@@ -68,6 +68,13 @@ namespace scream
  * <tracer>_precip_{liq,ice}_surf_mass accumulate the tracer's sedimentation
  * out of the lowest level (cloud + rain, and ice) [kg/m2], like P3's
  * precip_{liq,ice}_surf_mass; the driver zeroes them at each atm step.
+ *
+ * water_transfer_stage_T is the temperature at the start of each replayed
+ * stage [K], in water_tracers::TransferStage order, rebuilt once per call
+ * (not per tracer) from T_mid and the exports (see
+ * water_tracers::stage_temperatures). Nothing between SHOC and this process
+ * other than P3 may change T_mid; the driver checks it. Stages that are not
+ * replayed hold water_tracers::stage_T_fill. The tracers do not use it yet.
  */
 
 class WaterTracerTransfers : public AtmosphereProcess
@@ -91,11 +98,12 @@ protected:
 public:
 #endif
 
-  void initialize_impl (const RunType /* run_type */) override {}
+  void initialize_impl (const RunType /* run_type */) override;
   void run_impl        (const double dt) override;
   void finalize_impl   () override {}
 
   // Steps of run_impl
+  void rebuild_stage_temperatures (const Real dt);
   void replay_shoc ();
   void replay_p3 (const Real dt);
 

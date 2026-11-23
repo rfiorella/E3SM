@@ -33,10 +33,36 @@ the previous slice; with no surface fluxes only transport changes them); for
 P3, transfers in at least --min-p3-transfers components of
 p3_water_transfers, rain and ice sedimentation, and surface precipitation.
 
+With --stage-T-header, water_transfer_stage_T (the temperature at the start
+of each replayed stage, rebuilt from T_mid and the exports; needs T_mid and,
+with P3, pseudo_density_dry in the output) is checked, to --T-rtol relative
+to T_mid. Stages that are not replayed must hold the fill value. The
+heating of each p3_water_transfers component is taken from its name (C2V:
+cloud liquid to vapor, so -LatVap/cp per kg/kg), not from the code's table.
+  - P3, independent (--T-from-previous-slice; only valid if nothing but P3
+    changes T_mid, as in a P3-only run without subcycling): P3Entry must be
+    the previous slice's T_mid. This checks the rebuild against P3's own
+    temperature, so a wrong heating table or a heating P3 applies but does
+    not export (incl. the clips and homogeneous freezing, which no unit test
+    reaches) shows here.
+  - P3, bookkeeping: P3Entry = T_mid - sum_k L_k*rate_k*dt/cp, and P3Part2 -
+    P3Entry = the part1 clips' heating times pseudo_density/pseudo_density_dry
+    (P3's dry basis). Only checks that the code's table matches the names
+    and that the stages are assembled as documented.
+  - SHOC, bookkeeping only: ShocAfterTransport = T_after_SHOC -
+    (LatVap/cp)*(LiquidAfterCondensation - LiquidAfterTransport), with
+    T_after_SHOC = P3Entry with P3, else T_mid. No SHOC output holds the
+    temperature after transport, so nothing independent is available; the
+    physics rests on reading the code: shoc_main sets dse from
+    thl/inv_exner + (LatVap/cp)*ql (shoc_update_host_dse_impl.hpp), thl is
+    only read by the condensation (shoc_assumed_pdf, shoc_main_impl.hpp), and
+    SHOCPostprocess sets T_mid from dse (eamxx_shoc_process_interface.hpp).
+
 Enum orders are read from shoc_water_transfers.hpp (WaterStage),
-p3_water_transfers.hpp (WaterTransfer, SedFlux) and
-eamxx_water_tracers_registry.hpp (WaterPhase), so this script cannot drift
-from the code.
+p3_water_transfers.hpp (WaterTransfer, SedFlux),
+eamxx_water_tracers_registry.hpp (WaterPhase) and
+eamxx_water_tracer_transfers_functions.hpp (TransferStage), so this script
+cannot drift from the code.
 """
 
 import argparse, pathlib, re, sys
@@ -53,6 +79,14 @@ BULK = {"Vapor": "qv", "CloudLiquid": "qc", "Rain": "qr", "Ice": "qi"}
 EXACT = ["qr", "qi"]
 PRECIP = ["precip_liq_surf_mass", "precip_ice_surf_mass"]
 GRAVIT = 9.80616  # m/s2, physics::Constants::gravit
+LATVAP = 2501000.0  # J/kg, physics::Constants::LatVap
+LATICE = 333700.0   # J/kg, physics::Constants::LatIce
+CP     = 1004.64    # J/kg/K, physics::Constants::CP
+# Latent enthalpy relative to vapor [J/kg] of the phase each letter of a
+# p3_water_transfers component name stands for (C2V: cloud liquid to vapor)
+ENTHALPY = {"V": 0.0, "C": LATVAP, "R": LATVAP, "I": LATVAP + LATICE}
+# constants::fill_value<Real>: float max / 1e5, computed in float
+FILL = float(np.float32(np.finfo(np.float32).max) / np.float32(1e5))
 
 ###############################################################################
 def read_enum(header, enum_re):
@@ -160,6 +194,75 @@ def check_nonvacuous_p3(ds, t, transfers, sed, min_transfers):
     return ok
 
 ###############################################################################
+def report_T(label, a, b, T, rtol):
+###############################################################################
+    diff = np.abs(a - b)
+    rel = diff / T
+    nbad = int(np.sum(rel > rtol))
+    print(f"    {label}: max |diff| = {np.max(diff):.3e} K, max |diff|/T = {np.max(rel):.3e}, "
+          f"points over tol = {nbad}")
+    return nbad == 0
+
+###############################################################################
+def transfer_heating(names):
+###############################################################################
+    # Heating per unit mass moved by each p3_water_transfers component, from
+    # its name: (H(to) - H(from))/cp [K per kg/kg]
+    heating = {}
+    for n in names:
+        m = re.search(r"([VCRI])2([VCRI])$", n)
+        expect(m is not None, f"Cannot tell the phases of p3_water_transfers component {n}")
+        heating[n] = (ENTHALPY[m.group(2)] - ENTHALPY[m.group(1)]) / CP
+    return heating
+
+###############################################################################
+def check_stage_temperatures(ds, t, names, transfers, stages, dt, from_previous, rtol):
+###############################################################################
+    # transfers/stages: the WaterTransfer/WaterStage names if P3/SHOC is
+    # replayed, else None
+    T_stage = components(ds, "water_transfer_stage_T", t, names)
+    T = np.asarray(ds["T_mid"][t])
+    ok = True
+
+    # Stages that are not replayed hold the fill value
+    filled = ([] if stages else ["ShocAfterTransport"]) + ([] if transfers else ["P3Entry", "P3Part2"])
+    for s in filled:
+        nbad = int(np.sum(T_stage[s] != FILL))
+        print(f"    water_transfer_stage_T[{s}] (not replayed): points not the fill value = {nbad}")
+        ok &= nbad == 0
+
+    if transfers:
+        rate = components(ds, "p3_water_transfers", t, transfers)
+        heat = transfer_heating(transfers)
+        heating = sum(heat[n] * rate[n] * dt for n in transfers)
+        part1 = sum(heat[n] * rate[n] * dt for n in transfers if n.startswith("Part1"))
+        wet_to_dry = np.asarray(ds["pseudo_density"][t]) / np.asarray(ds["pseudo_density_dry"][t])
+        print(f"    P3 heating over its last call: max |T_mid - P3Entry| = "
+              f"{np.max(np.abs(T - T_stage['P3Entry'])):.3e} K; part1 clips: "
+              f"max |P3Part2 - P3Entry| = {np.max(np.abs(T_stage['P3Part2'] - T_stage['P3Entry'])):.3e} K "
+              f"at {int(np.sum(part1 != 0))} points")
+        if from_previous:
+            ok &= report_T("P3Entry vs previous slice's T_mid (independent)", T_stage["P3Entry"],
+                           np.asarray(ds["T_mid"][t-1]), T, rtol)
+        ok &= report_T("P3Entry vs T_mid - P3 heating (bookkeeping)", T_stage["P3Entry"],
+                       T - heating, T, rtol)
+        ok &= report_T("P3Part2 - P3Entry vs part1 clip heating (bookkeeping)",
+                       T_stage["P3Part2"] - T_stage["P3Entry"], part1 * wet_to_dry, T, rtol)
+
+    if stages:
+        stage = components(ds, "shoc_water_stages", t, stages)
+        cond = stage["LiquidAfterCondensation"] - stage["LiquidAfterTransport"]
+        T_after_shoc = T_stage["P3Entry"] if transfers else T
+        print(f"    SHOC condensation heating: max |T_after_SHOC - ShocAfterTransport| = "
+              f"{np.max(np.abs(T_after_shoc - T_stage['ShocAfterTransport'])):.3e} K")
+        ok &= report_T("ShocAfterTransport vs T_after_SHOC - (LatVap/cp)*cond (bookkeeping)",
+                       T_stage["ShocAfterTransport"], T_after_shoc - LATVAP / CP * cond, T, rtol)
+
+    if not ok:
+        print("    ERROR: water_transfer_stage_T is not the rebuilt stage temperature")
+    return ok
+
+###############################################################################
 def main():
 ###############################################################################
     parser = argparse.ArgumentParser(description=__doc__,
@@ -178,8 +281,20 @@ def main():
                         help="require R = 1 tracers' qr and qi to match bulk bit for bit (SHOC alone)")
     parser.add_argument("--min-p3-transfers", type=int, default=1,
                         help="P3 transfer components that must be nonzero in every step")
+    parser.add_argument("--stage-T-header",
+                        help="path to eamxx_water_tracer_transfers_functions.hpp: check water_transfer_stage_T")
+    parser.add_argument("--dt", type=float,
+                        help="dt of the last P3 call of a step [s] (needed by the stage-T checks with P3)")
+    parser.add_argument("--T-from-previous-slice", action="store_true",
+                        help="nothing but P3 changes T_mid: P3Entry must be the previous slice's T_mid")
+    parser.add_argument("--T-rtol", type=float, default=1e-13,
+                        help="tolerance of the stage-T checks, relative to T_mid")
     args = parser.parse_args()
     expect(args.stages_header or args.p3_header, "Need --stages-header and/or --p3-header")
+    expect(not (args.stage_T_header and args.p3_header) or args.dt,
+           "The stage-T checks with P3 need --dt")
+    expect(not args.T_from_previous_slice or (args.stage_T_header and args.p3_header),
+           "--T-from-previous-slice needs --stage-T-header and --p3-header")
 
     phases = read_enum(args.phases_header, r"enum\s+class\s+WaterPhase")
     expect(sorted(phases) == sorted(BULK), f"Unexpected WaterPhase {phases}")
@@ -189,6 +304,10 @@ def main():
         transfers = read_enum(args.p3_header, r"struct\s+WaterTransfer\s*\{\s*enum\s*:\s*int")
         sed = read_enum(args.p3_header, r"struct\s+SedFlux\s*\{\s*enum\s*:\s*int")
         expect(sed == ["CloudLiquid", "Rain", "Ice"], f"Unexpected SedFlux {sed}")
+    if args.stage_T_header:
+        stage_T_names = read_enum(args.stage_T_header, r"struct\s+TransferStage\s*\{\s*enum\s*:\s*int")
+        expect(sorted(stage_T_names) == sorted(["ShocAfterTransport", "P3Entry", "P3Part2"]),
+               f"Unexpected TransferStage {stage_T_names}")
     exact = EXACT if args.exact_qr_qi else []
 
     tracers = {}
@@ -197,6 +316,8 @@ def main():
         tracers[name] = float(ratio)
 
     ds = Dataset(args.file, "r")
+    # Read the fill value of stages that are not replayed as it is
+    ds.set_auto_mask(False)
     nt = ds.dimensions["time"].size
     expect(nt >= 2, "Need the t0 slice and at least one step")
 
@@ -211,6 +332,12 @@ def main():
                                              transport=not args.p3_header)
         if t > 0 and args.p3_header:
             success &= check_nonvacuous_p3(ds, t, transfers, sed, args.min_p3_transfers)
+        if t > 0 and args.stage_T_header:
+            print("  water_transfer_stage_T")
+            success &= check_stage_temperatures(
+                ds, t, stage_T_names,
+                transfers if args.p3_header else None, stages if args.stages_header else None,
+                args.dt, args.T_from_previous_slice, args.T_rtol)
 
         for name, ratio in tracers.items():
             print(f"  {name} (R = {ratio})")

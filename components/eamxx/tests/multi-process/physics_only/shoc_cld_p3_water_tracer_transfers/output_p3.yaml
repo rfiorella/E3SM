@@ -13,6 +13,8 @@ field_names:
   - qr
   - qi
   - pseudo_density
+  - pseudo_density_dry
+  - T_mid
   - precip_liq_surf_mass
   - precip_ice_surf_mass
   - wtrc_t_qv
@@ -31,6 +33,7 @@ field_names:
   - wtrc_half_residual_p3
   - p3_water_transfers
   - p3_sed_flux
+  - water_transfer_stage_T
 output_control:
   frequency: 1
   frequency_units: nsteps

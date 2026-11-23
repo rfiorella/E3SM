@@ -3,8 +3,30 @@
 
 #include "eamxx_water_tracers_functions.hpp"  // tracer_ratio
 
+#include "physics/p3/p3_water_transfers.hpp"
+#include "share/physics/physics_constants.hpp"
+#include "share/util/eamxx_universal_constants.hpp"
+
 namespace scream {
 namespace water_tracers {
+
+/*
+ * Components of the water_tracer_transfers field water_transfer_stage_T: the
+ * temperature at the start of each replayed stage [K] (see
+ * stage_temperatures). A stage that is not replayed holds stage_T_fill.
+ */
+struct TransferStage {
+enum : int {
+  ShocAfterTransport,  // SHOC after its turbulent transport, before its condensation
+  P3Entry,             // P3's entry state
+  P3Part2,             // P3 after its part1 clips: the state its part2 rates are computed from
+  Count
+};
+};
+
+// water_transfer_stage_T of a stage that is not replayed [K]: EAMxx's fill
+// value, which output files mark as missing (_FillValue)
+static constexpr Real stage_T_fill = constants::fill_value<Real>;
 
 /*
  * Device-callable transfers of the water_tracer_transfers process, one
@@ -165,6 +187,98 @@ KOKKOS_INLINE_FUNCTION
 ScalarT vapor_repair (const ScalarT& tr_v, const ScalarT& q_v, const ScalarT& amount)
 {
   return amount*tracer_ratio(tr_v, q_v);
+}
+
+// -----------------------------------------------------------------------
+// The temperature at the start of each replayed stage [K] (TransferStage
+// order), rebuilt from the temperature now and the exports. SHOC and P3
+// export no temperature, but both heat linearly in the water they move, so
+// their heating can be undone. Stages that are not replayed get stage_T_fill.
+//
+//   T_now        T_mid now [K]: after P3 when P3 is replayed, otherwise after
+//                SHOC (nothing between them and this process may change T_mid;
+//                the driver checks it)
+//   shoc_cond    SHOC's net condensation, LiquidAfterCondensation minus
+//                LiquidAfterTransport of shoc_water_stages [kg/kg, wet]
+//   phases       P3's heating table (p3::water_transfer_phases)
+//   p3_amount    p3_amount(cmp): mass moved by p3_water_transfers component
+//                cmp over the P3 call, rate*dt [kg/kg, wet]
+//   wet_to_dry   pseudo_density/pseudo_density_dry [-]
+//
+// P3. Each transfer heats theta by inv_exner*(H(to) - H(from))*m_dry/cp,
+// with m_dry the mass moved on P3's dry basis (see p3::WaterTransferPhases).
+// The P3 interface then rescales the call's dT by dp_dry/dp
+// (eamxx_p3_process_interface.hpp, p3_postamble), the factor that also turns
+// m_dry into the exported wet amount m. Hence
+//   T_P3Entry = T_now - sum_k (H(to_k) - H(from_k))*m_k/cp
+// over all components. P3 computes its part2 rates from its temperature after
+// the part1 clips, whose heating is not rescaled (it is on the dry basis):
+//   T_P3Part2 = T_P3Entry + sum_{part1 clips} (H(to_k) - H(from_k))*m_k*wet_to_dry/cp
+//
+// SHOC. shoc_main sets dse from T = thl/inv_exner + (LatVap/cp)*ql
+// (update_host_dse), and the SHOC interface sets T_mid from that dse; thl is
+// not changed by SHOC's condensation (shoc_assumed_pdf only reads it). The
+// temperature with the liquid after transport is therefore
+//   T_ShocAfterTransport = T_after_shoc - (LatVap/cp)*shoc_cond
+// with T_after_shoc = T_P3Entry when P3 is replayed, else T_now. It includes
+// SHOC's energy fixer, which corrects dse after update_host_dse and is not
+// exported separately.
+//
+// cp, LatVap and LatIce are the constants P3 and SHOC use. In the
+// water_tracer_transfers tests (dt = 300 s), |T_now - T_P3Entry| reaches
+// 0.8 K, |T_P3Part2 - T_P3Entry| 3e-5 K and SHOC's condensation heating 1.5 K.
+// -----------------------------------------------------------------------
+template <typename ScalarT, typename AmountFn>
+KOKKOS_INLINE_FUNCTION
+void stage_temperatures (const ScalarT& T_now,
+                         const bool replay_shoc, const ScalarT& shoc_cond,
+                         const bool replay_p3, const p3::WaterTransferPhases& phases,
+                         const AmountFn& p3_amount, const ScalarT& wet_to_dry,
+                         ScalarT (&T)[TransferStage::Count])
+{
+  using RealT = typename ekat::ScalarTraits<ScalarT>::scalar_type;
+  using C  = physics::Constants<RealT>;
+  using TS = TransferStage;
+  using WT = p3::WaterTransfer;
+  using WE = p3::WaterEntry;
+  static_assert(WT::Part1ClipC2V == 0 && WT::Part1ClipI2R == 3,
+                "The part1 clips must be the first four WaterTransfer components.");
+
+  constexpr RealT latvap = C::LatVap.value;  // [J/kg]
+  constexpr RealT latice = C::LatIce.value;  // [J/kg]
+  constexpr RealT cp     = C::CP.value;      // [J/kg/K]
+  constexpr RealT inv_cp = C::INV_CP.value;  // [kg K/J]
+  // Local copy: on CUDA, device code may not bind a reference to a
+  // namespace-scope variable (assigning it to a Pack would)
+  constexpr RealT fill   = stage_T_fill;
+
+  // Latent enthalpy of a phase relative to vapor [J/kg]
+  const auto H = [&] (const int phase) -> RealT {
+    return phase==WE::Vapor ? RealT(0) : (phase==WE::Ice ? latvap + latice : latvap);
+  };
+
+  T[TS::P3Entry] = fill;
+  T[TS::P3Part2] = fill;
+  ScalarT T_after_shoc = T_now;
+  if (replay_p3) {
+    // P3's heating over the call, and over its part1 clips [K]
+    ScalarT heating(0), part1_heating(0);
+    for (int cmp=0; cmp<WT::Count; ++cmp) {
+      const ScalarT dT = (H(phases.to[cmp]) - H(phases.from[cmp]))*p3_amount(cmp)*inv_cp;
+      heating += dT;
+      if (cmp <= WT::Part1ClipI2R) {
+        part1_heating += dT;
+      }
+    }
+    T[TS::P3Entry] = T_now - heating;
+    T[TS::P3Part2] = T[TS::P3Entry] + part1_heating*wet_to_dry;
+    T_after_shoc   = T[TS::P3Entry];
+  }
+
+  T[TS::ShocAfterTransport] = fill;
+  if (replay_shoc) {
+    T[TS::ShocAfterTransport] = T_after_shoc - (latvap/cp)*shoc_cond;
+  }
 }
 
 } // namespace water_tracers

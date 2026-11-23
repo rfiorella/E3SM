@@ -3,16 +3,20 @@ include (ScreamUtils)
 # water_tracers + water_tracer_transfers with the P3 replay: tracers with a
 # uniform ratio R to bulk water must keep it through P3's clips, process
 # rates, sedimentation and homogeneous freezing, in every phase and in the
-# surface precipitation (see check_water_tracer_transfers.py). Two runs:
-#  - p3 only:  [water_tracers, p3, water_tracer_transfers], no SHOC replay
+# surface precipitation (see check_water_tracer_transfers.py). The rebuilt
+# stage temperatures (water_transfer_stage_T) are checked too. Two runs:
+#  - p3 only:  [water_tracers, p3, water_tracer_transfers], no SHOC replay.
+#              Nothing but P3 changes T_mid, so the rebuilt P3 entry
+#              temperature must be the previous step's T_mid.
 #  - mac:      [water_tracers, mac], mac = [shoc, cld_fraction, p3,
 #              water_tracer_transfers] subcycled, both replays
 # and the driver link (AtmosphereDriver::setup_water_tracer_transfer_links):
 #  - link:     the mac run with no water_tracers_file for the transfers; the
 #              link must copy it. Same checks, same numbers.
 #  - neg_*:    mis-configured trees that the link must reject during init
-#              (incl. water_tracers after shoc, and SHOC's flux fixer on: SHOC
-#              applies the tracer surface fluxes).
+#              (incl. water_tracers after shoc, SHOC's flux fixer on: SHOC
+#              applies the tracer surface fluxes, and a process between SHOC
+#              and P3 that updates T_mid).
 CreateADUnitTestExec(shoc_cld_p3_water_tracer_transfers LIBS shoc cld_fraction p3 water_tracers)
 
 # Ensure test input files are present in the data dir
@@ -28,9 +32,9 @@ set (ATM_TIME_STEP 1800)
 set (MAC_SUBCYCLES 6)
 
 set (WTT_NEG_CASES order group nowtrc subcycle wtrc_after_shoc fixer)
-# These two need a process that updates bulk water, which no linked physics does:
+# These need a process that updates bulk water or T_mid, which no linked physics does:
 # wtt_link_modifier_test.cpp adds a test-only one (wtt_dummy_modifier) to the driver test
-set (WTT_NEG_MOD_CASES modifier_qc modifier_group)
+set (WTT_NEG_MOD_CASES modifier_qc modifier_group modifier_T)
 set (WTT_NEG_inputs)
 foreach (c ${WTT_NEG_CASES} ${WTT_NEG_MOD_CASES})
   list (APPEND WTT_NEG_inputs input_neg_${c}.yaml)
@@ -80,17 +84,24 @@ endforeach()
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tracers.yaml
                ${CMAKE_CURRENT_BINARY_DIR}/tracers.yaml COPYONLY)
 
-# Tolerance of the roundoff checks, relative to the total water at a point
+# Tolerance of the roundoff checks, relative to the total water at a point,
+# and of the stage temperature checks, relative to T_mid
 if (SCREAM_DOUBLE_PRECISION)
   set (WTT_RTOL 1e-12)
+  set (WTT_T_RTOL 1e-13)
 else()
   set (WTT_RTOL 1e-5)
+  set (WTT_T_RTOL 1e-5)
 endif()
+# dt of P3's calls in the mac runs
+math (EXPR MAC_DT "${ATM_TIME_STEP}/${MAC_SUBCYCLES}")
 
 set (WTT_CHECK ${CMAKE_CURRENT_SOURCE_DIR}/../shoc_water_tracer_transfers/check_water_tracer_transfers.py)
 set (WTT_HEADERS
   --phases-header ${SCREAM_SRC_DIR}/physics/specialized_tracers/water_tracers/eamxx_water_tracers_registry.hpp
-  --p3-header ${SCREAM_SRC_DIR}/physics/p3/p3_water_transfers.hpp)
+  --p3-header ${SCREAM_SRC_DIR}/physics/p3/p3_water_transfers.hpp
+  --stage-T-header ${SCREAM_SRC_DIR}/physics/specialized_tracers/water_tracers/eamxx_water_tracer_transfers_functions.hpp
+  --T-rtol ${WTT_T_RTOL})
 
 # p3 only
 CreateUnitTestFromExec(p3_water_tracer_transfers shoc_cld_p3_water_tracer_transfers
@@ -104,6 +115,8 @@ add_test (NAME p3_water_tracer_transfers_check
     --tracer wtrc_t=1 wtrc_half=0.5
     --min-p3-transfers 8
     --rtol ${WTT_RTOL}
+    --dt ${P3_TIME_STEP}
+    --T-from-previous-slice
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 set_tests_properties (p3_water_tracer_transfers_check PROPERTIES
   LABELS "p3;water_tracers;physics"
@@ -122,6 +135,7 @@ add_test (NAME shoc_cld_p3_water_tracer_transfers_check
     --tracer wtrc_t=1 wtrc_half=0.5
     --min-p3-transfers 8
     --rtol ${WTT_RTOL}
+    --dt ${MAC_DT}
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 set_tests_properties (shoc_cld_p3_water_tracer_transfers_check PROPERTIES
   LABELS "shoc;cld;p3;water_tracers;physics"
@@ -141,6 +155,7 @@ add_test (NAME shoc_cld_p3_water_tracer_transfers_evap_check
     --tracer wtrc_t=1 wtrc_half=0.5
     --min-p3-transfers 8
     --rtol ${WTT_RTOL}
+    --dt ${MAC_DT}
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 set_tests_properties (shoc_cld_p3_water_tracer_transfers_evap_check PROPERTIES
   LABELS "shoc;cld;p3;water_tracers;physics"
@@ -159,6 +174,7 @@ add_test (NAME shoc_cld_p3_wtt_link_check
     --tracer wtrc_t=1 wtrc_half=0.5
     --min-p3-transfers 8
     --rtol ${WTT_RTOL}
+    --dt ${MAC_DT}
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 set_tests_properties (shoc_cld_p3_wtt_link_check PROPERTIES
   LABELS "shoc;cld;p3;water_tracers;physics"
@@ -177,6 +193,7 @@ add_test (NAME shoc_cld_p3_wtt_link_evap_check
     --tracer wtrc_t=1 wtrc_half=0.5
     --min-p3-transfers 8
     --rtol ${WTT_RTOL}
+    --dt ${MAC_DT}
   WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 set_tests_properties (shoc_cld_p3_wtt_link_evap_check PROPERTIES
   LABELS "shoc;cld;p3;water_tracers;physics"
@@ -193,6 +210,7 @@ set (WTT_NEG_REGEX_wtrc_after_shoc "Process 'water_tracers' must come BEFORE[ \n
 set (WTT_NEG_REGEX_fixer  "'shoc::check_flux_state_consistency'[ \n]+is[ \n]+true,[ \n]+but[ \n]+SHOC[ \n]+applies[ \n]+the[ \n]+water[ \n]+tracer[ \n]+surface[ \n]+fluxes")
 set (WTT_NEG_REGEX_modifier_qc    "'wtt_dummy_modifier' in group 'mac' updates bulk water field[ \n]+'qc' between SHOC/P3")
 set (WTT_NEG_REGEX_modifier_group "'wtt_dummy_modifier' in group 'mac' updates the group[ \n]+'tracers' between SHOC/P3")
+set (WTT_NEG_REGEX_modifier_T     "'wtt_dummy_modifier'[ \n]+in[ \n]+group[ \n]+'mac'[ \n]+updates[ \n]+'T_mid'[ \n]+between[ \n]+SHOC/P3")
 foreach (c ${WTT_NEG_CASES} ${WTT_NEG_MOD_CASES})
   set (neg_exe shoc_cld_p3_water_tracer_transfers)
   if (c IN_LIST WTT_NEG_MOD_CASES)
