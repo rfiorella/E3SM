@@ -1,10 +1,12 @@
 #include "eamxx_water_tracers_process_interface.hpp"
 #include "eamxx_water_tracers_functions.hpp"
 #include "../water_isotopes/eamxx_water_isotopes_fractionation.hpp"
+#include "../water_isotopes/eamxx_water_isotopes_kinetic.hpp"
 
 #include "share/physics/eamxx_common_physics_functions.hpp"
 
 #include <ekat_assert.hpp>
+#include <ekat_kernel_assert.hpp>
 #include <ekat_pack.hpp>
 #include <ekat_units.hpp>
 
@@ -129,6 +131,7 @@ void WaterTracers::create_requests ()
 
   m_sfc_f     = KT::view_1d<Real>("water_tracers_sfc_f",     m_num_cols);
   m_sfc_rho   = KT::view_1d<Real>("water_tracers_sfc_rho",   m_num_cols);
+  m_sfc_zbot  = KT::view_1d<Real>("water_tracers_sfc_zbot",  m_num_cols);
   m_sfc_ustar = KT::view_1d<Real>("water_tracers_sfc_ustar", m_num_cols);
   m_sfc_re    = KT::view_1d<Real>("water_tracers_sfc_re",    m_num_cols);
   m_sfc_ssq   = KT::view_1d<Real>("water_tracers_sfc_ssq",   m_num_cols);
@@ -208,6 +211,7 @@ void WaterTracers::compute_bulk_state ()
 
   const auto sfc_f     = m_sfc_f;
   const auto sfc_rho   = m_sfc_rho;
+  const auto sfc_zbot  = m_sfc_zbot;
   const auto sfc_ustar = m_sfc_ustar;
   const auto sfc_re    = m_sfc_re;
   const auto sfc_ssq   = m_sfc_ssq;
@@ -225,6 +229,9 @@ void WaterTracers::compute_bulk_state ()
 
     sfc_f(icol)     = f[0];
     sfc_rho(icol)   = rho;
+    // Bottom-level midpoint height, == the exporter's Sa_z (z_mid with
+    // z_surf = 0) bit-for-bit, since z_mid(kbot) = (dz + 0)/2.
+    sfc_zbot(icol)  = 0.5*dz;
     sfc_ustar(icol) = u[0];
     sfc_re(icol)    = r[0];
     sfc_ssq(icol)   = s[0];
@@ -247,6 +254,7 @@ void WaterTracers::compute_tracer_fluxes ()
   // Local copies, so the lambda captures views and values rather than `this`.
   const auto sfc_f     = m_sfc_f;
   const auto sfc_rho   = m_sfc_rho;
+  const auto sfc_zbot  = m_sfc_zbot;
   const auto sfc_ustar = m_sfc_ustar;
   const auto sfc_re    = m_sfc_re;
   const auto sfc_ssq   = m_sfc_ssq;
@@ -264,8 +272,8 @@ void WaterTracers::compute_tracer_fluxes ()
     const Real r_ocn  = spec.r_ocn;
     const Real r_land = spec.r_land;
 
-    // Only isotopes fractionate; every other tracer uses alpha = 1. The
-    // species is unused unless fractionates is true.
+    // Only isotopes fractionate; every other tracer uses alpha = alpkn = 1.
+    // The species is unused unless fractionates is true.
     const bool fractionates = spec.type==water_tracers::TracerType::Isotope;
     const auto species = fractionates ? water_isotopes::WaterIsotopes::species(spec)
                                       : water_isotopes::WaterIsotopologues::H216O;
@@ -273,16 +281,25 @@ void WaterTracers::compute_tracer_fluxes ()
     Kokkos::parallel_for("water_tracers_ocean_flux_" + spec.name, KT::RangePolicy(0, m_num_cols),
                          KOKKOS_LAMBDA(const int icol) {
       const Pack1 f(sfc_f(icol)), e(sfc_evap(icol));
-      Pack1 alpha(1);
+      Pack1 alpha(1), alpkn(1);
       if (fractionates) {
+        const auto evap = wt::is_evaporating(f, e);
         alpha = water_isotopes::WaterIsotopeFractionation::alpha_liquid_vapor(
             Pack1(sst(icol)), species, water_isotopes::CondensedOverVapor, iso_params,
-            wt::is_evaporating(f, e));
+            evap);
+        alpkn = water_isotopes::WaterIsotopeKinetic::alpha_kinetic(
+            Pack1(sfc_rho(icol)), Pack1(sfc_zbot(icol)), Pack1(sfc_ustar(icol)),
+            species, iso_params, evap);
+        // No low-wind clamp, as in the Fortran: alpkn leaves (0,1] only for
+        // ustar*zbot below ~9e-6 m2/s, which the coupler's wind floor rules
+        // out. Debug builds check it.
+        EKAT_KERNEL_ASSERT_MSG(((alpkn > 0 && alpkn <= 1) || !evap).all(),
+            "water_tracers: kinetic fractionation factor alpkn outside (0,1]");
       }
       const Pack1 f_i = wt::surface_tracer_flux(kind, r_ocn, r_land,
           f, Pack1(sfc_rho(icol)), Pack1(sfc_ustar(icol)), Pack1(sfc_re(icol)),
           Pack1(sfc_ssq(icol)), Pack1(qv(icol, kbot)), Pack1(q_i(icol, kbot)),
-          Pack1(surf_evap(icol)), e, alpha);
+          Pack1(surf_evap(icol)), e, alpha, alpkn);
       flux(icol) = f_i[0];
     });
   }

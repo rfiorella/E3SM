@@ -703,7 +703,8 @@ void AtmosphereDriver::setup_water_tracer_transfer_links ()
   // unless set explicitly (and consistently)
   const auto& wtrc_pl = wtrc.proc->get_params();
   for (const std::string key : {"water_tracers_file", "liquid_vapor_formulation", "ice_vapor_formulation",
-                                "standard_ratio_formulation", "ocean_enrichment_formulation"}) {
+                                "standard_ratio_formulation", "ocean_enrichment_formulation",
+                                "kinetic_fractionation_formulation", "diffusivity_formulation"}) {
     const std::string wtrc_val = wtrc_pl.isParameter(key) ? wtrc_pl.get<std::string>(key) : "";
     const std::string xfer_val = xfer_pl.isParameter(key) ? xfer_pl.get<std::string>(key) : "";
     if (xfer_val=="") {

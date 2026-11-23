@@ -63,6 +63,22 @@ For `bulk_proportional` tracers, when both parts evaporate, the flux is formed a
 bottom-level concentration, so they do not close exactly against `surf_evap`
 (they do, to roundoff, for R = 1); their land part is the same.
 
+For isotopes, the ocean part also carries two fractionation factors: the
+equilibrium factor alpha_l at the SST, and the kinetic factor alpkn of
+evaporation into the boundary layer (a port of iCAM's `wiso_kmol`: Brutsaert
+(1975) resistances with the Merlivat & Jouzel (1979) kinetic modifier, a
+smooth or rough regime from the surface Reynolds number). Two options of
+`water_tracers` control alpkn:
+
+* `kinetic_fractionation_formulation`: `brutsaert_merlivat_jouzel_1979`
+  (default) or `none` (alpkn = 1);
+* `diffusivity_formulation`: the molecular diffusivity ratios it uses,
+  `merlivat_1978` (default) or `cappa_2003`.
+
+alpkn lies in (0, 1] for ustar times the bottom-level height above about
+1e-5 m2/s; there is no low-wind guard, as in the Fortran (debug builds check
+the range). The land and sea-ice part never fractionates.
+
 ## The two processes
 
 * `water_tracers` registers the fields, sets their initial conditions and
@@ -82,7 +98,8 @@ Parameters of `water_tracer_transfers`:
 * `replay_shoc`, `replay_p3` (default true): which sources to replay.
 * `water_tracers_file`: copied from `water_tracers` when unset.
 * `liquid_vapor_formulation`, `ice_vapor_formulation`,
-  `standard_ratio_formulation`, `ocean_enrichment_formulation`: the isotope
+  `standard_ratio_formulation`, `ocean_enrichment_formulation`,
+  `kinetic_fractionation_formulation`, `diffusivity_formulation`: the isotope
   options, copied from `water_tracers` when unset (and an error if set to a
   different value), so both processes use the same fractionation factors.
 * `alpha_override` (test only, not in the namelist defaults; default 0, off):
