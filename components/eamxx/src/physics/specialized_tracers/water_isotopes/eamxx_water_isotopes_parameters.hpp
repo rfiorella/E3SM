@@ -161,14 +161,32 @@ struct WaterIsotopeParameters
   // Active parameters (runtime-selected)
   // -----------------------------------------------------------------------
 
-  // Model standard isotope ratios
+  // Model standard isotope ratios, in WaterIsotopologues order (H216O, HDO,
+  // H218O, H217O, HTO). Row 0 is the default, normalized so that every standard
+  // ratio is 1. Row 1 is natural abundance (only used with
+  // standard_ratio_formulation: natural_abundance):
+  //  - H216O 0.9976: 16O fraction of oxygen (E3SM: SHR_CONST_VSMOW_16O, 0.997628).
+  //  - HDO 155.76e-6: D/H of VSMOW per hydrogen ATOM (E3SM: SHR_CONST_VSMOW_D),
+  //    not the HDO/H2O molecule ratio, which is twice as large. water_isotopes.F90
+  //    uses the same number and the same convention for its diffusivity ratios.
+  //  - H218O 2005.20e-6: 18O/16O of VSMOW (E3SM: SHR_CONST_VSMOW_18O).
+  //  - H217O 379.9e-6: 17O/16O of VSMOW as commonly quoted (E3SM's
+  //    SHR_CONST_VSMOW_17O is the rounded 379.e-6). The 402.00e-6 in
+  //    water_isotopes.F90 has no documented source and is not used here.
+  //  - HTO 1.0 is a placeholder: natural tritium has no meaningful standard
+  //    ratio in these units. (water_isotopes.F90's 77.88e-6 is exactly half of
+  //    its HDO value, and E3SM's SHR_CONST_VSMOW_T is 1.85e-6 3H/1H.)
   static constexpr Scalar StandardIsotopeRatio_table
       [etoi(StandardRatioFormulation::FormulationCount)][num_species] = {
         { 1.0,       1.0,        1.0,      1.0, 1.0 }, // Normalized by VSMOW
         { 0.9976, 155.76e-6, 2005.20e-6, 379.9e-6, 1.0 } // natural abundance
   };
 
-  // Ocean surface enrichment
+  // Ocean surface enrichment, same species order. Row 0 is modern (no
+  // enrichment). Row 1 is the Last Glacial Maximum, from the commented-out
+  // LGM line of water_isotopes.F90 (HDO 1.0128, H218O 1.0016, H217O 1.0008).
+  // HTO stays 1.0: no LGM enrichment is defined for tritium here. (That line also
+  // has 1.00671 in the HTO slot, which is not used.)
   static constexpr Scalar SurfaceOceanEnrichment_table
     [etoi(OceanEnrichmentFormulation::FormulationCount)][num_species] = {
       { 1.0,    1.0,    1.0,    1.0, 1.0 }, // Modern VSMOW
