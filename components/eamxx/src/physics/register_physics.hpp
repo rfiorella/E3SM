@@ -55,6 +55,7 @@
 #endif
 #ifdef EAMXX_HAS_WATER_TRACERS
 #include "physics/specialized_tracers/water_tracers/eamxx_water_tracers_process_interface.hpp"
+#include "physics/specialized_tracers/water_tracers/eamxx_water_tracer_transfers_process_interface.hpp"
 #endif
 
 namespace scream {
@@ -111,6 +112,7 @@ inline void register_physics () {
 #endif
 #ifdef EAMXX_HAS_WATER_TRACERS
   proc_factory.register_product("water_tracers",&create_atmosphere_process<WaterTracers>);
+  proc_factory.register_product("water_tracer_transfers",&create_atmosphere_process<WaterTracerTransfers>);
 #endif
 
   // If no physics was enabled, silence compile warning about unused var
