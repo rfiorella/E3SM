@@ -13,15 +13,17 @@
 namespace scream
 {
 /*
- * Water tracers: extra water species that follow qv through the model.
+ * Water tracers: extra water species that follow the bulk water (qv, qc, qr,
+ * qi) through the model.
  *
  * The tracers are defined in a YAML file (the water_tracers_file parameter; see
- * eamxx_water_tracers_registry.hpp). Each one is registered as an advected
- * tracer <name> [kg/kg], plus a diagnostic <name>_surf_flux [kg/m2/s], the
- * upward ocean evaporation flux of that tracer. The flux is computed every
- * step from the ocean bulk state imported from the coupler (ocn_ssq, ocn_re,
- * ocn_ustar) and the bottom-level atmosphere, and is NOT applied to anything:
- * this process never changes qv or a tracer after initialization.
+ * eamxx_water_tracers_registry.hpp). Each one is registered as four advected
+ * tracers <name>_qv, <name>_qc, <name>_qr, <name>_qi [kg/kg], one per bulk
+ * water phase, plus a diagnostic <name>_surf_flux [kg/m2/s], the upward ocean
+ * evaporation flux of the vapor tracer. The flux is computed every step from
+ * the ocean bulk state imported from the coupler (ocn_ssq, ocn_re, ocn_ustar)
+ * and the bottom-level atmosphere, and is NOT applied to anything: this
+ * process never changes bulk water or a tracer after initialization.
  *
  * Tracer kinds: generic (bulk_proportional or bulk_formula) and isotopes.
  * Isotope entries are only accepted when EAMXX_HAS_WATER_ISOTOPES is
@@ -57,7 +59,8 @@ public:
   void compute_bulk_state ();
   void compute_tracer_fluxes ();
 
-  // Sets q = r_init*q_ref for every init: ratio tracer on the given grid
+  // Sets every phase of every init: ratio tracer to r_init times its bulk
+  // phase (e.g. <name>_qc = r_init*qc) on the given grid
   void apply_ratio_initial_conditions (const std::string& grid_name);
 
 protected:
@@ -84,7 +87,7 @@ protected:
   //  - m_sfc_rho: bottom-level air density [kg/m3]
   //  - m_sfc_evap: E_ocn = bulk_ocean_flux(f,rho,u,r,s,q) [kg/m2/s], upward
   //    positive, exactly 0 where the ocean state is not valid
-  // compute_tracer_fluxes reads qv and sst from their fields directly.
+  // compute_tracer_fluxes reads qv, <name>_qv and sst from their fields directly.
   KT::view_1d<Real> m_sfc_f, m_sfc_rho, m_sfc_ustar, m_sfc_re, m_sfc_ssq,
                     m_sfc_evap;
 

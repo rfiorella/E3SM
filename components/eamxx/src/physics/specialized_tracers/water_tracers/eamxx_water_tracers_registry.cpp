@@ -158,6 +158,24 @@ TracerSpec parse_entry (const std::string& path, const std::string& name,
 
 } // anonymous namespace
 
+std::string bulk_field_name (const WaterPhase phase)
+{
+  switch (phase) {
+    case WaterPhase::Vapor:       return "qv";
+    case WaterPhase::CloudLiquid: return "qc";
+    case WaterPhase::Rain:        return "qr";
+    case WaterPhase::Ice:         return "qi";
+    default: break;
+  }
+  EKAT_ERROR_MSG("Error! Invalid WaterPhase " + std::to_string(etoi(phase)) + ".\n");
+  return "";  // unreachable; silences -Wreturn-type warning
+}
+
+std::string phase_field_name (const std::string& name, const WaterPhase phase)
+{
+  return name + "_" + bulk_field_name(phase);
+}
+
 std::vector<TracerSpec> parse_tracers_file (const std::string& path,
                                             const RegistryOptions& opts)
 {

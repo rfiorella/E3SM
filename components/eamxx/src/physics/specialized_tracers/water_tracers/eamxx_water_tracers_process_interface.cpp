@@ -60,8 +60,13 @@ void WaterTracers::create_requests ()
   const auto scalar2d     = m_grid->get_2d_scalar_layout();
   const auto scalar3d_mid = m_grid->get_3d_scalar_layout(LEV);
 
-  // Bottom-level atmosphere state (for qv and the air density)
-  add_tracer<Required>("qv", m_grid, kg/kg, ps);
+  // Bulk water: qv for the bottom-level state, and every phase for the
+  // init: ratio initial conditions
+  for (const auto phase : wt::water_phases) {
+    add_tracer<Required>(wt::bulk_field_name(phase), m_grid, kg/kg, ps);
+  }
+
+  // Bottom-level atmosphere state (for the air density)
   add_field<Required>("T_mid",          scalar3d_mid, K,  grid_name, ps);
   add_field<Required>("p_mid",          scalar3d_mid, Pa, grid_name, ps);
   add_field<Required>("pseudo_density", scalar3d_mid, Pa, grid_name, ps);
@@ -73,11 +78,15 @@ void WaterTracers::create_requests ()
   add_field<Required>("ocn_re",    scalar2d, none,  grid_name);
   add_field<Required>("ocn_ustar", scalar2d, m/s,   grid_name);
 
-  // The tracers and their diagnostic ocean fluxes. The flux group is not used
-  // yet; it is where a later process will find the fluxes to apply.
+  // The tracers (one field per phase) and their diagnostic ocean fluxes. The
+  // flux group is not used yet; it is where a later process will find the
+  // fluxes to apply.
   bool any_ratio_init = false;
   for (const auto& spec : m_specs) {
-    add_tracer<Updated>(spec.name, m_grid, kg/kg, ps, TracerAdvection::DynamicsAndTurbulence);
+    for (const auto phase : wt::water_phases) {
+      add_tracer<Updated>(wt::phase_field_name(spec.name, phase), m_grid, kg/kg, ps,
+                          TracerAdvection::DynamicsAndTurbulence);
+    }
     add_field<Computed>(spec.name + "_surf_flux", scalar2d, kg/m2/s, grid_name, "tracer_surface_fluxes");
     any_ratio_init |= spec.init==water_tracers::InitType::Ratio;
   }
@@ -92,7 +101,7 @@ void WaterTracers::create_requests ()
   // check_water_tracers_init_order, eamxx_buildnml.py), so on pgN its qv is
   // still unset during initialize_impl, and anything it wrote to its pgN
   // tracers would be overwritten by homme's remap.
-  // Hence, in a pgN run we also request qv and the tracers on physics_gll, set
+  // Hence, in a pgN run we also request bulk water and the tracers on physics_gll, set
   // the init: ratio tracers there (see initialize_impl), and homme carries
   // them to the dynamics grid and to pgN, like every other tracer IC. The
   // field manager accepts a tracer registered on both physics grids, and the
@@ -104,9 +113,12 @@ void WaterTracers::create_requests ()
   // physics takes the direct path.
   if (any_ratio_init and m_grids_manager->has_grid("physics_gll") and grid_name!="physics_gll") {
     m_ic_grid = m_grids_manager->get_grid("physics_gll");
-    add_tracer<Required>("qv", m_ic_grid, kg/kg, ps);
-    for (const auto& spec : m_specs) {
-      add_tracer<Updated>(spec.name, m_ic_grid, kg/kg, ps, TracerAdvection::DynamicsAndTurbulence);
+    for (const auto phase : wt::water_phases) {
+      add_tracer<Required>(wt::bulk_field_name(phase), m_ic_grid, kg/kg, ps);
+      for (const auto& spec : m_specs) {
+        add_tracer<Updated>(wt::phase_field_name(spec.name, phase), m_ic_grid, kg/kg, ps,
+                            TracerAdvection::DynamicsAndTurbulence);
+      }
     }
   }
 
@@ -129,9 +141,11 @@ void WaterTracers::initialize_impl (const RunType run_type)
 
   if (m_ic_grid) {
     const auto& ic_grid_name = m_ic_grid->name();
-    remove_field("qv", ic_grid_name);
-    for (const auto& spec : m_specs) {
-      remove_field(spec.name, ic_grid_name);
+    for (const auto phase : wt::water_phases) {
+      remove_field(wt::bulk_field_name(phase), ic_grid_name);
+      for (const auto& spec : m_specs) {
+        remove_field(wt::phase_field_name(spec.name, phase), ic_grid_name);
+      }
     }
   }
 }
@@ -144,15 +158,19 @@ void WaterTracers::apply_ratio_initial_conditions (const std::string& grid_name)
   const auto grid = m_grids_manager->get_grid(grid_name);
   const MDPolicy policy({0, 0}, {grid->get_num_local_dofs(), grid->get_num_vertical_levels()});
 
-  const auto q_v = get_field_in("qv", grid_name).get_view<const Real**>();
-  for (const auto& spec : m_specs) {
-    if (spec.init!=water_tracers::InitType::Ratio) continue;
-    const auto q = get_field_out(spec.name, grid_name).get_view<Real**>();
-    const Real r_init = spec.r_init;
-    Kokkos::parallel_for("water_tracers_ratio_ic_" + spec.name, policy,
-                         KOKKOS_LAMBDA(const int icol, const int ilev) {
-      q(icol, ilev) = r_init*q_v(icol, ilev);
-    });
+  // Every phase of the tracer starts with the same ratio to its bulk phase
+  for (const auto phase : wt::water_phases) {
+    const auto q_bulk = get_field_in(wt::bulk_field_name(phase), grid_name).get_view<const Real**>();
+    for (const auto& spec : m_specs) {
+      if (spec.init!=water_tracers::InitType::Ratio) continue;
+      const auto name = wt::phase_field_name(spec.name, phase);
+      const auto q = get_field_out(name, grid_name).get_view<Real**>();
+      const Real r_init = spec.r_init;
+      Kokkos::parallel_for("water_tracers_ratio_ic_" + name, policy,
+                           KOKKOS_LAMBDA(const int icol, const int ilev) {
+        q(icol, ilev) = r_init*q_bulk(icol, ilev);
+      });
+    }
   }
   Kokkos::fence();
 }
@@ -232,7 +250,8 @@ void WaterTracers::compute_tracer_fluxes ()
   // One kernel per tracer: tracers are few, their number is only known at
   // runtime, and each reads and writes its own fields.
   for (const auto& spec : m_specs) {
-    const auto q_i  = get_field_in(spec.name, gn).get_view<const Real**>();
+    const auto q_i  = get_field_in(wt::phase_field_name(spec.name, wt::WaterPhase::Vapor), gn)
+                        .get_view<const Real**>();
     const auto flux = get_field_out(spec.name + "_surf_flux", gn).get_view<Real*>();
     const auto kind  = spec.ocean_flux;
     const Real r_ocn = spec.r_ocn;

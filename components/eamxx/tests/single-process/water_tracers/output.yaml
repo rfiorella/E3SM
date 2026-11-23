@@ -5,9 +5,15 @@ averaging_type: instant
 field_names:
   - wtrc_bp_surf_flux
   - wtrc_bf_surf_flux
-  - wtrc_bp
-  - wtrc_bf
+  - wtrc_bp_qv
+  - wtrc_bf_qv
+  - wtrc_bf_qc
+  - wtrc_bf_qr
+  - wtrc_bf_qi
   - qv
+  - qc
+  - qr
+  - qi
 output_control:
   frequency: 1
   frequency_units: nsteps

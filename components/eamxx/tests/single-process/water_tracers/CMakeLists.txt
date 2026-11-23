@@ -7,6 +7,8 @@ include (ScreamUtils)
 set (NUM_STEPS 2)
 set (ATM_TIME_STEP 1800)
 set (RUN_T0 2021-10-12-45000)
+# output.yaml skips the t0 output, so the output file is stamped one step later
+set (FIRST_OUTPUT_T 2021-10-12-46800)
 
 CreateADUnitTestExec(water_tracers_standalone LIBS water_tracers)
 
@@ -21,7 +23,19 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/tracers_generic.yaml
                ${CMAKE_CURRENT_BINARY_DIR}/tracers_generic.yaml COPYONLY)
 CreateUnitTestFromExec(water_tracers_standalone water_tracers_standalone
   EXE_ARGS "--args -ifile=input_${POSTFIX}.yaml"
-  LABELS water_tracers physics)
+  LABELS water_tracers physics
+  FIXTURES_SETUP water_tracers_standalone_generic)
+
+# wtrc_bf has init: ratio and r_init = r_ocn = 1, and nothing changes it after
+# initialization, so every phase must equal its bulk phase.
+add_test (NAME water_tracers_standalone_phase_ic_check
+          COMMAND ${SCREAM_BASE_DIR}/scripts/compare-nc-files
+          -s water_tracers_standalone_output_generic.INSTANT.nsteps_x1.np1.${FIRST_OUTPUT_T}.nc
+          -c "wtrc_bf_qv=qv" "wtrc_bf_qc=qc" "wtrc_bf_qr=qr" "wtrc_bf_qi=qi"
+          WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
+set_tests_properties (water_tracers_standalone_phase_ic_check PROPERTIES
+          LABELS "water_tracers;physics"
+          FIXTURES_REQUIRED water_tracers_standalone_generic)
 
 if (EAMXX_ENABLE_WATER_ISOTOPES)
   # Same tracers, plus isotope entries in the same file/process.

@@ -86,5 +86,15 @@ TEST_CASE("registry_errors") {
   REQUIRE_THROWS_WITH(wt::parse_tracers_file(notmap, no_iso), Contains("must be a map"));
 }
 
+TEST_CASE("registry_phase_names") {
+  REQUIRE(wt::bulk_field_name(wt::WaterPhase::Vapor)       == "qv");
+  REQUIRE(wt::bulk_field_name(wt::WaterPhase::CloudLiquid) == "qc");
+  REQUIRE(wt::bulk_field_name(wt::WaterPhase::Rain)        == "qr");
+  REQUIRE(wt::bulk_field_name(wt::WaterPhase::Ice)         == "qi");
+  REQUIRE(wt::phase_field_name("wtrc_hdo", wt::WaterPhase::Vapor) == "wtrc_hdo_qv");
+  REQUIRE(wt::phase_field_name("wtrc_hdo", wt::WaterPhase::Ice)   == "wtrc_hdo_qi");
+  REQUIRE_THROWS(wt::bulk_field_name(wt::WaterPhase::Count));
+}
+
 } // anonymous namespace
 } // namespace scream
