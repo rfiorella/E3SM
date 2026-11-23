@@ -29,8 +29,9 @@ public:
   // EAMXX_HAS_WATER_ISOTOPES is true.
   static void enable (water_tracers::RegistryOptions& opts);
 
-  // Reads the runtime formulation options from the process's parameters.
-  // with no isotope tracers these options are just never read.
+  // Reads the runtime formulation options from the process's parameters
+  // (water_tracers, and water_tracer_transfers, to which the driver copies
+  // them). With no isotope tracers these options are just never used.
   void configure (ekat::ParameterList& params);
 
   // Completes every Isotope spec: r_ocn (and the default r_init and r_land) from the

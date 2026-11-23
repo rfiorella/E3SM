@@ -1,0 +1,48 @@
+%YAML 1.1
+---
+# What check_water_isotope_transfers.py (and, for alpha_override = 1,
+# check_water_tracer_transfers.py) needs. Slice 0 is the initial state (t0
+# output); every later slice follows one atm step.
+filename_prefix: ${OUT_PREFIX}
+averaging_type: instant
+# The budgets and the bit-for-bit comparisons need the output in Real
+floating_point_precision: real
+field_names:
+  - qv
+  - qc
+  - qr
+  - qi
+  - pseudo_density
+  - pseudo_density_dry
+  - T_mid
+  - precip_liq_surf_mass
+  - precip_ice_surf_mass
+  - wtrc_t_qv
+  - wtrc_t_qc
+  - wtrc_t_qr
+  - wtrc_t_qi
+  - wtrc_t_precip_liq_surf_mass
+  - wtrc_t_precip_ice_surf_mass
+  - wtrc_t_residual_p3
+  - wtrc_hdo_qv
+  - wtrc_hdo_qc
+  - wtrc_hdo_qr
+  - wtrc_hdo_qi
+  - wtrc_hdo_precip_liq_surf_mass
+  - wtrc_hdo_precip_ice_surf_mass
+  - wtrc_hdo_residual_p3
+  - wtrc_o18_qv
+  - wtrc_o18_qc
+  - wtrc_o18_qr
+  - wtrc_o18_qi
+  - wtrc_o18_precip_liq_surf_mass
+  - wtrc_o18_precip_ice_surf_mass
+  - wtrc_o18_residual_p3
+  - p3_water_transfers
+  - p3_sed_flux
+  - water_transfer_stage_T
+  - water_transfer_alpha_extrapolations
+output_control:
+  frequency: 1
+  frequency_units: nsteps
+...

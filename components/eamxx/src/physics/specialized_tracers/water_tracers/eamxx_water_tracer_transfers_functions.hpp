@@ -7,6 +7,9 @@
 #include "share/physics/physics_constants.hpp"
 #include "share/util/eamxx_universal_constants.hpp"
 
+#include <ekat_pack.hpp>
+#include <ekat_pack_math.hpp>  // ekat::expm1, ekat::abs; Kokkos::log1p
+
 namespace scream {
 namespace water_tracers {
 
@@ -29,101 +32,210 @@ enum : int {
 static constexpr Real stage_T_fill = constants::fill_value<Real>;
 
 /*
- * Device-callable transfers of the water_tracer_transfers process, one
- * function per class of bulk water transfer, so that each class can get its
- * own fractionation factor later.
+ * Device-callable transfers of the water_tracer_transfers process. Same
+ * ScalarT convention as eamxx_water_tracers_functions.hpp (an ekat::Pack;
+ * every division, log and comparison that could see a zero is masked, so
+ * these are FPE-safe).
  *
- * Each function takes the donor phase's tracer and bulk water, and the bulk
- * mass moved out of the donor phase, and returns the tracer mass moved
- * [kg/kg]. Same ScalarT convention as eamxx_water_tracers_functions.hpp (an
- * ekat::Pack; tracer_ratio masks dry donors, so these are FPE-safe).
+ * Every replayed phase change moves tracer out of a donor phase through
+ * donor_transfers, with one fractionation factor per sink,
+ *   beta = R_sink/R_donor,
+ * the ratio of what the sink removes to the donor's own tracer ratio. Each
+ * class of bulk water transfer gets its beta from one function below
+ * (shoc_condensation_beta, part2_beta). Only isotope tracers fractionate;
+ * every other tracer has beta = 1 for every class, which donor_transfers
+ * turns into the linear transfer it has always had, bit for bit.
+ *
+ * The betas are equilibrium factors (no kinetic effect), from
+ *   alpha_l = R_liquid/R_vapor and alpha_i = R_ice/R_vapor
+ * (water_isotopes::WisoAlphaDir CondensedOverVapor) at the temperature at the
+ * start of the stage (water_transfer_stage_T).
  */
 
-// -----------------------------------------------------------------------
-// SHOC's net condensation `amount`: > 0 moves vapor to cloud liquid (the
-// donor is vapor), < 0 moves cloud liquid to vapor (the donor is cloud
-// liquid, and the result has the sign of amount too).
-// -----------------------------------------------------------------------
-template <typename ScalarT>
-KOKKOS_INLINE_FUNCTION
-ScalarT shoc_condensation (const ScalarT& tr_donor, const ScalarT& q_donor, const ScalarT& amount)
-{
-  // alpha = 1: the tracer moves at the donor's ratio. This is where the
-  // liquid/vapor fractionation factor of SHOC's phase change goes.
-  return amount*tracer_ratio(tr_donor, q_donor);
-}
+// Bounds of beta in donor_transfers. The equilibrium alphas of the water
+// isotopologues are within [0.5, 2] at any temperature of the atmosphere, but
+// the fits are extrapolated outside their fitted range (to 50 K at worst,
+// where water_isotopes::check_temperature stops the run) and can return values
+// far from that there; the bounds only keep the Rayleigh step finite and
+// positive for whatever they return.
+static constexpr Real fractionation_beta_min = 1.e-6;
+static constexpr Real fractionation_beta_max = 1.e6;
 
 // -----------------------------------------------------------------------
-// P3 process rates (the Part2* components of p3_water_transfers). The donor
-// is the mass available to the donor phase over the P3 call (its post-part1
-// reservoir plus its part2 inflows; see replay_p3), and amount = rate*dt >= 0
-// is the bulk mass moved [kg/kg].
+// The tracer moved out of one donor phase by its sinks [kg/kg].
+//
+//   tr_d, q_d  the donor's tracer and bulk water available to the sinks
+//              (its reservoir, plus its inflows in P3's part2 stage)
+//   amount[k]  bulk mass moved by sink k [kg/kg], >= 0; 0 for an idle sink,
+//              or for an entry that is not a sink of this donor
+//   beta[k]    sink k's fractionation factor, R_sink/R_donor
+//   moved[k]   on return, the tracer moved by sink k [kg/kg]
+//
+// Lanes where every beta is exactly 1 (every lane of a non-fractionating
+// tracer) get the linear transfer,
+//   moved[k] = amount[k]*tracer_ratio(tr_d, q_d),
+// bit for bit as before fractionation.
+//
+// Elsewhere the sinks act together as a Rayleigh distillation of the donor.
+// While the sinks, in fixed proportions, remove dq from the donor's bulk
+// water q, sink k removes tracer at beta_k times the donor's ratio at that
+// moment, so
+//   d(tr) = beta_eff*(tr/q)*dq,   beta_eff = sum_k amount_k*beta_k / A,
+//   A = sum_k amount_k,
+// and integrating from q_d to q_d - A (the Rayleigh law R/R_0 =
+// f^(beta-1); e.g. Gat 1996, Annu. Rev. Earth Planet. Sci. 24, 225-262;
+// Mook 2000, Environmental Isotopes in the Hydrological Cycle, vol. I)
+//   tr_left = tr_d*f^beta_eff,   f = (q_d - A)/q_d.
+// The tracer moved, tr_d*(1 - f^beta_eff), is split among the sinks in
+// proportion to amount_k*beta_k. This
+//  - is the linear transfer at beta = 1, to roundoff;
+//  - cannot overdraw the donor or strand tracer in it: f is clamped to [0, 1],
+//    so the total moved is between 0 and tr_d, and all of tr_d leaves when
+//    A >= q_d (and, if A > 0, when q_d < water_tracers_qmin: a donor without
+//    bulk water keeps no tracer);
+//  - does not depend on the order of the sinks, and moves the same tracer in
+//    one step as in several (f multiplies).
+// 1 - f^beta_eff is formed as -expm1(beta_eff*log1p(-A/q_d)), which keeps full
+// precision when A << q_d. Each beta is clamped to [fractionation_beta_min,
+// fractionation_beta_max] first.
+//
+// Returns the lanes that took the Rayleigh path.
 // -----------------------------------------------------------------------
-
-// Vapor deposition and deposition/condensation-freezing nucleation (v -> i)
-template <typename ScalarT>
+template <typename ScalarT, int N>
 KOKKOS_INLINE_FUNCTION
-ScalarT ice_deposition (const ScalarT& tr_v, const ScalarT& q_v, const ScalarT& amount)
+ekat::Mask<ScalarT::n> donor_transfers (const ScalarT& tr_d, const ScalarT& q_d,
+                                        const ScalarT (&amount)[N], const ScalarT (&beta)[N],
+                                        ScalarT (&moved)[N])
 {
-  // alpha = 1. This is where the vapor/ice fractionation factor goes, with
-  // its kinetic effect in supersaturation (Jouzel & Merlivat 1984).
-  return amount*tracer_ratio(tr_v, q_v);
+  using RealT = typename ekat::ScalarTraits<ScalarT>::scalar_type;
+  using Mask  = ekat::Mask<ScalarT::n>;
+
+  // Local copies: on CUDA, device code may not bind a reference to a
+  // namespace-scope variable (passing one to a Pack function would)
+  constexpr RealT qmin  = water_tracers_qmin;
+  constexpr RealT b_min = fractionation_beta_min;
+  constexpr RealT b_max = fractionation_beta_max;
+  constexpr RealT zero  = 0;
+  constexpr RealT one   = 1;
+
+  // The linear transfer, at the donor's ratio
+  const ScalarT ratio = tracer_ratio(tr_d, q_d);
+  Mask rayleigh(false);
+  for (int k=0; k<N; ++k) {
+    moved[k] = amount[k]*ratio;
+    rayleigh = rayleigh || (beta[k] != one);
+  }
+  if (not rayleigh.any()) {
+    return rayleigh;
+  }
+
+  // Total sink A and its beta-weighted sum S = beta_eff*A [kg/kg]
+  ScalarT A(0), S(0), weight[N];
+  for (int k=0; k<N; ++k) {
+    weight[k] = amount[k]*ekat::min(ekat::max(beta[k], b_min), b_max);
+    A += amount[k];
+    S += weight[k];
+  }
+  const Mask sinks = A > zero;  // S > 0 there too
+  const Mask wet   = q_d >= qmin;
+
+  // Fraction of the donor's bulk water removed, x = 1 - f = A/q_d in [0, 1]
+  // (1 for a dry donor)
+  ScalarT q_safe = q_d;
+  q_safe.set(!wet, one);
+  ScalarT x = ekat::min(A/q_safe, one);
+  x.set(!wet, one);
+
+  // Fraction of the donor's tracer removed, F = 1 - f^beta_eff, for 0 <= x < 1
+  const Mask partial = sinks && x < one;
+  ScalarT A_safe = A, S_safe = S, x_safe = x;
+  A_safe.set(!sinks, one);
+  S_safe.set(!sinks, one);
+  x_safe.set(!partial, zero);
+  ScalarT log_f;
+  for (int s=0; s<ScalarT::n; ++s) {
+    log_f[s] = Kokkos::log1p(-x_safe[s]);
+  }
+  ScalarT F = -ekat::expm1((S_safe/A_safe)*log_f);
+  F.set(sinks && !partial, one);  // the sinks take all of the donor
+  F.set(!sinks, zero);
+
+  const ScalarT total = tr_d*F;
+  for (int k=0; k<N; ++k) {
+    moved[k].set(rayleigh, total*(weight[k]/S_safe));
+  }
+  return rayleigh;
 }
 
-// Sublimation (i -> v)
+// -----------------------------------------------------------------------
+// SHOC's net condensation `amount` [kg/kg]: > 0 moves vapor to cloud liquid
+// (the donor is vapor), < 0 moves cloud liquid to vapor (the donor is cloud
+// liquid). Returns the tracer moved, with the sign of amount.
+// -----------------------------------------------------------------------
 template <typename ScalarT>
 KOKKOS_INLINE_FUNCTION
-ScalarT ice_sublimation (const ScalarT& tr_i, const ScalarT& q_i, const ScalarT& amount)
+ScalarT shoc_condensation (const ScalarT& tr_donor, const ScalarT& q_donor, const ScalarT& amount,
+                           const ScalarT& beta)
 {
-  // alpha = 1. This is where a sublimation factor goes, if any.
-  return amount*tracer_ratio(tr_i, q_i);
+  using RealT = typename ekat::ScalarTraits<ScalarT>::scalar_type;
+
+  const ScalarT a[1] = { ekat::abs(amount) };
+  const ScalarT b[1] = { beta };
+  ScalarT moved[1];
+  donor_transfers(tr_donor, q_donor, a, b, moved);
+  moved[0].set(amount < RealT(0), -moved[0]);
+  return moved[0];
 }
 
-// Rain evaporation (r -> v)
+// The fractionation factor of SHOC's net condensation `amount`, given alpha_l
+// at the temperature after SHOC's transport: condensation (amount > 0) leaves
+// the new liquid in equilibrium with the vapor, beta = alpha_l; evaporation
+// (amount < 0) gives the vapor the liquid's ratio over alpha_l, beta =
+// 1/alpha_l. (The net transfer of a level is all that SHOC exports; no
+// kinetic effect.)
 template <typename ScalarT>
 KOKKOS_INLINE_FUNCTION
-ScalarT rain_evaporation (const ScalarT& tr_r, const ScalarT& q_r, const ScalarT& amount)
+ScalarT shoc_condensation_beta (const ScalarT& alpha_l, const ScalarT& amount)
 {
-  // alpha = 1. This is where the liquid/vapor fractionation factor goes, with
-  // the kinetic effect of evaporation into subsaturated air (Stewart 1975).
-  return amount*tracer_ratio(tr_r, q_r);
+  using RealT = typename ekat::ScalarTraits<ScalarT>::scalar_type;
+
+  ScalarT beta = alpha_l;
+  beta.set(amount < RealT(0), RealT(1)/alpha_l);
+  return beta;
 }
 
-// Accretion, autoconversion and shedding (c -> r)
+// -----------------------------------------------------------------------
+// The fractionation factor of P3 part2 process rate `cmp` (a Part2*
+// component of p3_water_transfers), given alpha_l and alpha_i at P3's part2
+// temperature:
+//  - vapor deposition and deposition/condensation-freezing nucleation
+//    (v -> i): alpha_i;
+//  - rain evaporation (r -> v): 1/alpha_l;
+//  - Bergeron (c -> i): alpha_i/alpha_l. The mass passes through the vapor:
+//    the liquid evaporates (1/alpha_l) and the vapor deposits on the ice
+//    (alpha_i), so the ice gets the liquid's ratio times alpha_i/alpha_l.
+//    A deliberate departure from the EAM Fortran (wtype_get_alpha in
+//    share/util/water_types.F90), which has no Bergeron branch and so uses 1;
+//  - sublimation (i -> v): 1, as in the Fortran (ice does not exchange
+//    isotopes with the vapor; it sublimates layer by layer);
+//  - accretion, autoconversion, shedding, riming, collection, freezing and
+//    melting: 1 (no phase change through the vapor).
+// For a non-fractionating tracer, alpha_l = alpha_i = 1 gives 1 everywhere.
+// -----------------------------------------------------------------------
 template <typename ScalarT>
 KOKKOS_INLINE_FUNCTION
-ScalarT liquid_collection (const ScalarT& tr_c, const ScalarT& q_c, const ScalarT& amount)
+ScalarT part2_beta (const int cmp, const ScalarT& alpha_l, const ScalarT& alpha_i)
 {
-  // alpha = 1. No phase change, so no factor is expected here.
-  return amount*tracer_ratio(tr_c, q_c);
-}
+  using RealT = typename ekat::ScalarTraits<ScalarT>::scalar_type;
+  using WT = p3::WaterTransfer;
 
-// Bergeron process (c -> i): cloud liquid evaporates and deposits on ice
-template <typename ScalarT>
-KOKKOS_INLINE_FUNCTION
-ScalarT bergeron (const ScalarT& tr_c, const ScalarT& q_c, const ScalarT& amount)
-{
-  // alpha = 1. The mass passes through vapor, so this is where the factor of
-  // that path goes (likely the deposition one).
-  return amount*tracer_ratio(tr_c, q_c);
-}
-
-// Riming, collection of rain by ice, and immersion freezing (c -> i, r -> i)
-template <typename ScalarT>
-KOKKOS_INLINE_FUNCTION
-ScalarT liquid_freezing (const ScalarT& tr_donor, const ScalarT& q_donor, const ScalarT& amount)
-{
-  // alpha = 1. This is where a freezing factor goes, if any.
-  return amount*tracer_ratio(tr_donor, q_donor);
-}
-
-// Melting (i -> r)
-template <typename ScalarT>
-KOKKOS_INLINE_FUNCTION
-ScalarT ice_melting (const ScalarT& tr_i, const ScalarT& q_i, const ScalarT& amount)
-{
-  // alpha = 1. This is where a melting factor goes, if any.
-  return amount*tracer_ratio(tr_i, q_i);
+  switch (cmp) {
+    case WT::Part2VapdepV2I:
+    case WT::Part2NucleatV2I: return alpha_i;
+    case WT::Part2EvapR2V:    return RealT(1)/alpha_l;
+    case WT::Part2BergC2I:    return alpha_i/alpha_l;
+    default:                  return ScalarT(1);
+  }
 }
 
 // -----------------------------------------------------------------------

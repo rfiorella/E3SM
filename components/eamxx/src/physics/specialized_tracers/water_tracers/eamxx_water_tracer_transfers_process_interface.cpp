@@ -1,6 +1,6 @@
 #include "eamxx_water_tracer_transfers_process_interface.hpp"
 #include "eamxx_water_tracer_transfers_functions.hpp"
-#include "../water_isotopes/eamxx_water_isotopes.hpp"
+#include "../water_isotopes/eamxx_water_isotopes_fractionation.hpp"
 
 #include "physics/p3/p3_water_transfers.hpp"
 #include "physics/shoc/shoc_water_transfers.hpp"
@@ -48,32 +48,11 @@ constexpr int first_part2 = p3::WaterTransfer::Part2VapdepV2I;
 constexpr int num_part2   = p3::WaterTransfer::Part2MeltI2R - first_part2 + 1;
 static_assert(num_part2 == 13, "Update the part2 tables below to match p3_water_transfers.hpp.");
 
-// The tracer moved by part2 component `cmp` [kg/kg], given its donor's tracer
-// and bulk water, and the bulk mass moved, through its transfer class
-KOKKOS_INLINE_FUNCTION
-Pack part2_transfer (const int cmp, const Pack& tr_d, const Pack& q_d, const Pack& amount)
-{
-  using WT = p3::WaterTransfer;
-  switch (cmp) {
-    case WT::Part2VapdepV2I:
-    case WT::Part2NucleatV2I:  return wt::ice_deposition(tr_d, q_d, amount);
-    case WT::Part2SublimI2V:   return wt::ice_sublimation(tr_d, q_d, amount);
-    case WT::Part2EvapR2V:     return wt::rain_evaporation(tr_d, q_d, amount);
-    case WT::Part2AccretC2R:
-    case WT::Part2AutoconvC2R:
-    case WT::Part2ShedC2R:     return wt::liquid_collection(tr_d, q_d, amount);
-    case WT::Part2BergC2I:     return wt::bergeron(tr_d, q_d, amount);
-    case WT::Part2CollectC2I:
-    case WT::Part2FreezeC2I:
-    case WT::Part2CollectR2I:
-    case WT::Part2FreezeR2I:   return wt::liquid_freezing(tr_d, q_d, amount);
-    default:                   return wt::ice_melting(tr_d, q_d, amount);  // Part2MeltI2R
-  }
-}
-
 // Fixed-point passes that refine the part2 donor ratios (see replay_p3). The
 // longest chain of donors without a cycle is c -> r -> i -> v, so three
 // passes carry the ratio of a well-filled reservoir to the end of any chain.
+// (In the isotope tests, 2, 3 and 6 passes give the same result bit for bit;
+// 1 pass differs by up to 1e-4 of a tracer phase.)
 constexpr int num_ratio_passes = 3;
 
 // One top-down sedimentation sweep of one species in one column (level 0 is
@@ -113,6 +92,12 @@ WaterTracerTransfers::WaterTracerTransfers (const ekat::Comm& comm, const ekat::
 {
   m_replay_shoc = m_params.get<bool>("replay_shoc", true);
   m_replay_p3   = m_params.get<bool>("replay_p3",   true);
+
+  // Test only (not in the namelist defaults): see m_alpha_override
+  m_alpha_override = m_params.get<double>("alpha_override", 0.0);
+  EKAT_REQUIRE_MSG(m_alpha_override >= 0,
+      "Error! 'water_tracer_transfers::alpha_override' must be > 0 (or 0, off), got " +
+      std::to_string(m_alpha_override) + ".\n");
 }
 
 // =========================================================================================
@@ -134,6 +119,12 @@ void WaterTracerTransfers::create_requests ()
       "  'water_tracers_file' is missing or empty. Set it to the water_tracers process' file.\n");
 
   m_specs = wt::parse_tracers_file(m_params.get<std::string>(key), opts);
+
+  // The isotope formulation options (the driver copies water_tracers' ones,
+  // so both processes use the same alphas). Read even with no isotope
+  // tracers, like water_tracers does; only isotopes evaluate alpha.
+  m_isotopes.configure(m_params);
+  m_isotopes.resolve(m_specs);
 
   m_grid = m_grids_manager->get_grid("physics");
   const auto& grid_name = m_grid->name();
@@ -160,6 +151,12 @@ void WaterTracerTransfers::create_requests ()
   }
   const auto stage_T_layout = m_grid->get_3d_vector_layout(LEV, wt::TransferStage::Count, "water_transfer_stage");
   add_field<Computed>("water_transfer_stage_T", stage_T_layout, K, grid_name, ps);
+
+  // Per column, the isotope alpha evaluations (levels x tracers x phases)
+  // whose temperature was outside the fit's accepted range, so that the fit
+  // was extrapolated, summed over the atm step like the precipitation [count]
+  add_field<Computed>("water_transfer_alpha_extrapolations", scalar2d, none, grid_name, "ACCUMULATED");
+  m_alpha_extrapolations_run = KT::view_1d<Real>("water_tracer_transfers_alpha_extrapolations_run", m_num_cols);
 
   // Bulk water after each SHOC stage (exported by SHOC in builds with water tracers)
   if (m_replay_shoc) {
@@ -233,6 +230,33 @@ void WaterTracerTransfers::run_impl (const double dt)
 }
 
 // =========================================================================================
+void WaterTracerTransfers::finalize_impl ()
+{
+  // The alpha evaluations that extrapolated a fit, over the run and all
+  // ranks: one log message per run, rather than one per pack, level and
+  // step (the per-column, per-step count is water_transfer_alpha_extrapolations).
+  // Reading it here keeps the run itself free of device-to-host copies.
+  // (The view is unallocated if the run stopped before create_requests.)
+  const auto run_count = m_alpha_extrapolations_run;
+  if (not run_count.is_allocated()) {
+    return;
+  }
+  Real num = 0;
+  Kokkos::parallel_reduce("water_tracer_transfers_alpha_extrapolations_sum",
+                          KT::RangePolicy(0, run_count.extent(0)),
+                          KOKKOS_LAMBDA(const int icol, Real& sum) {
+    sum += run_count(icol);
+  }, num);
+  m_comm.all_reduce(&num, 1, MPI_SUM);
+  if (num > 0 and m_comm.am_i_root()) {
+    m_atm_logger->warn("[water_tracer_transfers] " + std::to_string(static_cast<long long>(num)) +
+                       " isotope fractionation factor evaluations were at a temperature outside the "
+                       "fit's accepted range (see TemperatureBounds in eamxx_water_isotopes_parameters.hpp) "
+                       "and extrapolated the fit. Per column and atm step: water_transfer_alpha_extrapolations.");
+  }
+}
+
+// =========================================================================================
 void WaterTracerTransfers::rebuild_stage_temperatures (const Real dt)
 {
   using MDPolicy = Kokkos::MDRangePolicy<KT::ExeSpace, Kokkos::Rank<2>>;
@@ -301,15 +325,25 @@ void WaterTracerTransfers::rebuild_stage_temperatures (const Real dt)
 void WaterTracerTransfers::replay_shoc ()
 {
   using MDPolicy = Kokkos::MDRangePolicy<KT::ExeSpace, Kokkos::Rank<2>>;
-  using WS = shoc::WaterStage;
+  using WS  = shoc::WaterStage;
+  using TS  = wt::TransferStage;
+  using WIF = water_isotopes::WaterIsotopeFractionation;
 
   const auto& gn = m_grid->name();
-  const int nlev_packs = ekat::npack<Pack>(m_num_levs);
+  const int nlev = m_num_levs;
+  const int nlev_packs = ekat::npack<Pack>(nlev);
   const MDPolicy policy({0, 0}, {m_num_cols, nlev_packs});
 
   const auto stages = get_field_in("shoc_water_stages", gn).get_view<const Pack***>();
   const auto qr     = get_field_in("qr", gn).get_view<const Pack**>();
   const auto qi     = get_field_in("qi", gn).get_view<const Pack**>();
+
+  // Fractionation of isotope tracers (see the class comment)
+  const auto stage_T     = get_field_out("water_transfer_stage_T", gn).get_view<const Pack***>();
+  const auto num_extrap  = get_field_out("water_transfer_alpha_extrapolations", gn).get_view<Real*>();
+  const auto extrap_run  = m_alpha_extrapolations_run;
+  const auto iso_params  = m_isotopes.parameters();
+  const Real alpha_fixed = m_alpha_override;
 
   // With the P3 replay, P3 ran between SHOC and this process, so the bulk qr
   // and qi SHOC returned are P3's entry values, not the bulk fields
@@ -333,6 +367,11 @@ void WaterTracerTransfers::replay_shoc ()
                          .get_view<const Pack**>();
     const auto residual = get_field_out(spec.name + "_residual_shoc", gn).get_view<Pack***>();
 
+    // Only isotopes fractionate. The species is unused unless fractionates is true.
+    const bool fractionates = spec.type==wt::TracerType::Isotope;
+    const auto species = fractionates ? water_isotopes::WaterIsotopes::species(spec)
+                                      : water_isotopes::WaterIsotopologues::H216O;
+
     Kokkos::parallel_for("water_tracer_transfers_shoc_" + spec.name, policy,
                          KOKKOS_LAMBDA(const int icol, const int k) {
       // Bulk water after SHOC's turbulent transport, and the cloud liquid
@@ -342,8 +381,8 @@ void WaterTracerTransfers::replay_shoc ()
       const Pack qc_trans = stages(icol, WS::LiquidAfterTransport,    k);
       const Pack qc_cond  = stages(icol, WS::LiquidAfterCondensation, k);
 
-      // Net condensation [kg/kg]: > 0 moves vapor to liquid at the vapor's
-      // ratio, < 0 moves liquid to vapor at the liquid's ratio
+      // Net condensation [kg/kg]: > 0 moves vapor to liquid (the donor is
+      // the vapor), < 0 moves liquid to vapor (the donor is the liquid)
       const Pack cond = qc_cond - qc_trans;
       const auto evap = cond < Real(0);
       Pack tr_donor = tr_qv(icol, k);
@@ -351,7 +390,28 @@ void WaterTracerTransfers::replay_shoc ()
       tr_donor.set(evap, tr_qc(icol, k));
       q_donor.set(evap, qc_trans);
 
-      const Pack dtr = wt::shoc_condensation(tr_donor, q_donor, cond);
+      // Its fractionation factor: 1, or for an isotope from alpha_l at the
+      // temperature after SHOC's transport, evaluated where SHOC moved water
+      // (elsewhere alpha is not used); padded lanes are masked out
+      Pack beta(1);
+      if (fractionates) {
+        Pack alpha_l(alpha_fixed);
+        if (alpha_fixed <= 0) {
+          const auto in_range = ekat::range<IntPack>(k*Pack::n) < nlev;
+          Pack T(0);
+          T.set(in_range, stage_T(icol, TS::ShocAfterTransport, k));
+          int nx = 0;
+          alpha_l = WIF::alpha_liquid_vapor(T, species, water_isotopes::CondensedOverVapor, iso_params,
+                                            in_range && cond != Real(0), &nx);
+          if (nx > 0) {
+            Kokkos::atomic_add(&num_extrap(icol), Real(nx));
+            Kokkos::atomic_add(&extrap_run(icol), Real(nx));
+          }
+        }
+        beta = wt::shoc_condensation_beta(alpha_l, cond);
+      }
+
+      const Pack dtr = wt::shoc_condensation(tr_donor, q_donor, cond, beta);
       tr_qv(icol, k) -= dtr;
       tr_qc(icol, k) += dtr;
 
@@ -377,6 +437,9 @@ void WaterTracerTransfers::replay_p3 (const Real dt)
   using WE  = p3::WaterEntry;
   using WT  = p3::WaterTransfer;
   using SF  = p3::SedFlux;
+  using TS  = wt::TransferStage;
+  using WIF = water_isotopes::WaterIsotopeFractionation;
+  using Mask = ekat::Mask<Pack::n>;
 
   const auto& gn = m_grid->name();
   const int nlev = m_num_levs;
@@ -401,6 +464,13 @@ void WaterTracerTransfers::replay_p3 (const Real dt)
 
   const auto bulk = m_bulk;
 
+  // Fractionation of isotope tracers (see the class comment)
+  const auto stage_T     = get_field_out("water_transfer_stage_T", gn).get_view<const Pack***>();
+  const auto num_extrap  = get_field_out("water_transfer_alpha_extrapolations", gn).get_view<Real*>();
+  const auto extrap_run  = m_alpha_extrapolations_run;
+  const auto iso_params  = m_isotopes.parameters();
+  const Real alpha_fixed = m_alpha_override;
+
   for (const auto& spec : m_specs) {
     const auto tr_qv = get_field_out(wt::phase_field_name(spec.name, wt::WaterPhase::Vapor), gn)
                          .get_view<Pack**>();
@@ -413,6 +483,11 @@ void WaterTracerTransfers::replay_p3 (const Real dt)
     const auto residual   = get_field_out(spec.name + "_residual_p3", gn).get_view<Pack***>();
     const auto precip_liq = get_field_out(spec.name + "_precip_liq_surf_mass", gn).get_view<Real*>();
     const auto precip_ice = get_field_out(spec.name + "_precip_ice_surf_mass", gn).get_view<Real*>();
+
+    // Only isotopes fractionate. The species is unused unless fractionates is true.
+    const bool fractionates = spec.type==wt::TracerType::Isotope;
+    const auto species = fractionates ? water_isotopes::WaterIsotopes::species(spec)
+                                      : water_isotopes::WaterIsotopologues::H216O;
 
     // One team per column: the stages before and after sedimentation are
     // local to a level, the sedimentation sweep is serial in k.
@@ -465,13 +540,13 @@ void WaterTracerTransfers::replay_p3 (const Real dt)
 
         // part2 process rates, all applied together from the post-part1
         // state, as P3 applies them. Each moves the tracer at its donor's
-        // ratio. P3 limits a species' sinks to its reservoir plus its sources
-        // in the same call (p3_conservation_impl.hpp), so a sink can far
-        // exceed the reservoir (a tiny rain reservoir fed by autoconversion
-        // can be collected by ice many times over); the reservoir's own ratio
-        // would then amplify its roundoff by sink/reservoir, every call. The
-        // donor ratio is therefore that of the mass available to the donor
-        // over the call, its reservoir plus its inflows:
+        // ratio (times its fractionation factor, for isotopes). P3 limits a
+        // species' sinks to its reservoir plus its sources in the same call
+        // (p3_conservation_impl.hpp), so a sink can far exceed the reservoir
+        // (a tiny rain reservoir fed by autoconversion can be collected by ice
+        // many times over); the reservoir's own ratio would then amplify its
+        // roundoff by sink/reservoir, every call. The donor is therefore the
+        // mass available to it over the call, its reservoir plus its inflows:
         //   R_x = (tr_x + sum of tracer inflows)/(q_x + sum of bulk inflows).
         // The tracer inflows depend on the upstream donors' ratios, so the
         // ratios are refined by fixed-point passes starting from the
@@ -490,16 +565,60 @@ void WaterTracerTransfers::replay_p3 (const Real dt)
           q_in[to[j]] += amount[j];
         }
 
+        // The fractionation factor of each rate (see wt::part2_beta): 1 for
+        // a tracer that does not fractionate. For an isotope, alpha_l and
+        // alpha_i at P3's part2 temperature, evaluated on the lanes where a
+        // rate that uses them moved water (elsewhere they are not used).
+        Pack beta[num_part2];
+        for (int j=0; j<num_part2; ++j) {
+          beta[j] = Pack(1);
+        }
+        if (fractionates) {
+          Pack alpha_l(alpha_fixed), alpha_i(alpha_fixed);
+          if (alpha_fixed <= 0) {
+            const Pack T = get_cmp(stage_T, TS::P3Part2, k, in_range);
+            const auto uses = [&] (const int cmp) { return amount[cmp - first_part2] > Real(0); };
+            const auto need_l = in_range && (uses(WT::Part2EvapR2V) || uses(WT::Part2BergC2I));
+            const auto need_i = in_range && (uses(WT::Part2VapdepV2I) || uses(WT::Part2NucleatV2I) ||
+                                             uses(WT::Part2BergC2I));
+            int nx = 0;
+            alpha_l = WIF::alpha_liquid_vapor(T, species, water_isotopes::CondensedOverVapor, iso_params,
+                                              need_l, &nx);
+            alpha_i = WIF::alpha_ice_vapor(T, species, water_isotopes::CondensedOverVapor, iso_params,
+                                           need_i, &nx);
+            if (nx > 0) {
+              Kokkos::atomic_add(&num_extrap(icol), Real(nx));
+              Kokkos::atomic_add(&extrap_run(icol), Real(nx));
+            }
+          }
+          for (int j=0; j<num_part2; ++j) {
+            beta[j] = wt::part2_beta(first_part2 + j, alpha_l, alpha_i);
+          }
+        }
+
         // The donors' tracer and bulk water: first the reservoirs, then the
-        // reservoirs plus the inflows of the previous pass
+        // reservoirs plus the inflows of the previous pass. Each donor's
+        // sinks move tracer through wt::donor_transfers (the linear transfer
+        // where all of the donor's betas are 1, else a Rayleigh step); the
+        // components that are not its sinks enter as amount 0, beta 1.
         Pack tr_d[nphases], q_d[nphases], dtr[num_part2];
+        Mask rayleigh[nphases];  // lanes where a donor took the Rayleigh step
         for (int p=0; p<nphases; ++p) {
           tr_d[p] = tr[p];
           q_d[p]  = q[p];
+          rayleigh[p] = Mask(false);
         }
         for (int pass=0; pass<=num_ratio_passes; ++pass) {
-          for (int j=0; j<num_part2; ++j) {
-            dtr[j] = part2_transfer(first_part2 + j, tr_d[from[j]], q_d[from[j]], amount[j]);
+          for (int p=0; p<nphases; ++p) {
+            Pack a[num_part2], b[num_part2], out[num_part2];
+            for (int j=0; j<num_part2; ++j) {
+              a[j] = from[j]==p ? amount[j] : Pack(0);
+              b[j] = from[j]==p ? beta[j]   : Pack(1);
+            }
+            rayleigh[p] = wt::donor_transfers(tr_d[p], q_d[p], a, b, out);
+            for (int j=0; j<num_part2; ++j) {
+              if (from[j]==p) dtr[j] = out[j];
+            }
           }
           if (pass < num_ratio_passes) {
             Pack tr_in[nphases];
@@ -512,11 +631,48 @@ void WaterTracerTransfers::replay_p3 (const Real dt)
             }
           }
         }
+
+        // Guard of the Rayleigh donors. A Rayleigh step never moves more than
+        // the donor's tracer plus its inflows, but the inflows are those of
+        // the previous pass: where they changed in the last pass (a cycle of
+        // donors that the passes have not converged, or roundoff) the donor's
+        // outflows can exceed its tracer plus its final inflows. Scale them
+        // down to that, which conserves the tracer, one donor at a time along
+        // the longest chain (c, r, i, v: a donor's inflows are then final
+        // unless they come from a later donor that is scaled too, i.e. from
+        // vapor, which does not run dry). Linear donors are left as they
+        // are, as for non-fractionating tracers.
+        constexpr int guard_order[nphases] = {ic, ir, ii, iv};
+        for (const int p : guard_order) {
+          if (not rayleigh[p].any()) continue;
+          Pack outflow(0), inflow(0);
+          for (int j=0; j<num_part2; ++j) {
+            if (from[j]==p) outflow += dtr[j];
+            if (to[j]==p)   inflow  += dtr[j];
+          }
+          const Pack avail = ekat::max(tr[p] + inflow, Pack(0));
+          const auto over = rayleigh[p] && outflow > avail;
+          if (over.any()) {
+            Pack outflow_safe = outflow;
+            outflow_safe.set(!over, Real(1));
+            const Pack scale = avail/outflow_safe;
+            for (int j=0; j<num_part2; ++j) {
+              if (from[j]==p) dtr[j].set(over, dtr[j]*scale);
+            }
+          }
+        }
+
         for (int j=0; j<num_part2; ++j) {
           tr[from[j]] -= dtr[j];
           tr[to[j]]   += dtr[j];
           q[from[j]]  -= amount[j];
           q[to[j]]    += amount[j];
+        }
+        // Clamp what is left below 0 in a Rayleigh donor (roundoff of the
+        // guard, or of a donor that came in at -roundoff): not conservative,
+        // but only of roundoff size
+        for (int p=0; p<nphases; ++p) {
+          tr[p].set(rayleigh[p] && tr[p] < Real(0), Real(0));
         }
 
         // part2 clips, from the post-update state

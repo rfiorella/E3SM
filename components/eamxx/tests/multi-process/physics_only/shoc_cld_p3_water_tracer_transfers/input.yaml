@@ -14,7 +14,7 @@ eamxx:
   atm_procs_list: [water_tracers, mac]
   schedule_type: sequential
   water_tracers:
-    water_tracers_file: tracers.yaml
+    water_tracers_file: ${WTT_TRACERS_FILE}
   mac:
     type: group
     schedule_type: sequential
@@ -40,7 +40,9 @@ eamxx:
       max_total_ni: 740.0e3
       do_prescribed_ccn: false
     water_tracer_transfers:
-      water_tracers_file: tracers.yaml
+      water_tracers_file: ${WTT_TRACERS_FILE}
+      # Test only: > 0 replaces the isotopes' alphas (0: off)
+      alpha_override: ${WTT_ALPHA_OVERRIDE}
 
 grids_manager:
   type: mesh_free
@@ -77,6 +79,15 @@ initial_conditions:
   wtrc_half_qc: 0.0
   wtrc_half_qr: 0.0
   wtrc_half_qi: 0.0
+  # Isotope tracers of the isotope runs (tracers_iso.yaml); unused otherwise
+  wtrc_hdo_qv: 0.0
+  wtrc_hdo_qc: 0.0
+  wtrc_hdo_qr: 0.0
+  wtrc_hdo_qi: 0.0
+  wtrc_o18_qv: 0.0
+  wtrc_o18_qc: 0.0
+  wtrc_o18_qr: 0.0
+  wtrc_o18_qi: 0.0
 
 # The parameters for I/O control
 scorpio:

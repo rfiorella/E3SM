@@ -1,0 +1,11 @@
+%YAML 1.1
+---
+# Isotope runs: two fractionating isotopes, and a generic tracer with R = 1 as
+# the reference (bulk water). The default isotope options (normalized
+# standard ratios, modern ocean) give each isotope r_ocn = r_land = r_init = 1,
+# so with alpha = 1 an isotope follows bulk water like wtrc_t.
+tracers:
+  wtrc_t:   {type: generic, init: ratio, r_ocn: 1, r_init: 1}
+  wtrc_hdo: {type: isotope, species: HDO, init: ratio}
+  wtrc_o18: {type: isotope, species: H218O, init: ratio}
+...

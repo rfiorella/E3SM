@@ -14,7 +14,7 @@ eamxx:
   atm_procs_list: [water_tracers, mac]
   schedule_type: sequential
   water_tracers:
-    water_tracers_file: tracers.yaml
+    water_tracers_file: ${WTT_TRACERS_FILE}
   mac:
     type: group
     schedule_type: sequential
@@ -37,8 +37,10 @@ eamxx:
       coeff_km_horiz: 0.1
       shoc_1p5tke: false
     water_tracer_transfers:
-      water_tracers_file: tracers.yaml
+      water_tracers_file: ${WTT_TRACERS_FILE}
       replay_p3: false
+      # Test only: > 0 replaces the isotopes' alphas (0: off)
+      alpha_override: ${WTT_ALPHA_OVERRIDE}
 
 grids_manager:
   type: mesh_free
@@ -58,6 +60,9 @@ initial_conditions:
   # surf_evap = 0 is a cancelling ocean evaporation and land dew)
   surf_sens_flux: 0.0
   surf_evap: ${SURF_EVAP}  # kg/m2/s, upward
+  # Empty, except in the isotope new-cloud run, which starts with no cloud
+  # liquid (qc: 0.0), so that all of SHOC's first condensation is new cloud
+  ${WTT_EXTRA_IC}
   # Ocean inputs of water_tracers (it turns them into tracer surface fluxes, applied by SHOC)
   sst: 300.0
   ocnfrac: ${OCNFRAC}
@@ -73,6 +78,15 @@ initial_conditions:
   wtrc_half_qc: 0.0
   wtrc_half_qr: 0.0
   wtrc_half_qi: 0.0
+  # Isotope tracers of the isotope runs (tracers_iso.yaml); unused otherwise
+  wtrc_hdo_qv: 0.0
+  wtrc_hdo_qc: 0.0
+  wtrc_hdo_qr: 0.0
+  wtrc_hdo_qi: 0.0
+  wtrc_o18_qv: 0.0
+  wtrc_o18_qc: 0.0
+  wtrc_o18_qr: 0.0
+  wtrc_o18_qi: 0.0
 
 # The parameters for I/O control
 scorpio:
