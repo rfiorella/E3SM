@@ -56,7 +56,8 @@ void Functions<S,D>
   const uview_1d<Pack>& qr_tend,
   const uview_1d<Pack>& nr_tend,
   Scalar& precip_liq_surf,
-  const P3Runtime& runtime_options)
+  const P3Runtime& runtime_options,
+  const uview_1d<Pack>& sed_mass)
 {
   // Get temporary workspaces needed for the ice-sed calculation
   uview_1d<Pack> V_qr, V_nr, flux_qx, flux_nx;
@@ -126,7 +127,11 @@ void Functions<S,D>
       }, Kokkos::Max<Scalar>(Co_max));
       team.team_barrier();
 
+      const Scalar dt_sub = sed_substep_dt(Co_max, dt_left);
       generalized_sedimentation<2>(rho, inv_rho, inv_dz, team, nk, k_qxtop, k_qxbot, kbot, kdir, Co_max, dt_left, prt_accum, fluxes_ptr, vs_ptr, qnr_ptr);
+      if (sed_mass.data() != nullptr) {
+        accumulate_sed_mass(team, flux_qx, k_qxtop, k_qxbot, dt_sub, sed_mass);
+      }
 
       //Update _incld values with end-of-step cell-ave values
       //No prob w/ div by cld_frac_r because set to min of 1e-4 in interface.

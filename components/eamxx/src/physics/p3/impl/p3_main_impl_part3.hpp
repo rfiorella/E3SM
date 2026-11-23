@@ -2,6 +2,7 @@
 #define P3_MAIN_IMPL_PART_3_HPP
 
 #include "p3_functions.hpp" // for ETI only but harmless for GPU
+#include "p3_water_transfers.hpp"
 #include "share/physics/physics_functions.hpp" // also for ETI not on GPUs
 #include "share/physics/physics_saturation_impl.hpp"
 
@@ -56,13 +57,18 @@ void Functions<S,D>
   const uview_1d<Pack>& diag_equiv_reflectivity,
   const uview_1d<Pack>& diag_eff_radius_qc,
   const uview_1d<Pack>& diag_eff_radius_qr,
-  const P3Runtime& runtime_options)
+  const P3Runtime& runtime_options,
+  const uview_2d<Pack>& water_transfers)
 {
   constexpr Scalar qsmall       = C::QSMALL;
   constexpr Scalar inv_cp       = C::INV_CP.value;
   constexpr Scalar nsmall       = C::NSMALL;
   constexpr Scalar latvap       = C::LatVap.value;
   constexpr Scalar latice       = C::LatIce.value;
+
+  // export_water_transfers: record the mass each clip below moves
+  const bool export_transfers = water_transfers.data() != nullptr;
+  using WT = WaterTransfer;
 
   Kokkos::parallel_for(
     Kokkos::TeamVectorRange(team, nk_pack), [&] (Int k) {
@@ -92,6 +98,7 @@ void Functions<S,D>
         diag_eff_radius_qc(k).set(qc_gt_small, sp(0.5) * (mu_c(k) + 3) / lamc(k));
       }
       if (qc_small.any()) {
+        if (export_transfers) water_transfers(WT::Part3ClipC2V, k).set(qc_small, qc(k));
         qv(k)                .set(qc_small, qv(k)+qc(k));
         th_atm(k)            .set(qc_small, th_atm(k)-inv_exner(k)*qc(k)*latvap*inv_cp);
         vap_liq_exchange(k)  .set(qc_small, vap_liq_exchange(k) - qc(k));
@@ -122,6 +129,7 @@ void Functions<S,D>
       }
 
       if (qr_small.any()) {
+        if (export_transfers) water_transfers(WT::Part3ClipR2V, k).set(qr_small, qr(k));
         qv(k)              .set(qr_small, qv(k) + qr(k));
         th_atm(k)          .set(qr_small, th_atm(k) - inv_exner(k)*qr(k)*latvap*inv_cp);
         vap_liq_exchange(k).set(qr_small, vap_liq_exchange(k) - qr(k));
@@ -184,6 +192,7 @@ void Functions<S,D>
       //above formula for ze only makes sense for in-cloud vals, but users expect cell-ave output.
       ze_ice(k).set(qi_gt_small, ze_ice(k)*cld_frac_i(k));
 
+      if (export_transfers) water_transfers(WT::Part3ClipI2V, k).set(qi_small, qi(k));
       qv(k).set(qi_small, qv(k) + qi(k));
       th_atm(k).set(qi_small, th_atm(k) - inv_exner(k)*qi(k)*(latvap+latice)*inv_cp);
       qi(k).set(qi_small, 0);

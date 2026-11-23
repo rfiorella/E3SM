@@ -1,4 +1,5 @@
 #include "p3_functions.hpp" // for ETI only but harmless for GPU
+#include "p3_water_transfers.hpp"
 #include "share/physics/physics_functions.hpp" // also for ETI not on GPUs
 #include "share/physics/physics_saturation_impl.hpp"
 
@@ -60,7 +61,8 @@ void Functions<Real,DefaultDevice>
   const uview_2d<Pack>& bm_incld,
   const uview_1d<bool>& nucleationPossible,
   const uview_1d<bool>& hydrometeorsPresent,
-  const P3Runtime& runtime_options)
+  const P3Runtime& runtime_options,
+  const view_3d<Pack>& water_transfers)
 {
   using ExeSpace = typename KT::ExeSpace;
   using TPF      = ekat::TeamPolicyFactory<ExeSpace>;
@@ -83,7 +85,8 @@ void Functions<Real,DefaultDevice>
       ekat::subview(qv, i), ekat::subview(th_atm, i), ekat::subview(qc, i), ekat::subview(nc, i), ekat::subview(qr, i), ekat::subview(nr, i), ekat::subview(qi, i),
       ekat::subview(ni, i), ekat::subview(qm, i), ekat::subview(bm, i), ekat::subview(qc_incld, i), ekat::subview(qr_incld, i), ekat::subview(qi_incld, i),
       ekat::subview(qm_incld, i), ekat::subview(nc_incld, i), ekat::subview(nr_incld, i), ekat::subview(ni_incld, i), ekat::subview(bm_incld, i),
-      nucleationPossible(i), hydrometeorsPresent(i), runtime_options);
+      nucleationPossible(i), hydrometeorsPresent(i), runtime_options,
+      export_column(water_transfers, i));
 
   });
 }

@@ -2,6 +2,7 @@
 #define P3_ICE_SED_IMPL_HPP
 
 #include "p3_functions.hpp" // for ETI only but harmless for GPU
+#include "p3_water_transfers.hpp"
 
 namespace scream {
 namespace p3 {
@@ -87,7 +88,8 @@ void Functions<S,D>
   const uview_1d<Pack>& ni_tend,
   const view_ice_table& ice_table_vals,
   Scalar& precip_ice_surf,
-  const P3Runtime& runtime_options)
+  const P3Runtime& runtime_options,
+  const uview_1d<Pack>& sed_mass)
 {
   // Get temporary workspaces needed for the ice-sed calculation
   uview_1d<Pack> V_qit, V_nit, flux_nit, flux_bir, flux_qir, flux_qit;
@@ -172,7 +174,11 @@ void Functions<S,D>
       }, Kokkos::Max<Scalar>(Co_max));
       team.team_barrier();
 
+      const Scalar dt_sub = sed_substep_dt(Co_max, dt_left);
       generalized_sedimentation<4>(rho, inv_rho, inv_dz, team, nk, k_qxtop, k_qxbot, kbot, kdir, Co_max, dt_left, prt_accum, fluxes_ptr, vs_ptr, qnr_ptr);
+      if (sed_mass.data() != nullptr) {
+        accumulate_sed_mass(team, flux_qit, k_qxtop, k_qxbot, dt_sub, sed_mass);
+      }
 
       //Update _incld values with end-of-step cell-ave values
       //No prob w/ div by cld_frac_i because set to min of 1e-4 in interface.
@@ -220,7 +226,8 @@ void Functions<S,D>
   const uview_1d<Pack>& ni,
   const uview_1d<Pack>& qm,
   const uview_1d<Pack>& bm,
-  const uview_1d<Pack>& th_atm)
+  const uview_1d<Pack>& th_atm,
+  const uview_2d<Pack>& water_transfers)
 {
   constexpr Scalar qsmall          = C::QSMALL;
   constexpr Scalar nsmall          = C::NSMALL;
@@ -249,6 +256,11 @@ void Functions<S,D>
     const auto qr_ge_small   = range_mask && t_lt_homogf && qr(pk) >= qsmall;
 
     Pack Qc_nuc(qc(pk)), Qr_nuc(qr(pk)), Nc_nuc(max(nc(pk), nsmall)), Nr_nuc(max(nr(pk), nsmall));
+
+    if (water_transfers.data() != nullptr) {
+      water_transfers(WaterTransfer::HomFreezeC2I, pk).set(qc_ge_small, Qc_nuc);
+      water_transfers(WaterTransfer::HomFreezeR2I, pk).set(qr_ge_small, Qr_nuc);
+    }
 
     qm(pk).set(qc_ge_small, qm(pk) + Qc_nuc);
     qi(pk).set(qc_ge_small, qi(pk) + Qc_nuc);

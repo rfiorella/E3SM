@@ -39,6 +39,12 @@ void P3Microphysics::run_impl (const double dt)
   get_field_out("micro_vap_liq_exchange").deep_copy(0.0);
   get_field_out("micro_vap_ice_exchange").deep_copy(0.0);
 
+  // p3_main accumulates into these, and skips columns and levels with nothing to do
+  if (runtime_options.export_water_transfers) {
+    get_field_out("p3_water_transfers").deep_copy(0.0);
+    get_field_out("p3_sed_flux").deep_copy(0.0);
+  }
+
   // Optional extra p3 diags
   if (runtime_options.extra_p3_diags) {
     get_field_out("qr2qv_evap").deep_copy(0.0);

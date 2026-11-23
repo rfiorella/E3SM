@@ -2,6 +2,7 @@
 #define P3_MAIN_IMPL_PART_1_HPP
 
 #include "p3_functions.hpp" // for ETI only but harmless for GPU
+#include "p3_water_transfers.hpp"
 #include "share/physics/physics_functions.hpp" // also for ETI not on GPUs
 #include "share/physics/physics_saturation_impl.hpp"
 
@@ -63,7 +64,8 @@ void Functions<S,D>
   const uview_1d<Pack>& bm_incld,
   bool& nucleationPossible,
   bool& hydrometeorsPresent,
-  const P3Runtime& runtime_options)
+  const P3Runtime& runtime_options,
+  const uview_2d<Pack>& water_transfers)
 {
   // Get access to saturation functions
   using physics = scream::physics::Functions<Scalar, Device>;
@@ -82,6 +84,10 @@ void Functions<S,D>
 
   const Scalar spa_ccn_to_nc_factor = runtime_options.spa_ccn_to_nc_factor;
   const Scalar spa_ccn_to_nc_exponent = runtime_options.spa_ccn_to_nc_exponent;
+
+  // export_water_transfers: record the mass each clip below moves
+  const bool export_transfers = water_transfers.data() != nullptr;
+  using WT = WaterTransfer;
 
   nucleationPossible = false;
   hydrometeorsPresent = false;
@@ -123,6 +129,7 @@ void Functions<S,D>
     // (implying all mass is expected to evaporate/sublimate in one time step)
     auto drymass = qc(k) < qsmall;
     auto not_drymass = !drymass && range_mask;
+    if (export_transfers) water_transfers(WT::Part1ClipC2V, k).set(drymass, qc(k));
     qv(k).set(drymass, qv(k) + qc(k));
     th_atm(k).set(drymass, th_atm(k) - inv_exner(k) * qc(k) * latvap * inv_cp);
     qc(k).set(drymass, 0);
@@ -156,6 +163,7 @@ void Functions<S,D>
 
     drymass = qr(k) < qsmall;
     not_drymass = !drymass && range_mask;
+    if (export_transfers) water_transfers(WT::Part1ClipR2V, k).set(drymass, qr(k));
     qv(k).set(drymass, qv(k) + qr(k));
     th_atm(k).set(drymass, th_atm(k) - inv_exner(k) * qr(k) * latvap * inv_cp);
     qr(k).set(drymass, 0);
@@ -166,6 +174,7 @@ void Functions<S,D>
 
     drymass = (qi(k) < qsmall || (qi(k) < 1.e-8 && qv_supersat_i(k) < -0.1));
     not_drymass = !drymass && range_mask;
+    if (export_transfers) water_transfers(WT::Part1ClipI2V, k).set(drymass, qi(k));
     qv(k).set(drymass, qv(k) + qi(k));
     th_atm(k).set(drymass, th_atm(k) - inv_exner(k) * qi(k) * (latvap+latice) * inv_cp);
     qi(k).set(drymass, 0);
@@ -177,6 +186,7 @@ void Functions<S,D>
     }
 
     drymass = (qi(k) >= qsmall && qi(k) < 1.e-8 && T_atm(k) >= T_zerodegc);
+    if (export_transfers) water_transfers(WT::Part1ClipI2R, k).set(drymass, qi(k));
     qr(k).set(drymass, qr(k) + qi(k));
     th_atm(k).set(drymass, th_atm(k) - inv_exner(k) * qi(k) * latice * inv_cp);
     qi(k).set(drymass, 0);

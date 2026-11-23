@@ -2,6 +2,7 @@
 #define P3_MAIN_IMPL_PART_2_HPP
 
 #include "p3_functions.hpp" // for ETI only but harmless for GPU
+#include "p3_water_transfers.hpp"
 #include "share/physics/physics_functions.hpp" // also for ETI not on GPUs
 #include "share/physics/physics_saturation_impl.hpp"
 
@@ -107,7 +108,8 @@ void Functions<S,D>
   const uview_1d<Pack>& pratot,
   const uview_1d<Pack>& prctot,
   bool& hydrometeorsPresent, const Int& nk,
-  const P3Runtime& runtime_options)
+  const P3Runtime& runtime_options,
+  const uview_2d<Pack>& water_transfers)
 {
   constexpr Scalar qsmall       = C::QSMALL;
   constexpr Scalar nsmall       = C::NSMALL;
@@ -123,6 +125,10 @@ void Functions<S,D>
   const bool use_hetfrz_classnuc = runtime_options.use_hetfrz_classnuc;
   const bool use_separate_ice_liq_frac = runtime_options.use_separate_ice_liq_frac;
   const bool extra_p3_diags = runtime_options.extra_p3_diags;
+
+  // export_water_transfers: record the mass each process and clip moves
+  const bool export_transfers = water_transfers.data() != nullptr;
+  using WT = WaterTransfer;
 
   team.team_barrier();
   hydrometeorsPresent = false;
@@ -531,6 +537,25 @@ void Functions<S,D>
       qi2qr_melt(k).set(not_skip_all, qi2qr_melt_tend);
     }
 
+    // Same masks and amounts update_prognostic_ice/liquid applied above
+    if (export_transfers) {
+      const auto nucleat = use_hetfrz_classnuc ? qv2qi_nucleat_tend + qinuc_cnt : qv2qi_nucleat_tend;
+      const auto freeze_c2i = use_hetfrz_classnuc ? qcheti_cnt + qicnt : qc2qi_hetero_freeze_tend;
+      water_transfers(WT::Part2VapdepV2I,   k).set(not_skip_all, qv2qi_vapdep_tend*dt);
+      water_transfers(WT::Part2NucleatV2I,  k).set(not_skip_all, nucleat*dt);
+      water_transfers(WT::Part2SublimI2V,   k).set(not_skip_all, qi2qv_sublim_tend*dt);
+      water_transfers(WT::Part2EvapR2V,     k).set(not_skip_all, qr2qv_evap_tend*dt);
+      water_transfers(WT::Part2AccretC2R,   k).set(not_skip_all, qc2qr_accret_tend*dt);
+      water_transfers(WT::Part2AutoconvC2R, k).set(not_skip_all, qc2qr_autoconv_tend*dt);
+      water_transfers(WT::Part2ShedC2R,     k).set(not_skip_all, qc2qr_ice_shed_tend*dt);
+      water_transfers(WT::Part2BergC2I,     k).set(not_skip_all, qc2qi_berg_tend*dt);
+      water_transfers(WT::Part2CollectC2I,  k).set(not_skip_all, qc2qi_collect_tend*dt);
+      water_transfers(WT::Part2FreezeC2I,   k).set(not_skip_all, freeze_c2i*dt);
+      water_transfers(WT::Part2CollectR2I,  k).set(not_skip_all, qr2qi_collect_tend*dt);
+      water_transfers(WT::Part2FreezeR2I,   k).set(not_skip_all, qr2qi_immers_freeze_tend*dt);
+      water_transfers(WT::Part2MeltI2R,     k).set(not_skip_all, qi2qr_melt_tend*dt);
+    }
+
     // clipping for small hydrometeor values
     const auto qc_small    = qc(k) < qsmall    && not_skip_all;
     const auto qr_small    = qr(k) < qsmall    && not_skip_all;
@@ -540,6 +565,7 @@ void Functions<S,D>
     const auto qr_not_small    = qr(k) >= qsmall    && not_skip_all;
     const auto qi_not_small = qi(k) >= qsmall && not_skip_all;
 
+    if (export_transfers) water_transfers(WT::Part2ClipC2V, k).set(qc_small, qc(k));
     qv(k).set(qc_small, qv(k) + qc(k));
     th_atm(k).set(qc_small, th_atm(k) - inv_exner(k) * qc(k) * latvap * inv_cp);
     qc(k).set(qc_small, 0);
@@ -549,6 +575,7 @@ void Functions<S,D>
       hydrometeorsPresent = true;
     }
 
+    if (export_transfers) water_transfers(WT::Part2ClipR2V, k).set(qr_small, qr(k));
     qv(k).set(qr_small, qv(k) + qr(k));
     th_atm(k).set(qr_small, th_atm(k) - inv_exner(k) * qr(k) * latvap * inv_cp);
     qr(k).set(qr_small, 0);
@@ -558,6 +585,7 @@ void Functions<S,D>
       hydrometeorsPresent = true;
     }
 
+    if (export_transfers) water_transfers(WT::Part2ClipI2V, k).set(qi_small, qi(k));
     qv(k).set(qi_small, qv(k) + qi(k));
     th_atm(k).set(qi_small, th_atm(k) - inv_exner(k) * qi(k) * (latvap+latice) * inv_cp);
     qi(k).set(qi_small, 0);

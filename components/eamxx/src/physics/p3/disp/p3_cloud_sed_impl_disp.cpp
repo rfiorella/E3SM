@@ -1,4 +1,5 @@
 #include "p3_functions.hpp" // for ETI only but harmless for GPU
+#include "p3_water_transfers.hpp"
 
 #include <ekat_subview_utils.hpp>
 #include <ekat_team_policy_utils.hpp>
@@ -32,7 +33,8 @@ void Functions<Real,DefaultDevice>
     const uview_2d<Pack>& nc_tend,
     const uview_1d<Scalar>& precip_liq_surf,
     const uview_1d<bool>& nucleationPossible,
-    const uview_1d<bool>& hydrometeorsPresent)
+    const uview_1d<bool>& hydrometeorsPresent,
+    const view_3d<Pack>& sed_mass)
 {
   using ExeSpace = typename KT::ExeSpace;
   using TPF      = ekat::TeamPolicyFactory<ExeSpace>;
@@ -56,7 +58,7 @@ void Functions<Real,DefaultDevice>
       nk, ktop, kbot, kdir, dt, inv_dt, do_predict_nc,
       ekat::subview(qc, i), ekat::subview(nc, i), ekat::subview(nc_incld, i), ekat::subview(mu_c, i), ekat::subview(lamc, i), ekat::subview(qc_tend, i),
       ekat::subview(nc_tend, i),
-      precip_liq_surf(i));
+      precip_liq_surf(i), export_row(sed_mass, i, SedFlux::CloudLiquid));
   });
 
 }

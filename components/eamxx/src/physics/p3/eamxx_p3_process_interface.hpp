@@ -3,6 +3,7 @@
 
 #include "share/atm_process/atmosphere_process.hpp"
 #include "physics/p3/p3_functions.hpp"
+#include "physics/p3/p3_water_transfers.hpp"
 #include "share/physics/eamxx_common_physics_functions.hpp"
 
 #include <ekat_parameter_list.hpp>
@@ -35,6 +36,7 @@ class P3Microphysics : public AtmosphereProcess
   using view_1d_const  = typename P3F::view_1d<const Real>;
   using view_2d  = typename P3F::view_2d<Pack>;
   using view_2d_const  = typename P3F::view_2d<const Pack>;
+  using view_3d  = typename P3F::view_3d<Pack>;
   using sview_2d = typename KokkosTypes<DefaultDevice>::template view_2d<Real>;
 
   using uview_1d  = Unmanaged<view_1d>;
@@ -84,6 +86,14 @@ public:
 
         //compute dz from full pressure
         dz(icol,ipack) = PF::calculate_dz(pseudo_density_pack, pmid_pack, T_atm_pack, qv(icol,ipack));
+
+        // export_water_transfers: bulk water at entry, before the conversion to dry
+        if (water_entry.data() != nullptr) {
+          water_entry(icol,p3::WaterEntry::Vapor,ipack)       = qv(icol,ipack);
+          water_entry(icol,p3::WaterEntry::CloudLiquid,ipack) = qc(icol,ipack);
+          water_entry(icol,p3::WaterEntry::Rain,ipack)        = qr(icol,ipack);
+          water_entry(icol,p3::WaterEntry::Ice,ipack)         = qi(icol,ipack);
+        }
 
         /*----------------------------------------------------------------------------------------------------------------------
          *Wet to dry mixing ratios:
@@ -172,6 +182,8 @@ public:
     view_2d       cld_frac_i;
     view_2d       cld_frac_r;
     view_2d       dz;
+    // export_water_transfers only (empty otherwise)
+    view_3d       water_entry;
     // Add runtime_options as a member variable
     P3F::P3Runtime runtime_opts;
     // Assigning local variables
@@ -266,6 +278,21 @@ public:
         qv(icol,ipack) = PF::calculate_wetmmr_from_drymmr_dp_based(qv(icol,ipack),pseudo_density_pack,pseudo_density_dry_pack);
         qv_prev(icol,ipack) = qv(icol,ipack);
 
+        // export_water_transfers: p3_main recorded the mass moved [kg/kg dry];
+        // convert to wet-basis rates like the state above [kg/kg/s].
+        if (water_transfers.data() != nullptr) {
+          const Real inv_dt = 1/m_dt;
+          for (int itr=0; itr<p3::WaterTransfer::Count; ++itr) {
+            water_transfers(icol,itr,ipack) = inv_dt*PF::calculate_wetmmr_from_drymmr_dp_based(
+                water_transfers(icol,itr,ipack),pseudo_density_pack,pseudo_density_dry_pack);
+          }
+          // p3_main recorded sedimented mass per area [kg/m2], which has no
+          // dry/wet basis; make it a flux [kg/m2/s]
+          for (int ised=0; ised<p3::SedFlux::Count; ++ised) {
+            sed_flux(icol,ised,ipack) *= inv_dt;
+          }
+        }
+
         // Rescale effective radius' into microns
         diag_eff_radius_qc(icol,ipack) *= 1e6;
         diag_eff_radius_qi(icol,ipack) *= 1e6;
@@ -326,6 +353,9 @@ public:
     view_1d       water_flux;
     view_1d       ice_flux;
     view_1d       heat_flux;
+    // export_water_transfers only (empty otherwise)
+    view_3d       water_transfers;
+    view_3d       sed_flux;
 
     void set_variables(const int ncol, const int npack,
                     const view_2d& th_atm_, const view_2d_const& pmid_, const view_2d_const& pmid_dry_,

@@ -1,4 +1,5 @@
 #include "p3_functions.hpp" // for ETI only but harmless for GPU
+#include "p3_water_transfers.hpp"
 
 #include <ekat_subview_utils.hpp>
 #include <ekat_team_policy_utils.hpp>
@@ -106,7 +107,8 @@ void Functions<Real,DefaultDevice>
   const uview_2d<Pack>& prctot,
   const uview_1d<bool>& nucleationPossible,
   const uview_1d<bool>& hydrometeorsPresent,
-  const P3Runtime& runtime_options)
+  const P3Runtime& runtime_options,
+  const view_3d<Pack>& water_transfers)
 {
   using ExeSpace = typename KT::ExeSpace;
   using TPF      = ekat::TeamPolicyFactory<ExeSpace>;
@@ -149,7 +151,8 @@ void Functions<Real,DefaultDevice>
       ekat::subview(qv2qi_vapdep, i), ekat::subview(qc2qi_berg, i), ekat::subview(qc2qr_ice_shed, i), ekat::subview(qc2qi_collect, i),
       ekat::subview(qr2qi_collect, i), ekat::subview(qc2qi_hetero_freeze, i), ekat::subview(qr2qi_immers_freeze, i),
       ekat::subview(qi2qr_melt, i),
-      ekat::subview(pratot, i), ekat::subview(prctot, i), hydrometeorsPresent(i), nk, runtime_options);
+      ekat::subview(pratot, i), ekat::subview(prctot, i), hydrometeorsPresent(i), nk, runtime_options,
+      export_column(water_transfers, i));
 
     if (!hydrometeorsPresent(i)) return;
   });

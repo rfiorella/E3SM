@@ -32,7 +32,8 @@ void Functions<S,D>
     const uview_1d<Pack>& lamc,
     const uview_1d<Pack>& qc_tend,
     const uview_1d<Pack>& nc_tend,
-    Scalar& precip_liq_surf)
+    Scalar& precip_liq_surf,
+    const uview_1d<Pack>& sed_mass)
 {
   // Get temporary workspaces needed for the cloud-sed calculation
   uview_1d<Pack> V_qc, V_nc, flux_qx, flux_nx;
@@ -112,11 +113,15 @@ void Functions<S,D>
       }, Kokkos::Max<Scalar>(Co_max));
       team.team_barrier();
 
+      const Scalar dt_sub = sed_substep_dt(Co_max, dt_left);
       if (do_predict_nc) {
         generalized_sedimentation<2>(rho, inv_rho, inv_dz, team, nk, k_qxtop, k_qxbot, kbot, kdir, Co_max, dt_left, prt_accum, fluxes_ptr, vs_ptr, qnr_ptr);
       }
       else {
         generalized_sedimentation<1>(rho, inv_rho, inv_dz, team, nk, k_qxtop, k_qxbot, kbot, kdir, Co_max, dt_left, prt_accum, flux_ptr, v_ptr, qr_ptr);
+      }
+      if (sed_mass.data() != nullptr) {
+        accumulate_sed_mass(team, flux_qx, k_qxtop, k_qxbot, dt_sub, sed_mass);
       }
 
       //Update _incld values with end-of-step cell-ave values
